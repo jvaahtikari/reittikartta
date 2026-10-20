@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reittikartta</title>
+<link rel="stylesheet" href="lib/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="topbar">
+  <button id="menuBtn" class="mi" type="button" aria-label="Valikko" title="Valikko">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <div class="brand" title="Selainpohjainen reittisuunnittelu merikartalla">Reittikartta</div>
+  <nav id="menubar" aria-label="Valikot">
+    <button class="mi" data-menu="file">Tiedosto</button>
+    <button class="mi" data-menu="tools">Työkalut</button>
+    <button class="mi" data-menu="tasks">Tehtävät</button>
+    <button class="mi" data-menu="view">Näytä</button>
+    <button class="mi" data-menu="help">Ohje</button>
+  </nav>
+  <div class="top-fields">
+    <label class="fld">Alus
+      <select id="vesselSel"></select>
+    </label>
+    <label class="fld">
+      <select id="routeFilter" aria-label="Näytettävät reitit">
+        <option value="vessel">Reitit tälle alukselle</option>
+        <option value="all">Kaikki reitit</option>
+      </select>
+    </label>
+  </div>
+  <div id="searchBox" role="search">
+    <input id="searchIn" type="search" placeholder="Hae paikka, turvalaite tai koordinaatti" autocomplete="off" spellcheck="false" aria-label="Paikkahaku">
+    <div id="searchRes" hidden></div>
+  </div>
+  <span id="netStatus" class="net" role="status"></span>
+  <button id="panelToggle" class="btn-ghost" aria-pressed="true"><span class="pt-long">Reittikirjasto</span><span class="pt-short">Kirjasto</span></button>
+</header>
+
+<main id="main">
+  <div id="mapwrap">
+    <div id="map" aria-label="Merikartta"></div>
+
+    <div id="toolbar" role="toolbar" aria-label="Työkalut">
+      <button class="tb" id="tbMeasure" title="Harppi – matkan mittaaminen (M)">
+        <svg viewBox="0 0 24 24"><path d="M12 3v3M12 6l-6 15M12 6l6 15M8.2 15.5h7.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="6" r="1.8" fill="currentColor"/></svg>
+      </button>
+      <button class="tb" id="tbEbl" title="Suuntima – tosisuuntima ja etäisyys (F6)">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 16L20 4" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 2.4"/></svg>
+      </button>
+      <button class="tb" id="tbRoute" title="Uusi reitti (Ctrl+R)">
+        <svg viewBox="0 0 24 24"><path d="M4 19L10 11L15 14L20 5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="4" cy="19" r="2" fill="currentColor"/><circle cx="10" cy="11" r="2" fill="currentColor"/><circle cx="15" cy="14" r="2" fill="currentColor"/><circle cx="20" cy="5" r="2" fill="currentColor"/></svg>
+      </button>
+      <span class="tb-sep"></span>
+      <button class="tb tg" id="tbNotes" title="Reittinuottien näkyvyys">
+        <svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><text x="12" y="15.2" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor">057</text></svg>
+      </button>
+      <button class="tb tg" id="tbPasses" title="Sivuutus- ja käännösetäisyyksien näkyvyys">
+        <svg viewBox="0 0 24 24"><path d="M3 18H21" stroke="currentColor" stroke-width="1.8"/><path d="M12 18V6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.5 2"/><path d="M9 6H15" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+      <button class="tb tg" id="tbDeep" title="Syvä vesi – turvasyvyyttä syvempi vesi vaaleana, varottava sinisenä">
+        <svg viewBox="0 0 24 24"><path d="M3 9c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3 15c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2.2 2.4"/><path d="M12 3v3M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <span class="tb-sep"></span>
+      <button class="tb" id="tbMark" title="Lisää oma merkki kartalta">
+        <svg viewBox="0 0 24 24"><path d="M7 21V4M7 4h10l-2.5 4L17 12H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="tb" id="tbTask" title="Uusi tehtäväpaikka">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+    </div>
+
+    <div id="baseSwitch" role="radiogroup" aria-label="Kartan esitystapa">
+      <button type="button" role="radio" data-base="raster" title="Rasterikartta – Traficomin paperikartat, tasolle 17 asti (R)">Rasteri</button>
+      <button type="button" role="radio" data-base="enc" title="ENC-kartta perinteisin symbolein, tasolle 17 asti (E)">ENC</button>
+      <button type="button" role="radio" data-base="enc-ecdis" title="ENC-kartta ECDIS-symbolein, tasolle 17 asti (Shift+E)">ECDIS</button>
+      <button type="button" role="radio" data-base="vector" title="Vektorikartta – terävä kaikilla tasoilla, tasolle 20 asti (V)">Vektori</button>
+    </div>
+
+    <div id="editBanner" hidden></div>
+
+    <div id="readout" class="idle" aria-live="off">
+      <div class="ro-mode" id="roMode"></div>
+      <div class="ro-grid">
+        <span class="empty">Suuntima</span><b id="roBrg" class="empty">–</b>
+        <span class="empty">Etäisyys</span><b id="roDist" class="empty">–</b>
+        <span class="empty">Reitti</span><b id="roTotal" class="empty">–</b>
+        <span>Kursori</span><b id="roPos">–</b>
+        <span class="ro-task" hidden>Tehtävä</span><b class="ro-task" id="roTask" hidden>–</b>
+      </div>
+      <div class="ro-clock" id="roClock" title="Tietokoneen kello – ei GNSS-aikaa">--:--:--</div>
+    </div>
+
+    <div id="disclaimer">Ei navigointikäyttöön.<span class="dl-long"> Reitit tarkistetaan ja hyväksytään SARNavissa virallista ENC-karttaa vasten.</span></div>
+  </div>
+
+  <aside id="panel" aria-label="Reittikirjasto">
+    <div class="tabs" role="tablist">
+      <button class="tab on" data-tab="routes" role="tab">Reitit</button>
+      <button class="tab" data-tab="marks" role="tab">Merkit</button>
+      <button class="tab" data-tab="tasks" role="tab">Tehtävät</button>
+    </div>
+    <div class="tabbody" id="tab-routes"></div>
+    <div class="tabbody" id="tab-marks" hidden></div>
+    <div class="tabbody" id="tab-tasks" hidden></div>
+  </aside>
+</main>
+
+<div id="ctxmenu" role="menu" hidden></div>
+<div id="modalRoot" hidden></div>
+<div id="toast" role="status" hidden></div>
+<input type="file" id="fileInput" accept=".gpx,.json,application/gpx+xml,application/json" hidden>
+
+<script src="lib/leaflet.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/rastersharp.js"></script>
+<script src="js/symbols.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/gpx.js"></script>
+<script src="js/routes.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/library.js"></script>
+<script src="js/search.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
