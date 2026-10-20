@@ -301,7 +301,8 @@
   // Tehtäväpaikan voi antaa koordinaatteina, poimia kartalta tai hakea nimellä. Haun tulos tarkistetaan
   // kartalla ennen vahvistusta: numeroidut osumat näkyvät, ja merkkiä voi siirtää tai napauttaa karttaa.
   // draft on lomakkeen keskeneräinen tila (uusi tehtävä tai muokattavan kopio); ctx säilyttää haun.
-  function editTask(id, newPos, draft, ctx) {
+  // after(task): kutsutaan, kun tehtävä on luotu tai tallennettu (task) tai lomake peruttiin (null).
+  function editTask(id, newPos, draft, ctx, after) {
     var isNew = !id;
     var orig = isNew ? null : S.taskById(id);
     if (!isNew && !orig) return;
@@ -325,10 +326,10 @@
       if (p) { t.lat = p.lat; t.lng = p.lng; }
       ctx.q = md.querySelector('#tFind').value;
     }
-    function reopen() { editTask(isNew ? null : orig.id, null, t, ctx); }
+    function reopen() { editTask(isNew ? null : orig.id, null, t, ctx, after); }
     UI.modal({
       title: isNew ? 'Uusi tehtäväpaikka' : 'Tehtäväpaikka', body: body, enterButton: 1,
-      buttons: [{ label: 'Peruuta' }, {
+      buttons: [{ label: 'Peruuta', action: function () { if (after) setTimeout(function () { after(null); }, 0); } }, {
         label: isNew ? 'Luo tehtävä' : 'Tallenna', primary: true, action: function (md) {
           var pos = G.parsePos(md.querySelector('#tPos').value);
           if (!pos) { var er = md.querySelector('#tErr'); er.textContent = 'Paikka puuttuu tai koordinaatteja ei tunnistettu. Hae paikka nimellä, poimi se kartalta tai tarkista koordinaattien muoto.'; er.hidden = false; return false; }
@@ -341,6 +342,7 @@
           if (act) S.state.tasks.forEach(function (x) { x.active = x.id === task.id; }); else task.active = false;
           S.emit('tasks');
           App.centerOn([task.lat, task.lng], Math.max(map.getZoom(), 13));
+          if (after) setTimeout(function () { after(task); }, 0);
         }
       }],
       onOpen: function (md) {

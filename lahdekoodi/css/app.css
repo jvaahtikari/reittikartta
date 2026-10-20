@@ -581,7 +581,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 
 /* automaattinen reititys */
 .rt-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
-.rt-row input { flex: 1 1 200px; min-width: 0; }
+.rt-row input, .rt-row select { flex: 1 1 200px; min-width: 0; }
 .help table th { text-align: left; font-weight: 600; padding: 2px 10px 2px 0; }
 .help table td { padding: 2px 10px 2px 0; }
 

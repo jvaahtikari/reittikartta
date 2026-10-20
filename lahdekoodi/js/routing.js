@@ -654,11 +654,20 @@
   function taskDialog(taskId, ctx) {
     var st = S.state.settings;
     var tasks = S.state.tasks.slice().sort(function (a, b) { return (b.active ? 1 : 0) - (a.active ? 1 : 0) || String(b.time).localeCompare(String(a.time)); });
+    // uusi tehtävä luodaan tehtävälomakkeella, ja sen jälkeen palataan tähän dialogiin uusi tehtävä valittuna
+    function newTask(cur) {
+      UI.closeModal();
+      global.Tools.editTask(null, null, null, null, function (task) {
+        var c = cur || { start: 'gps', From: null, depth: defaultDepth() };
+        if (task) c.task = task.id;
+        taskDialog(null, c);
+      });
+    }
     if (!tasks.length) {
       UI.modal({
         title: 'Reititä tehtävälle',
         body: '<div class="help"><p>Tehtäviä ei ole. Luo ensin tehtäväpaikka, niin reitti voidaan laskea sille.</p></div>',
-        buttons: [{ label: 'Peruuta' }, { label: 'Uusi tehtävä…', primary: true, action: function () { setTimeout(function () { global.Tools.editTask(null, null); }, 0); } }]
+        buttons: [{ label: 'Peruuta' }, { label: 'Uusi tehtävä…', primary: true, action: function () { setTimeout(function () { newTask(null); }, 0); } }]
       });
       return;
     }
@@ -672,7 +681,7 @@
       return '<label><input type="radio" name="rtStart" value="' + v + '"' + (ctx.start === v ? ' checked' : '') + (dis ? ' disabled' : '') + '> ' + label + '</label>';
     }
     var body = '<div class="form">' +
-      '<label for="rtTask">Tehtävä</label><select id="rtTask">' + opts + '</select>' +
+      '<label for="rtTask">Tehtävä</label><div class="rt-row"><select id="rtTask">' + opts + '</select><button type="button" class="btn small" id="rtNewTask">Uusi tehtävä…</button></div>' +
       '<label>Lähtöpiste</label><div class="checks rt-start">' +
       radio('gps', 'Oma sijainti' + (App.gps && App.gps.position ? '' : ' (käynnistetään)')) +
       radio('station', st.station ? UI.esc(st.station.name || 'Asema') : 'Asema (ei asetettu)', !st.station) +
@@ -728,6 +737,11 @@
           rb.addEventListener('change', function () { ctx.start = readStart(md); other.hidden = ctx.start !== 'other'; if (!other.hidden) setTimeout(function () { md.querySelector('#rtFromQ').focus(); }, 30); });
         });
         md.querySelector('#rtTask').addEventListener('change', function () { ctx.task = this.value; });
+        md.querySelector('#rtNewTask').addEventListener('click', function () {
+          ctx.task = md.querySelector('#rtTask').value; ctx.start = readStart(md);
+          var v = parseFloat(String(md.querySelector('#rtDepth').value).replace(',', '.')); ctx.depth = isFinite(v) ? v : '';
+          newTask(ctx);
+        });
         md.querySelector('#rtDepth').addEventListener('input', function () { var v = parseFloat(String(this.value).replace(',', '.')); ctx.depth = isFinite(v) ? v : ''; });
         // "Muu paikka" käyttää samaa hakukenttää kuin reititysdialogi; kartalta poiminta palaa tähän dialogiin
         placeField(md, ctx, 'From', 'Lähtöpiste', function () { ctx.task = md.querySelector('#rtTask').value; ctx.start = 'other'; var v = parseFloat(String(md.querySelector('#rtDepth').value).replace(',', '.')); ctx.depth = isFinite(v) ? v : ''; }, function () { taskDialog(null, ctx); });

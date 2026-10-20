@@ -183,6 +183,7 @@ with sync_playwright() as pw:
     page.click('.modal .btn.primary')
     page.wait_for_selector('.modal h2', timeout=15000)
     check(page.inner_text('.modal h2') == 'Reitti laskettu', 'tehtäväreitti laskettu (%s)' % page.inner_text('.modal h2'))
+    if page.inner_text('.modal h2') != 'Reitti laskettu': print('   syy:', page.inner_text('.modal .mb').replace('\n', ' ')[:300], '| virheet:', errs)
     page.click('.modal .btn.primary'); page.wait_for_timeout(200)
     rt = page.evaluate('Store.state.routes[Store.state.routes.length-1]')
     check(page.evaluate('Store.state.routes.length') == n0 + 1 and rt['to'] == 'Keikka 1' and abs(rt['points'][-1]['lat'] - 61.80) < 1e-3, 'reitti päättyy tehtävää lähimpään väyläpisteeseen C, Mihin = tehtävän nimi')
@@ -208,6 +209,23 @@ with sync_playwright() as pw:
         page.keyboard.press('Escape'); page.wait_for_timeout(200)
     else:
         print('   (oma sijainti ohitettu: selain ei anna sijaintia file://-sivulle)')
+
+    # 9) uusi tehtävä reititysdialogista: lomake avautuu, luotu tehtävä on valittuna palattaessa
+    page.click('#tbTaskRoute'); page.wait_for_selector('#rtTask'); page.wait_for_timeout(120)
+    page.check('input[name=rtStart][value=station]'); page.fill('#rtDepth', '1.7')
+    page.click('#rtNewTask')
+    page.wait_for_selector('#tName'); page.wait_for_timeout(120)
+    page.fill('#tName', 'Keikka 2'); page.fill('#tPos', '61 42.0N 23 48.0E')
+    page.locator('.modal button', has_text='Luo tehtävä').click()
+    page.wait_for_selector('#rtTask', timeout=5000); page.wait_for_timeout(120)
+    check('Keikka 2' in page.inner_text('#rtTask option:checked'), 'uusi tehtävä on valittuna reititysdialogissa')
+    check(page.is_checked('input[name=rtStart][value=station]') and page.input_value('#rtDepth') == '1.7', 'lähtöpiste ja kulkusyvyys säilyivät')
+    shot(page, 'r9-uusi-tehtava')
+    page.click('#rtNewTask'); page.wait_for_selector('#tName'); page.wait_for_timeout(120)
+    page.locator('.modal button', has_text='Peruuta').click()
+    page.wait_for_selector('#rtTask', timeout=5000); page.wait_for_timeout(120)
+    check('Keikka 2' in page.inner_text('#rtTask option:checked'), 'peruutus palaa reititysdialogiin')
+    page.keyboard.press('Escape'); page.wait_for_timeout(200)
 
     check(not errs, 'ei JavaScript-virheitä: %s' % errs)
     b.close()
