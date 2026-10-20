@@ -713,6 +713,8 @@
         '<h3>Sijaintitarkkuus</h3><p>Rasterimerikartta on skannattu paperikartta, ja sen piirros poikkeaa ENC-kartasta. Pistokokeissa väylälinjan sijainti rasterikartalla poikkesi ENC:stä tyypillisesti noin 5 metriä ja suurimmillaan noin 16 metriä (Savonlinna, Kyrönsalmi), ja Näsijärvellä koko piirros oli siirtynyt noin 5–6 metriä luoteeseen. Väyläviraston navigointilinjat poikkesivat ENC:stä noin 1–2 metriä. Siksi reittipisteet kiinnitetään väyläaineistoon ja sivuutus- ja käännösetäisyyksien kohteet Väyläviraston turvalaiterekisterin sijainteihin. Turvalaitteiden sijainteja ei ole mitattu erikseen ENC:tä vasten. Vapaa piste tai kohde perii rasterikartan virheen.</p>' +
         '<h3>Käyttötarkoitus</h3><p>Traficomin määritelmän mukaan aluksen reitin suunnittelu on navigointikäyttöä, johon avoin aineisto ei ole tarkoitettu. Tämä sovellus soveltuu koulutukseen, havainnollistamiseen ja reittien luonnosteluun. Ajettavat reitit tarkistetaan ja hyväksytään SARNavissa virallista ENC-merikarttaa vasten.</p>' +
         '<h3>Laskenta</h3><p>Suunnat ovat tosisuuntia ja matkat loksodromimatkoja WGS84-ellipsoidilla. 1 mpk = 1852 m, 1 kaapeli = 0,1 mpk.</p>' +
+        '<h3>Lähdemerkintä</h3><p>Traficomin edellyttämä merkintä merikartta-aineistolle: <b>Lähde: Liikenne- ja viestintävirasto. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.</b></p>' +
+        '<h3>Sovelluksen koodi</h3><p>Copyright 2026 Jussi Vaahtikari. Lisenssi <a href="https://polyformproject.org/licenses/noncommercial/1.0.0" target="_blank" rel="noopener">PolyForm Noncommercial 1.0.0</a>, ks. <b>Tietoja</b>.</p>' +
         '</div>',
       buttons: [{ label: 'Sulje', primary: true }]
     });
@@ -722,7 +724,9 @@
     UI.modal({
       title: 'Tietoja',
       body: '<div class="help"><p><b>Reittikartta</b> on selainpohjainen reittisuunnittelun työkalu, jonka toiminnot mukailevat SARNav-karttaohjelmaa: reittiluonnos, suuntanuotit, sivuutus- ja käännösetäisyydet, hyväksyntä aluskohtaiseen reittikirjastoon, omat merkit ja tehtäväpaikat. Se ei ole Meripelastusseuran virallinen ohjelma.</p>' +
-        '<p>Sovellus toimii selaimessa ilman asennusta, verkko-osoitteessa tai yhtenä tiedostona. Karttatiilet ja väylätiedot haetaan verkosta.</p></div>',
+        '<p>Sovellus toimii selaimessa ilman asennusta, verkko-osoitteessa tai yhtenä tiedostona. Karttatiilet ja väylätiedot haetaan verkosta.</p>' +
+        '<h3>Lisenssi</h3><p>Copyright 2026 Jussi Vaahtikari. Sovelluksen koodi on lisensoitu ehdoilla <a href="https://polyformproject.org/licenses/noncommercial/1.0.0" target="_blank" rel="noopener">PolyForm Noncommercial 1.0.0</a>: koodia saa kopioida, muokata ja jakaa ei-kaupalliseen tarkoitukseen, ja yleishyödylliset yhteisöt, julkisen turvallisuuden organisaatiot ja viranomaiset saavat käyttää sitä rahoituksestaan riippumatta. Kaupallinen käyttö vaatii luvan tekijältä. Karttakirjasto Leaflet 1.9.4 on BSD-2-lisensoitu. Kartta-aineistot ovat omien lisenssiensä alaisia, ks. <b>Aineistot ja käyttöehdot</b>.</p>' +
+        '<p class="meta">Lähde: Liikenne- ja viestintävirasto. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.</p></div>',
       buttons: [{ label: 'Sulje', primary: true }]
     });
   }

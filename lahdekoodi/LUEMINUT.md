@@ -212,6 +212,18 @@ Reitti viedään GPX-tiedostoksi reitin valikosta tai reittikirjastosta, ja koko
 
 Lisenssiteksti ja lähdemerkinnät ovat sovelluksessa kohdassa Ohje → Aineistot ja käyttöehdot.
 
+Traficom edellyttää merikartta-aineistolle lähdemerkintää muodossa: *Lähde: Liikenne- ja viestintävirasto. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.* Merkintä on sovelluksen Tietoja-ikkunassa ja kohdassa Aineistot ja käyttöehdot.
+
+## Lisenssi
+
+Sovelluksen oma koodi on lisensoitu ehdoilla **PolyForm Noncommercial 1.0.0**. Lisenssiteksti on tiedostossa `LICENSE.md` ja osoitteessa https://polyformproject.org/licenses/noncommercial/1.0.0. Koodia saa vapaasti kopioida, muokata ja jakaa ei-kaupalliseen tarkoitukseen. Yleishyödylliset yhteisöt, julkisen turvallisuuden organisaatiot, oppilaitokset ja viranomaiset saavat käyttää sitä rahoituksestaan riippumatta, joten esimerkiksi Meripelastusseura ja sen yhdistykset voivat ottaa sovelluksen käyttöön ilman erillistä lupaa. Kaupallinen käyttö vaatii luvan tekijältä.
+
+Required Notice: Copyright 2026 Jussi Vaahtikari
+
+Ei-kaupallinen rajaus vastaa sovelluksen käyttämän aineiston ehtoja. Traficomin syvyysaineiston lisenssi sallii aineiston hyödyntämisen vain ei-kaupallisesti ja muuhun kuin navigointiin, joten vapaampi koodilisenssi antaisi luvan, jota sovellus ei aineistonsa puolesta voi käyttää. Lisenssi ei ole OSI:n määritelmän mukainen avoimen lähdekoodin lisenssi, vaikka lähdekoodi on julkinen.
+
+Lisenssi koskee vain sovelluksen omaa koodia. Kartta-aineistot ovat omien lisenssiensä alaisia (taulukko edellä), ja mukana tuleva Leaflet on BSD-2-lisensoitu; sen tekijänoikeusilmoitus säilyy kirjaston alussa. SARNav on Meripelastusseuran ohjelma, ja nimeä käytetään tässä vain kuvailevasti.
+
 OpenStreetMapin palvelimet estävät karttatiilet sivuilta, jotka eivät lähetä Referer-tietoa, eikä tiedostona avattu sivu lähetä sitä. Siksi sovellus hakee OSM-tiilet erikseen ja tunnistaa itsensä X-Requested-With-otsakkeella. Jos tiilet näkyvät joskus Access blocked -ruutuina, maapohjaksi voi valita Maanmittauslaitoksen taustakartan.
 
 ## Repon rakenne
@@ -221,6 +233,7 @@ OpenStreetMapin palvelimet estävät karttatiilet sivuilta, jotka eivät lähet�
 | `index.html` | Koko sovellus yhtenä tiedostona. Vercel julkaisee tämän. |
 | `api/mml.js` | Vercelin palvelinfunktio: välityspalvelu Maanmittauslaitoksen rajapintaan |
 | `README.md` | Tämä ohje (kopio tiedostosta `lahdekoodi/LUEMINUT.md`) |
+| `LICENSE.md` | Koodin lisenssi, PolyForm Noncommercial 1.0.0 |
 | `lahdekoodi/index.html`, `lahdekoodi/css/app.css` | Sovelluksen runko ja tyylit |
 | `lahdekoodi/js/app.js` | Käynnistys, valikot, näppäimet, oma sijainti ja asetukset |
 | `lahdekoodi/js/chart.js` | Karttapohjat, vektorikartta, väylätiedot, valot, Maanmittauslaitoksen aineistot ja laiturit |
@@ -234,7 +247,7 @@ OpenStreetMapin palvelimet estävät karttatiilet sivuilta, jotka eivät lähet�
 | `lahdekoodi/js/geo.js` | Suunnat, matkat ja koordinaattien muotoilu |
 | `lahdekoodi/js/store.js` | Tila ja tallennus selaimeen |
 | `lahdekoodi/js/ui.js` | Valikot, dialogit, ilmoitukset ja lukemat |
-| `lahdekoodi/lib/` | Leaflet 1.9.4 |
+| `lahdekoodi/lib/` | Leaflet 1.9.4 (BSD-2) |
 | `lahdekoodi/build.py` | Kokoaa yhden tiedoston version |
 | `lahdekoodi/tests/` | Käyttöliittymätestit |
 
