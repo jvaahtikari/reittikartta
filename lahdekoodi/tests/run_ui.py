@@ -24,6 +24,7 @@ ENC_EAST = 23.75
 
 osm_log = []
 mml_name_log = []
+mml_pier_log = []
 overpass_log = []
 overpass_fail_main = []
 
@@ -106,7 +107,7 @@ def handle(route, request):
         if q.get('api-key') != 'TESTI':
             return route.fulfill(status=401, headers=cors, content_type='application/json', body='{"error":"unauthorized"}')
         if u.path.endswith('/collections'):
-            cols = [{'id': c} for c in ('tieviiva', 'vesikivi', 'vesikivikko', 'matalikko', 'syvyyspiste')]
+            cols = [{'id': c} for c in ('tieviiva', 'vesikivi', 'vesikivikko', 'matalikko', 'syvyyspiste', 'pistolaituriviiva', 'aallonmurtaja')]
             return route.fulfill(status=200, headers=cors, content_type='application/json', body=json.dumps({'collections': cols}))
         bb = [float(v) for v in q.get('bbox', '0,0,0,0').split(',')]
         cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
@@ -114,6 +115,9 @@ def handle(route, request):
         if '/vesikivi/' in u.path:
             for i, k in enumerate((38511, 38512, 38513)):
                 feats.append({'type': 'Feature', 'id': '%s-%d' % (q['bbox'], i), 'geometry': {'type': 'Point', 'coordinates': [cx + 0.004 * i, cy]}, 'properties': {'kohdeluokka': k}})
+        elif '/pistolaituriviiva/' in u.path:
+            mml_pier_log.append(url)
+            feats.append({'type': 'Feature', 'id': 'pl' + q['bbox'], 'geometry': {'type': 'LineString', 'coordinates': [[cx, cy], [cx + 0.0008, cy + 0.0002]]}, 'properties': {'kohdeluokka': 45111}})
         elif '/matalikko/' in u.path:
             feats.append({'type': 'Feature', 'id': 'm' + q['bbox'], 'geometry': {'type': 'Polygon', 'coordinates': [[[cx, cy + 0.003], [cx + 0.006, cy + 0.003], [cx + 0.006, cy + 0.006], [cx, cy + 0.006], [cx, cy + 0.003]]]}, 'properties': {}})
         elif 'placenames' in u.path and ('spelling' in q or 'spelling_case_insensitive' in q):

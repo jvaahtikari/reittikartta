@@ -887,7 +887,8 @@
     }).then(function (j) {
       var ids = (j.collections || []).map(function (c) { return c.id; });
       function find(re) { return ids.filter(function (id) { return re.test(id); })[0] || null; }
-      mmlCols = { rock: find(/^vesikivi$/i) || find(/vesikivi(?!kko)/i), rocks: find(/vesikivikko/i), shoal: find(/matalikko/i) };
+      mmlCols = { rock: find(/^vesikivi$/i) || find(/vesikivi(?!kko)/i), rocks: find(/vesikivikko/i), shoal: find(/matalikko/i),
+        pier: find(/^pistolaituriviiva$/i), breakwater: find(/^aallonmurtaja$/i) };
       return mmlCols;
     }).catch(function (e) {
       mmlColsErr = e.message === 'avain' ? (viaProxy ? 'Palvelimen Maanmittauslaitoksen API-avain ei kelpaa' : 'Maanmittauslaitoksen API-avain ei kelpaa')
@@ -1042,6 +1043,7 @@
     k = String(k || '').trim();
     if (k === mmlKey) return;
     mmlKey = k; mmlCols = null; mmlColsErr = ''; mmlLoaded = {}; mmlStore = { rock: {}, rocks: {}, shoal: {}, name: {} };
+    mmlPierLoaded = {};
     renderMml(); loadMml();
   }
 
@@ -1280,7 +1282,48 @@
   var OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
   var PIER_CELL = { w: 0.2, h: 0.1 }, PIER_MINZ = 14, PIER_TTL = 30 * 864e5;
   var pierStore = {}, pierBounds = {}, pierLoaded = {}, pierFailAt = {}, pierLayer = null, pierRenderer = null, pierBusy = 0, pierDb = null, pierAttr = false;
-  var ATTR_PIER = 'Laiturit: &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-tekijät';
+  var ATTR_PIER = 'Laiturit: Maanmittauslaitos CC BY 4.0 ja &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-tekijät';
+  // Maanmittauslaitoksen maastotietokannan laituriviivat (pistolaituriviiva) ja aallonmurtajat tulevat
+  // välityspalvelun kautta luotettavasti myös silloin, kun Overpass on ruuhkautunut. Kun niitä on saatavilla,
+  // OpenStreetMapista piirretään laitureista vain alueina kartoitetut, ettei sama laituri näy kahdesti.
+  var mmlPierLoaded = {};
+  function mmlPiersOn() { return mmlAvailable(); }
+  function loadMmlPiers() {
+    if (!mmlPiersOn()) return;
+    var bb = map.getBounds().pad(0.2);
+    var cx0 = Math.floor(bb.getWest() / MML_CELL.w), cx1 = Math.floor(bb.getEast() / MML_CELL.w);
+    var cy0 = Math.floor(bb.getSouth() / MML_CELL.h), cy1 = Math.floor(bb.getNorth() / MML_CELL.h);
+    if ((cx1 - cx0 + 1) * (cy1 - cy0 + 1) > 24) return;
+    mmlDiscover().then(function (cols) {
+      if (!cols || !(cols.pier || cols.breakwater)) return;
+      for (var cx = cx0; cx <= cx1; cx++) for (var cy = cy0; cy <= cy1; cy++) {
+        var key = cx + ':' + cy;
+        if (mmlPierLoaded[key]) continue;
+        mmlPierLoaded[key] = 'pending';
+        (function (key, cx, cy) {
+          var bbox = '&bbox=' + [cx * MML_CELL.w, cy * MML_CELL.h, (cx + 1) * MML_CELL.w, (cy + 1) * MML_CELL.h].map(function (v) { return v.toFixed(5); }).join(',') + '&limit=2000';
+          pierBusy++; setStatus();
+          Promise.all(['pier', 'breakwater'].filter(function (k) { return cols[k]; }).map(function (k) {
+            return fetch(mmlUrl(MML_TOPO, '/collections/' + cols[k] + '/items', bbox)).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+              .then(function (j) {
+                (j.features || []).forEach(function (f, i) {
+                  var g = f.geometry; if (!g) return;
+                  var lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates
+                    : g.type === 'Polygon' ? [g.coordinates[0]] : g.type === 'MultiPolygon' ? g.coordinates.map(function (p) { return p[0]; }) : [];
+                  var area = /Polygon/.test(g.type);
+                  lines.forEach(function (ln, li) {
+                    var pts = ln.map(function (c) { return [Math.round(c[1] * 1e6) / 1e6, Math.round(c[0] * 1e6) / 1e6]; });
+                    if (pts.length < 2) return;
+                    pierStore['m' + k.charAt(0) + (f.id != null ? f.id : key + ':' + i) + '_' + li] = { p: pts, a: area, w: 0, k: k === 'pier' ? 'pier' : 'breakwater', src: 'mml' };
+                  });
+                });
+              });
+          })).then(function () { mmlPierLoaded[key] = true; }, function () { delete mmlPierLoaded[key]; })
+            .then(function () { pierBusy--; setStatus(); renderPiers(); });
+        })(key, cx, cy);
+      }
+    }, function () { });
+  }
   function piersOn() { return show.piers !== false && vecOn(); }
   function pierDbOpen() {
     if (pierDb) return pierDb;
@@ -1359,6 +1402,7 @@
   }
   function loadPiers() {
     if (!piersOn() || map.getZoom() < PIER_MINZ) return;
+    loadMmlPiers();
     var bb = map.getBounds().pad(0.2);
     var cx0 = Math.floor(bb.getWest() / PIER_CELL.w), cx1 = Math.floor(bb.getEast() / PIER_CELL.w);
     var cy0 = Math.floor(bb.getSouth() / PIER_CELL.h), cy1 = Math.floor(bb.getNorth() / PIER_CELL.h);
@@ -1383,8 +1427,12 @@
     var mpp = 40075016.686 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, map.getZoom() + 8);   // metriä / pikseli
     var night = document.body.classList.contains('night');
     var fill = night ? '#4d4a40' : '#e6dcc0', edge = night ? '#cfc8b4' : '#333333';
-    Object.keys(pierStore).forEach(function (id) {
+    var haveMml = mmlPiersOn() && Object.keys(mmlPierLoaded).some(function (k) { return mmlPierLoaded[k] === true; });
+    // Maanmittauslaitoksen kohteet ensin, OpenStreetMapin alueet niiden päälle
+    var ids = Object.keys(pierStore).sort(function (a, b) { return (pierStore[a].src === 'mml' ? 0 : 1) - (pierStore[b].src === 'mml' ? 0 : 1); });
+    ids.forEach(function (id) {
       var x = pierStore[id];
+      if (haveMml && x.src !== 'mml' && !x.a && x.k === 'pier') return;
       var xb = pierBounds[id] || (pierBounds[id] = L.latLngBounds(x.p));      // ei tallenneta välimuistiin
       if (!bb.intersects(xb)) return;
       if (x.a) {

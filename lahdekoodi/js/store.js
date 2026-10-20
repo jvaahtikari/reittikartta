@@ -28,6 +28,7 @@
         mmlKey: '',                 // Maanmittauslaitoksen avoimen rajapinnan API-avain           // turvasyvyys aluksittain (m)
         base: 'raster',             // karttapohja: 'raster' | 'vector' | 'enc' | 'enc-ecdis'
         night: false,
+        gps: null,                  // oma sijainti: null = puhelimessa päälle käynnistyessä, true/false = käyttäjän valinta
         panelOpen: true,
         turnWarnNM: 1.0             // käännösetäisyys punaiseksi tätä pidempänä
       }

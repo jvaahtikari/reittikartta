@@ -46,7 +46,7 @@ Uutta tehtävää luotaessa paikan voi hakea lomakkeen kentästä Hae paikka sam
 
 ## Oma sijainti
 
-Työkalupalkin sijaintipainike näyttää laitteen oman sijainnin sinisenä pisteenä ja tarkkuuden vaaleana ympyränä. Liikkeessä pisteen edessä on kulkusuunnan nuoli, ja lukemissa näkyvät sijainti, nopeus solmuina, kulku ja tarkkuus. Selain kysyy luvan ensimmäisellä kerralla. Sijaintia ei tallenneta eikä lähetetä minnekään. Kun seuranta on päällä, painike keskittää kartan sijaintiin, jos se on näkymän ulkopuolella, ja muuten lopettaa seurannan. Sijainti toimii verkkoversiossa. Tiedostona avatussa sivussa selain ei välttämättä anna sijaintia.
+Työkalupalkin sijaintipainike näyttää laitteen oman sijainnin sinisenä pisteenä ja tarkkuuden vaaleana ympyränä. Liikkeessä pisteen edessä on kulkusuunnan nuoli, ja lukemissa näkyvät sijainti, nopeus solmuina, kulku ja tarkkuus. Puhelimessa sijainti käynnistyy, kun sovellus avataan, ja selain kysyy luvan ensimmäisellä kerralla. Tietokoneella sijainti käynnistetään painikkeesta. Sijaintia ei tallenneta eikä lähetetä minnekään. Jos lopetat seurannan tai kiellät luvan, sovellus muistaa valinnan eikä käynnistä sijaintia enää itsestään. iPhonessa sijainnin pitää olla sallittu myös kohdassa Asetukset → Tietosuoja ja suojaus → Sijaintipalvelut → Safarin verkkosivustot. Kun seuranta on päällä, painike keskittää kartan sijaintiin, jos se on näkymän ulkopuolella, ja muuten lopettaa seurannan. Sijainti toimii verkkoversiossa. Tiedostona avatussa sivussa selain ei välttämättä anna sijaintia.
 
 ## Reitin suunnat ja käännösmerkit
 
@@ -69,7 +69,7 @@ Maapohja on oletuksena OpenStreetMap, jotta vektorikartalla näkyvät maa-alueid
 
 ## Laiturit ja aallonmurtajat
 
-Vektorikartalla laiturit, aallonmurtajat ja pengerrykset haetaan OpenStreetMapista ja piirretään veden päälle, koska maapohjan laiturit jäisivät vektorikartan vesialueen alle. Ensimmäinen haku uudelle alueelle voi kestää OSM:n Overpass-palvelimen kuormasta riippuen puolikin minuuttia, ja tilarivillä lukee silloin Ladataan laitureita. Haetut alueet tallennetaan selaimeen 30 päiväksi, joten seuraavalla kerralla ne näkyvät heti. OpenStreetMap on vapaaehtoisten kartoittama, joten laiturit ovat yleensä oikeissa paikoissa, mutta niitä ei ole tarkastettu merenkulun tarpeisiin, ja kelluvat laiturit voivat olla kausittaisia. Laiturit saa pois valikosta Näytä.
+Vektorikartalla laiturit ja aallonmurtajat haetaan Maanmittauslaitoksen maastotietokannasta ja OpenStreetMapista ja piirretään veden päälle, koska maapohjan laiturit jäisivät vektorikartan vesialueen alle. Maanmittauslaitoksen laituriviivat tulevat aina. OpenStreetMapista lisätään alueina kartoitetut laiturit, aallonmurtajat ja pengerrykset, kun OpenStreetMapin Overpass-palvelu vastaa. Ensimmäinen haku uudelle alueelle voi kestää OSM:n Overpass-palvelimen kuormasta riippuen puolikin minuuttia, ja tilarivillä lukee silloin Ladataan laitureita. Haetut alueet tallennetaan selaimeen 30 päiväksi, joten seuraavalla kerralla ne näkyvät heti. OpenStreetMap on vapaaehtoisten kartoittama, joten laiturit ovat yleensä oikeissa paikoissa, mutta niitä ei ole tarkastettu merenkulun tarpeisiin, ja kelluvat laiturit voivat olla kausittaisia. Laiturit saa pois valikosta Näytä.
 
 ## Syvä vesi ja turvasyvyys
 
