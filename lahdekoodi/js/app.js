@@ -100,7 +100,7 @@
   // ---------- moduulit ----------
   var chart = global.Chart.init(map, st.show, { statusEl: UI.$('netStatus') });
   global.ChartAPI = chart;
-  chart.setLand(st.land || 'mml');
+  chart.setLand(st.land || 'osm');
   chart.setUnderlay(!!st.show.underlay);
   chart.setMmlKey(st.mmlKey || '');
   if (st.show.sharpen === false) chart.base.charts.setSharpen(false);
@@ -219,6 +219,57 @@
     global.Tools.pick('Uusi merkki – klikkaa paikka kartalta', function (ll) { global.Tools.editMark(null, ll); });
   });
   UI.$('tbTask').addEventListener('click', function () { global.Tools.editTask(null, null); });
+
+  // ---------- oma sijainti ----------
+  // Selaimen sijainti (GPS puhelimessa) vain käyttäjän pyynnöstä: selain kysyy luvan ensimmäisellä kerralla.
+  // Ensimmäinen sijainti keskitetään; jos sijainti on näkymän ulkopuolella, painike keskittää, muuten se lopettaa.
+  var gps = { watch: null, layer: null, last: null, first: false };
+  function gpsText(c) {
+    var t = G.fmtPos({ lat: c.latitude, lng: c.longitude });
+    if (c.speed != null && c.speed >= 0) t += ' · ' + G.fmtNum(c.speed * 3600 / G.NM, 1) + ' kn';
+    if (c.heading != null && !isNaN(c.heading) && c.speed > 0.3) t += ' · ' + G.fmtBrg(c.heading, 0);
+    return t + ' (±' + Math.round(c.accuracy) + ' m)';
+  }
+  function gpsShow(p) {
+    var c = p.coords, ll = L.latLng(c.latitude, c.longitude);
+    gps.last = ll;
+    if (!gps.layer) gps.layer = L.layerGroup().addTo(map);
+    gps.layer.clearLayers();
+    L.circle(ll, { radius: c.accuracy, color: '#1a73e8', weight: 1, fillColor: '#1a73e8', fillOpacity: 0.1, interactive: false }).addTo(gps.layer);
+    var moving = c.heading != null && !isNaN(c.heading) && c.speed > 0.3;
+    L.marker(ll, {
+      icon: L.divIcon({ className: 'gps-ico', html: (moving ? '<span class="gps-dir" style="transform:rotate(' + Math.round(c.heading) + 'deg)"></span>' : '') + '<span class="gps-dot"></span>', iconSize: [0, 0] }),
+      keyboard: false, zIndexOffset: 2000
+    }).bindTooltip('Oma sijainti<br>' + UI.esc(gpsText(c)), { direction: 'top', offset: [0, -10] }).addTo(gps.layer);
+    UI.readout({ gps: gpsText(c) });
+    if (gps.first) { gps.first = false; App.centerOn(ll, Math.max(map.getZoom(), 14)); }
+  }
+  function gpsStop() {
+    if (gps.watch != null) navigator.geolocation.clearWatch(gps.watch);
+    gps.watch = null; gps.last = null;
+    if (gps.layer) { map.removeLayer(gps.layer); gps.layer = null; }
+    UI.$('tbGps').classList.remove('on');
+    UI.readout({ gps: null });
+  }
+  function gpsStart() {
+    if (!navigator.geolocation) { UI.toast('Tämä selain ei anna sijaintia.', true); return; }
+    if (global.isSecureContext === false) { UI.toast('Selain antaa sijainnin vain suojatulle (https) sivulle. Käytä verkkoversiota.', true); return; }
+    UI.$('tbGps').classList.add('on');
+    gps.first = true;
+    UI.toast('Haetaan sijaintia…');
+    gps.watch = navigator.geolocation.watchPosition(gpsShow, function (err) {
+      var msg = err.code === 1 ? 'Sijainnin käyttö on estetty. Salli se selaimen tai puhelimen asetuksista (Safari: Asetukset → Tietosuoja → Sijaintipalvelut).'
+        : err.code === 3 ? 'Sijaintia ei saatu ajoissa. Yritetään edelleen.' : 'Sijaintia ei saatu.';
+      UI.toast(msg, true);
+      if (err.code === 1) gpsStop();
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  }
+  UI.$('tbGps').addEventListener('click', function () {
+    if (gps.watch == null) { gpsStart(); return; }
+    if (gps.last && !App.visibleBounds().pad(-0.1).contains(gps.last)) { App.centerOn(gps.last); return; }
+    gpsStop();
+  });
+  App.gps = { get position() { return gps.last; }, stop: gpsStop };
   UI.$('tbDeep').addEventListener('click', function () {
     st.show.safety = !st.show.safety; S.emit('settings');
     if (st.show.safety) UI.toast('Syvä vesi: turvasyvyys ' + fmtDepth(safetyFor()) + ' m' + (st.currentVessel ? ' (' + st.currentVessel + ')' : '') + '. Muuta arvoa valikosta Näytä → Aseta turvasyvyys.');
@@ -325,8 +376,8 @@
         { head: 'Maapohja ja näyttö' },
         item('Karttareunus (minuuttiasteikko)', toggleShow('border')),
         item('Maapohja merikartan alla (rasteri- ja ENC-pohjalla)', toggleShow('underlay', function (on) { chart.setUnderlay(on); })),
-        { label: 'Maapohja: Maanmittauslaitoksen taustakartta', checked: (st.land || 'mml') === 'mml', action: function () { st.land = 'mml'; chart.setLand('mml'); S.save(); } },
-        { label: 'Maapohja: OpenStreetMap', checked: st.land === 'osm', action: function () { st.land = 'osm'; chart.setLand('osm'); S.save(); } },
+        { label: 'Maapohja: Maanmittauslaitoksen taustakartta', checked: st.land === 'mml', action: function () { st.land = 'mml'; chart.setLand('mml'); S.save(); } },
+        { label: 'Maapohja: OpenStreetMap', checked: (st.land || 'osm') === 'osm', action: function () { st.land = 'osm'; chart.setLand('osm'); S.save(); } },
         { label: 'Terävä suurennus (rasteri)', checked: st.show.sharpen !== false, keepOpen: true, action: function () {
           st.show.sharpen = st.show.sharpen === false; chart.base.charts.setSharpen(st.show.sharpen); S.save();
         } },
@@ -625,11 +676,13 @@
         '<h3>Karttamerkit</h3><p>Kivet, turvalaitteet ja valot piirretään Suomen merikarttojen merkeillä Traficomin virallisen merkkienselityksen mukaan, samoin kuin rasterikartassa.</p>' + legend() +
         '<h3>Loistot, sektorit ja muut väylätiedot</h3><p>Jokaisella loistolla, apuloistolla ja valaistulla viitalla on valon värinen pisara (valkoinen valo keltaisena, kuten merikartassa). Sektoriloistoilla näytetään lisäksi valosektorit värikaarina ja sektorirajat pisteviivoina sekä loistorekisterin valotunnus (esim. VQ (3) 5 s). Valotiedot tulevat Väyläviraston turvalaite- ja loistorekistereistä, myös muiden väylänpitäjien laitteista. Lisäksi näytetään nopeusrajoitusalueet ja muiden väylänpitäjien (esim. kaupunkien) väylät ja turvalaitteet. Vektoripohjalla ne ovat oletuksena näkyvissä, muilla pohjilla ne saa päälle valikosta Näytä.</p>' +
         '<h3>Laiturit ja aallonmurtajat</h3><p>Vektorikartalla laiturit, aallonmurtajat ja pengerrykset haetaan OpenStreetMapista ja piirretään veden päälle, koska maapohjan laiturit jäisivät vesialueen alle. Ensimmäinen haku uudelle alueelle voi kestää OSM:n palvelimen kuormasta riippuen puolikin minuuttia. Haetut alueet tallennetaan selaimeen 30 päiväksi, joten seuraavalla kerralla ne näkyvät heti. OpenStreetMap on vapaaehtoisten kartoittama, joten laiturit ovat yleensä oikeissa paikoissa, mutta niitä ei ole tarkastettu merenkulun tarpeisiin, ja kelluvat laiturit voivat olla kausittaisia.</p>' +
-        '<h3>Maanmittauslaitoksen kivet, karikot ja nimistö</h3><p>Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta vedenalaiset (⊤), vedenpinnassa olevat (+) ja vedenpäälliset (⊥) kivet sekä vesikivikot ja matalikot, jotka rajataan mustalla pisteviivalla (vaarakäyrä). OpenStreetMap-maapohjalla näytetään myös nimistörekisterin nimet. Tämä vaatii Maanmittauslaitoksen maksuttoman API-avaimen, joka syötetään kohtaan <b>Tiedosto → Asetukset</b>. Maastotietokannan kivet on kartoitettu maastokartoituksessa, eivät merenmittauksessa.</p>' +
+        '<h3>Maanmittauslaitoksen kivet, karikot ja nimistö</h3><p>Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta vedenalaiset (⊤), vedenpinnassa olevat (+) ja vedenpäälliset (⊥) kivet sekä vesikivikot ja matalikot, jotka rajataan mustalla pisteviivalla (vaarakäyrä). Vektorikartan maapohja on oletuksena OpenStreetMap, ja sen päällä näytetään myös nimistörekisterin paikannimet. Maanmittauslaitoksen taustakartan voi valita Näytä-valikosta. Verkkoversiossa Maanmittauslaitoksen aineisto toimii ilman omaa avainta. Tiedostona avattu versio tarvitsee maksuttoman API-avaimen, joka syötetään kohtaan <b>Tiedosto → Asetukset</b>. Maastotietokannan kivet on kartoitettu maastokartoituksessa, eivät merenmittauksessa.</p>' +
         '<h3>Vektorikartta</h3><p>Karttapohjaksi voi valita myös vektorikartan. Siinä syvyysalueet, syvyyskäyrät, syvyysluvut ja rantaviiva piirretään Traficomin merikarttatietokannasta ja väylät ja turvalaitteet Väyläviraston aineistosta, joten kartta on terävä kaikilla tasoilla ja kattaa myös Näsijärven. Maalla näkyy Maanmittauslaitoksen taustakartta. Paperikartan nimistö ja erikoismerkinnät puuttuvat.</p>' +
         '<h3>Paikkahaku ja koordinaatit</h3><p>Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, oman merkin tai tehtävän nimen tai koordinaatin. Turvalaitteet haetaan Väyläviraston aineistosta. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä, mikä vaatii Maanmittauslaitoksen API-avaimen (Tiedosto → Asetukset).</p>' +
-        '<p>Hakusanaksi riittää nimen alku: <b>viitas</b> löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten <b>salmi</b> löytää esimerkiksi lähellä olevan Viitasalmen. Samannimisiä paikkoja on paljon, joten tulokset näytetään kartalla numeroituina ja listassa lähimmät ensin. Alle 50 km:n päässä kartan keskeltä olevat ovat omana ryhmänään, ja jokaisella rivillä on etäisyys ja suunta kartan keskeltä. Jos lähialueen tuloksia ei näy kartalla, kartta siirtyy niihin. <b>Näytä kartalla</b> (tai Enter) näyttää kaikki lähialueen tulokset. Nuolinäppäimet ja hiiren vienti listan riville korostavat tuloksen kartalla, ja tuloksen voi valita listasta tai klikkaamalla sen numeroa kartalla. Numerot jäävät kartalle vertailua varten, kunnes valitset paikan tai painat Esc.</p>' +
+        '<p>Hakusanaksi riittää nimen alku: <b>viitas</b> löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten <b>salmi</b> löytää esimerkiksi lähellä olevan Viitasalmen. Samannimisiä paikkoja on paljon, joten tulokset näytetään kartalla numeroituina ja listassa lähimmät ensin. Alle 27 meripeninkulman (50 km) päässä kartan keskeltä olevat ovat omana ryhmänään, ja jokaisella rivillä on etäisyys merimaileina ja suunta kartan keskeltä. Jos lähialueen tuloksia ei näy kartalla, kartta siirtyy niihin. <b>Näytä kartalla</b> (tai Enter) näyttää kaikki lähialueen tulokset. Nuolinäppäimet ja hiiren vienti listan riville korostavat tuloksen kartalla, ja tuloksen voi valita listasta tai klikkaamalla sen numeroa kartalla. Numerot jäävät kartalle vertailua varten, kunnes valitset paikan tai painat Esc.</p>' +
         '<p>Koordinaatissa asteen ja minuutin merkit voi korvata välilyönneillä. Heti perään kirjoitettu N tai E päättää luvun: <b>61 35,1N</b> = 61°35,1′N, <b>61 35 11N</b> = 61°35′11″N ja <b>61,5N</b> = 61°30′N. Leveys ja pituus erotetaan välilyönnillä tai pilkulla, esimerkiksi <b>61 35,1N 23 45,6E</b>. Tehtävän sijaintikentän alla näkyy heti, miten syöte tulkittiin.</p>' +
+        '<h3>Tehtäväpaikan haku</h3><p>Uutta tehtävää luotaessa paikan voi hakea lomakkeen kentästä Hae paikka samalla tavalla kuin yläpalkista. Kun osuma valitaan, lomake väistyy ja paikka näytetään kartalla magentalla renkaalla. Muut osumat näkyvät numeroituina, ja numeron napautus vaihtaa paikan. Paikkaa voi tarkentaa vetämällä rengasta tai napauttamalla karttaa. Vahvista paikka palaa lomakkeelle uusi paikka valittuna, ja tehtävä luodaan vasta painikkeesta Luo tehtävä. Takaisin palaa lomakkeelle muuttamatta paikkaa.</p>' +
+        '<h3>Oma sijainti</h3><p>Työkalupalkin sijaintipainike näyttää laitteen oman sijainnin sinisenä pisteenä ja tarkkuuden vaaleana ympyränä. Liikkeessä pisteen edessä on kulkusuunnan nuoli, ja lukemissa näkyvät sijainti, nopeus solmuina, kulku ja tarkkuus. Selain kysyy luvan ensimmäisellä kerralla. Sijaintia ei tallenneta eikä lähetetä minnekään. Kun seuranta on päällä, painike keskittää kartan sijaintiin, jos se on näkymän ulkopuolella, ja muuten lopettaa seurannan. Sijainti toimii verkkoversiossa. Tiedostona avatussa sivussa selain ei välttämättä anna sijaintia.</p>' +
         '<h3>Puhelimessa ja tabletissa</h3><p>Kapealla näytöllä valikot ovat vasemman yläkulman valikkonapin takana, ja samasta valikosta valitaan alus ja näytettävät reitit. Puhelimessa valikko avautuu yläreunasta levynä, jossa on <b>Takaisin</b> ja <b>Sulje</b>, ja Näytä-valikko on jaettu osioihin. Jos valintoja on näkyvän osan alapuolella, levyn alareunassa lukee siitä. <b>Kirjasto</b> avautuu näytön alaosaan ja sulkeutuu itsestään, kun aloitat reitin tai muokkauksen. Kun kirjasto on auki, kartta keskitetään sen yläpuolelle jäävään osaan. Karttaa zoomataan nipistämällä, ja pitkä painallus vastaa hiiren oikeaa painiketta. Reittipisteitä lisättäessä ja harpilla mitattaessa ylhäällä ovat painikkeet <b>Poista viimeinen</b> ja <b>Valmis</b>, ja lukemat näyttävät juuri lisätyn välin suunnan ja pituuden.</p>' +
         '<h3>Karttapohja</h3><p>Kartan yläreunan painikkeilla <b>Rasteri</b>, <b>ENC</b>, <b>ECDIS</b> ja <b>Vektori</b>, valikosta <b>Näytä</b> tai näppäimillä <kbd>R</kbd>, <kbd>E</kbd>, <kbd>Shift</kbd>+<kbd>E</kbd> ja <kbd>V</kbd> voi valita rasterikartan (Traficomin paperikartat), vektorikartan tai ENC-kartan, jonka Traficomin palvelu piirtää ENC-aineistosta. ENC-aineistoa ei ole kaikilla vesillä, esimerkiksi Näsijärvellä. Silloin sovellus näyttää rasterikartan ja kertoo siitä kartan oikeassa yläkulmassa.</p>' +
         '<p>Rasteri- ja ENC-pohjaa näytetään tasolle 17 asti. Kun zoomaat sitä lähemmäs, kartta vaihtuu itsestään vektorikarttaan, jota voi suurentaa tasolle 20 asti (näytön leveydellä noin sata metriä). Uloszoomatessa palataan valittuun pohjaan. Kun vektorikartta on vaihtunut itsestään, Vektori-painike näkyy katkoviivoitettuna. Vektorikartan syvyysalueiden ja rantaviivan tarkkuus on merikarttatietokannan tarkkuus, joten suurennus ei tee aineistosta tarkempaa kuin se on.</p>' +

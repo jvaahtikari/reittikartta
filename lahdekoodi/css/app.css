@@ -553,3 +553,28 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   #editBanner button { min-height: 40px; }
   .modal .mf .btn, .modal .mf button { min-height: 44px; }
 }
+
+/* oma sijainti */
+.gps-ico { pointer-events: auto; }
+.gps-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 1px 4px rgba(0,0,0,.4); }
+.gps-dir { position: absolute; left: -9px; top: -26px; width: 18px; height: 26px; transform-origin: 9px 26px; }
+.gps-dir::before { content: ""; position: absolute; left: 3px; top: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 16px solid #1a73e8; }
+
+/* tehtäväpaikan haku lomakkeessa */
+.tfind { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tsr { max-height: 240px; overflow: auto; border: 1px solid #c9d3dc; border-radius: 6px; background: #fff; color: #111; font: 13px var(--font); }
+.tsr[hidden] { display: none; }
+.tsr .sr { display: flex; align-items: center; gap: 8px; padding: 6px 8px; min-height: 40px; box-sizing: border-box; cursor: pointer; border-bottom: 1px solid #eef1f4; }
+.tsr .sr:hover { background: #eaf3fb; }
+.tsr .sr-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tsr .sr-t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsr .sr-t span { color: #5b6b78; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsr em { font-style: normal; color: #33495a; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tsr .sn-no { font-style: normal; flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #c2188b; color: #c2188b; font: 700 11px/16px var(--font); text-align: center; box-sizing: border-box; }
+.tsr .sh { padding: 5px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #6b7a86; background: #f6f8fa; }
+.tsr .sn { padding: 6px 8px; color: #6b7a86; font-size: 12px; }
+/* tarkistettava tehtäväpaikka kartalla */
+.tv-ico { cursor: grab; }
+.tv-ring { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; border: 3px solid #c2188b; box-sizing: border-box; box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+.tv-dot { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: #c2188b; border: 1.5px solid #fff; }
+.form label[for=tFind] { align-self: start; padding-top: 9px; }

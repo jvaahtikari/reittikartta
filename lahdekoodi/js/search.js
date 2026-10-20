@@ -48,14 +48,42 @@
   }
 
   // etäisyys ja suunta hakupisteestä
-  function place(items) {
+  function place(items, at) {
+    at = at || ref;
     items.forEach(function (it) {
-      it.km = G.distance(ref, it) / 1000;
-      it.brg = G.bearing(ref, it);
+      it.km = G.distance(at, it) / 1000;
+      it.brg = G.bearing(at, it);
     });
     return items.sort(function (a, b) { return a.km - b.km; });
   }
-  function fmtKm(km) { return km < 10 ? G.fmtNum(km, 1) + ' km' : Math.round(km) + ' km'; }
+  function hasNames() { return !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available); }
+  // turvalaitteet ja paikannimet, etäisyysjärjestyksessä pisteestä at
+  function remote(q, at) {
+    return Promise.all([
+      aids(q),
+      hasNames() ? global.ChartAPI.searchNames(q, at).catch(function () { return []; }) : Promise.resolve([])
+    ]).then(function (res) {
+      return place(res[1].concat(res[0].map(function (a) { a.aid = true; return a; })), at);
+    });
+  }
+  // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, turvalaitteet ja paikannimet
+  // yhtenä listana lähimmästä kauimpaan. Palauttaa lupauksen.
+  function find(q, at) {
+    q = String(q || '').trim();
+    if (q.length < 2) return Promise.resolve([]);
+    var p = G.parsePos(q);
+    if (p) return Promise.resolve(place([{ name: G.fmtPos(p), info: 'koordinaatti', lat: p.lat, lng: p.lng, coord: true }], at));
+    var mine = local(q);
+    if (q.length < 3) return Promise.resolve(place(mine, at));
+    return remote(q, at).then(function (rem) {
+      var all = place(mine.concat(rem), at);
+      var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
+      var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
+      return near.concat(far);
+    });
+  }
+  // etäisyys merimaileina (alle 10 mpk kahdella desimaalilla, muuten yhdellä)
+  function fmtKm(km) { return G.fmtNM(km * 1000); }
 
   function clearMarkers() { if (resLayer) resLayer.clearLayers(); }
   function drawMarkers() {
@@ -116,19 +144,15 @@
     if (p) groups.push({ title: 'Koordinaatti', items: [{ name: G.fmtPos(p), info: 'siirry', lat: p.lat, lng: p.lng, coord: true }] });
     var mine = place(local(q)).slice(0, 8);
     groups.push({ title: 'Omat kohteet', items: mine });
-    var remote = q.length >= 3 && !p;
-    render(groups, remote);
-    if (!remote) return;
-    var hasKey = !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available);
-    Promise.all([
-      aids(q),
-      hasKey ? global.ChartAPI.searchNames(q, ref).catch(function () { return []; }) : Promise.resolve([])
-    ]).then(function (res) {
+    var more = q.length >= 3 && !p;
+    render(groups, more);
+    if (!more) return;
+    var hasKey = hasNames();
+    remote(q, ref).then(function (all) {
       if (my !== seq) return;
-      var all = place(res[1].concat(res[0].map(function (a) { a.aid = true; return a; })));
       var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
       var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
-      groups.push({ title: 'Alle ' + NEAR_KM + ' km', items: near });
+      groups.push({ title: 'Alle 27 mpk (50 km)', items: near });
       groups.push({ title: 'Kauempana', items: far });
       render(groups, false);
       if (!hasKey) box.insertAdjacentHTML('beforeend', '<div class="sn">Paikannimet haetaan Maanmittauslaitoksen nimistöstä, kun API-avain on asetettu (Tiedosto → Asetukset).</div>');
@@ -212,5 +236,5 @@
     input.addEventListener('focus', function () { if (box.innerHTML && input.value.trim().length >= 2) box.hidden = false; });
   }
 
-  global.Search = { init: init, run: run, get results() { return results; } };
+  global.Search = { init: init, run: run, find: find, NEAR_KM: NEAR_KM, get hasNames() { return hasNames(); }, get results() { return results; } };
 })(window);

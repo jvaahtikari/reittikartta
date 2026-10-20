@@ -1225,6 +1225,31 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   .modal .mf .btn, .modal .mf button { min-height: 44px; }
 }
 
+/* oma sijainti */
+.gps-ico { pointer-events: auto; }
+.gps-dot { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 1px 4px rgba(0,0,0,.4); }
+.gps-dir { position: absolute; left: -9px; top: -26px; width: 18px; height: 26px; transform-origin: 9px 26px; }
+.gps-dir::before { content: ""; position: absolute; left: 3px; top: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 16px solid #1a73e8; }
+
+/* tehtäväpaikan haku lomakkeessa */
+.tfind { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tsr { max-height: 240px; overflow: auto; border: 1px solid #c9d3dc; border-radius: 6px; background: #fff; color: #111; font: 13px var(--font); }
+.tsr[hidden] { display: none; }
+.tsr .sr { display: flex; align-items: center; gap: 8px; padding: 6px 8px; min-height: 40px; box-sizing: border-box; cursor: pointer; border-bottom: 1px solid #eef1f4; }
+.tsr .sr:hover { background: #eaf3fb; }
+.tsr .sr-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tsr .sr-t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsr .sr-t span { color: #5b6b78; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsr em { font-style: normal; color: #33495a; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tsr .sn-no { font-style: normal; flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #c2188b; color: #c2188b; font: 700 11px/16px var(--font); text-align: center; box-sizing: border-box; }
+.tsr .sh { padding: 5px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #6b7a86; background: #f6f8fa; }
+.tsr .sn { padding: 6px 8px; color: #6b7a86; font-size: 12px; }
+/* tarkistettava tehtäväpaikka kartalla */
+.tv-ico { cursor: grab; }
+.tv-ring { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; border: 3px solid #c2188b; box-sizing: border-box; box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+.tv-dot { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: #c2188b; border: 1.5px solid #fff; }
+.form label[for=tFind] { align-self: start; padding-top: 9px; }
+
 </style>
 </head>
 <body>
@@ -1287,6 +1312,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       <button class="tb" id="tbMark" title="Lisää oma merkki kartalta">
         <svg viewBox="0 0 24 24"><path d="M7 21V4M7 4h10l-2.5 4L17 12H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
       </button>
+      <button class="tb tg" id="tbGps" title="Oma sijainti – selain kysyy luvan">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
       <button class="tb" id="tbTask" title="Uusi tehtäväpaikka">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
       </button>
@@ -1309,6 +1337,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         <span class="empty">Reitti</span><b id="roTotal" class="empty">–</b>
         <span>Kursori</span><b id="roPos">–</b>
         <span class="ro-task" hidden>Tehtävä</span><b class="ro-task" id="roTask" hidden>–</b>
+        <span class="ro-gps" hidden>Oma</span><b class="ro-gps" id="roGps" hidden>–</b>
       </div>
       <div class="ro-clock" id="roClock" title="Tietokoneen kello – ei GNSS-aikaa">--:--:--</div>
     </div>
@@ -1561,7 +1590,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
           legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true
         },
         safetyDepths: {},
-        land: 'mml',                // maapohja: 'mml' | 'osm'
+        land: 'osm',                // maapohja: 'osm' (oletus, näyttää maa-alueiden nimet) | 'mml'
         mmlKey: '',                 // Maanmittauslaitoksen avoimen rajapinnan API-avain           // turvasyvyys aluksittain (m)
         base: 'raster',             // karttapohja: 'raster' | 'vector' | 'enc' | 'enc-ecdis'
         night: false,
@@ -1595,6 +1624,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       if (raw) state = deepMerge(defaults(), JSON.parse(raw));
     } catch (e) { storageOk = false; }
     dropSampleVessels();
+    osmLandDefault();
     return state;
   }
 
@@ -1609,6 +1639,16 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     s.vessels = (s.vessels || []).filter(function (v) { return SAMPLE.indexOf(v) < 0 || used[v]; });
     if (s.vessels.indexOf(s.currentVessel) < 0) s.currentVessel = s.vessels[0] || '';
     s.sampleVesselsDropped = true;
+    if (storageOk) save();
+  }
+
+  // OpenStreetMap-maapohja on oletus, jotta vektorikartalla näkyvät maa-alueiden paikannimet.
+  // Aiemmin tallennettu oletus (MML) vaihdetaan kerran; käyttäjä voi palauttaa MML:n Näytä-valikosta.
+  function osmLandDefault() {
+    var s = state.settings;
+    if (s.landOsmDefault) return;
+    s.land = 'osm';
+    s.landOsmDefault = true;
     if (storageOk) save();
   }
 
@@ -1842,8 +1882,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       v.classList.toggle('empty', empty);
       if (v.previousElementSibling) v.previousElementSibling.classList.toggle('empty', empty);
     });
-    ['mode', 'brg', 'dist', 'total', 'task'].forEach(function (k) { if (k in o) ro.v[k] = k === 'mode' ? !!o.mode : o[k] != null && o[k] !== ''; });
-    var busy = ro.v.mode || ro.v.brg || ro.v.dist || ro.v.total || ro.v.task;
+    if ('gps' in o) {
+      document.querySelectorAll('.ro-gps').forEach(function (el) { el.hidden = !o.gps; });
+      if (o.gps) $('roGps').textContent = o.gps;
+    }
+    ['mode', 'brg', 'dist', 'total', 'task', 'gps'].forEach(function (k) { if (k in o) ro.v[k] = k === 'mode' ? !!o.mode : o[k] != null && o[k] !== ''; });
+    var busy = ro.v.mode || ro.v.brg || ro.v.dist || ro.v.total || ro.v.task || ro.v.gps;
     $('readout').classList.toggle('idle', !busy);
   }
   function clearMeasure() { readout({ brg: null, dist: null, total: null }); }
@@ -3447,6 +3491,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   // Paikannimihaku nimistörekisteristä (Maanmittauslaitoksen dokumentoima parametri spelling_case_insensitive,
   // jokerimerkki * ja aluerajaus bbox). Samannimisiä paikkoja on Suomessa paljon, joten haetaan ensin
   // hakupisteen ympäriltä (noin 50 km) ja sitten koko maasta; tulokset yhdistetään ja järjestetään etäisyyden mukaan.
+  // Kuntanumerot nimiksi (Tilastokeskus, Kunnat 2025). Nimistöpalvelu antaa kunnan ja paikkatyypin koodeina.
+  var KUNTA = {};
+  '020:Akaa;005:Alajärvi;009:Alavieska;010:Alavus;016:Asikkala;018:Askola;019:Aura;035:Brändö;043:Eckerö;046:Enonkoski;047:Enontekiö;049:Espoo;050:Eura;051:Eurajoki;052:Evijärvi;060:Finström;061:Forssa;062:Föglö;065:Geta;069:Haapajärvi;071:Haapavesi;072:Hailuoto;074:Halsua;075:Hamina;076:Hammarland;077:Hankasalmi;078:Hanko;079:Harjavalta;081:Hartola;082:Hattula;086:Hausjärvi;111:Heinola;090:Heinävesi;091:Helsinki;097:Hirvensalmi;098:Hollola;102:Huittinen;103:Humppila;105:Hyrynsalmi;106:Hyvinkää;108:Hämeenkyrö;109:Hämeenlinna;139:Ii;140:Iisalmi;142:Iitti;143:Ikaalinen;145:Ilmajoki;146:Ilomantsi;153:Imatra;148:Inari;149:Inkoo;151:Isojoki;152:Isokyrö;165:Janakkala;167:Joensuu;169:Jokioinen;170:Jomala;171:Joroinen;172:Joutsa;176:Juuka;177:Juupajoki;178:Juva;179:Jyväskylä;181:Jämijärvi;182:Jämsä;186:Järvenpää;202:Kaarina;204:Kaavi;205:Kajaani;208:Kalajoki;211:Kangasala;213:Kangasniemi;214:Kankaanpää;216:Kannonkoski;217:Kannus;218:Karijoki;224:Karkkila;226:Karstula;230:Karvia;231:Kaskinen;232:Kauhajoki;233:Kauhava;235:Kauniainen;236:Kaustinen;239:Keitele;240:Kemi;320:Kemijärvi;241:Keminmaa;322:Kemiönsaari;244:Kempele;245:Kerava;249:Keuruu;250:Kihniö;256:Kinnula;257:Kirkkonummi;260:Kitee;261:Kittilä;263:Kiuruvesi;265:Kivijärvi;271:Kokemäki;272:Kokkola;273:Kolari;275:Konnevesi;276:Kontiolahti;280:Korsnäs;284:Koski Tl;285:Kotka;286:Kouvola;287:Kristiinankaupunki;288:Kruunupyy;290:Kuhmo;291:Kuhmoinen;295:Kumlinge;297:Kuopio;300:Kuortane;301:Kurikka;304:Kustavi;305:Kuusamo;312:Kyyjärvi;316:Kärkölä;317:Kärsämäki;318:Kökar;398:Lahti;399:Laihia;400:Laitila;407:Lapinjärvi;402:Lapinlahti;403:Lappajärvi;405:Lappeenranta;408:Lapua;410:Laukaa;416:Lemi;417:Lemland;418:Lempäälä;420:Leppävirta;421:Lestijärvi;422:Lieksa;423:Lieto;425:Liminka;426:Liperi;444:Lohja;430:Loimaa;433:Loppi;434:Loviisa;435:Luhanka;436:Lumijoki;438:Lumparland;440:Luoto;441:Luumäki;475:Maalahti;478:Maarianhamina;480:Marttila;481:Masku;483:Merijärvi;484:Merikarvia;489:Miehikkälä;491:Mikkeli;494:Muhos;495:Multia;498:Muonio;499:Mustasaari;500:Muurame;503:Mynämäki;504:Myrskylä;505:Mäntsälä;508:Mänttä-Vilppula;507:Mäntyharju;529:Naantali;531:Nakkila;535:Nivala;536:Nokia;538:Nousiainen;541:Nurmes;543:Nurmijärvi;545:Närpiö;560:Orimattila;561:Oripää;562:Orivesi;563:Oulainen;564:Oulu;309:Outokumpu;576:Padasjoki;577:Paimio;578:Paltamo;445:Parainen;580:Parikkala;581:Parkano;599:Pedersören kunta;583:Pelkosenniemi;854:Pello;584:Perho;592:Petäjävesi;593:Pieksämäki;595:Pielavesi;598:Pietarsaari;601:Pihtipudas;604:Pirkkala;607:Polvijärvi;608:Pomarkku;609:Pori;611:Pornainen;638:Porvoo;614:Posio;615:Pudasjärvi;616:Pukkila;619:Punkalaidun;620:Puolanka;623:Puumala;624:Pyhtää;625:Pyhäjoki;626:Pyhäjärvi;630:Pyhäntä;631:Pyhäranta;635:Pälkäne;636:Pöytyä;678:Raahe;710:Raasepori;680:Raisio;681:Rantasalmi;683:Ranua;684:Rauma;686:Rautalampi;687:Rautavaara;689:Rautjärvi;691:Reisjärvi;694:Riihimäki;697:Ristijärvi;698:Rovaniemi;700:Ruokolahti;702:Ruovesi;704:Rusko;707:Rääkkylä;729:Saarijärvi;732:Salla;734:Salo;736:Saltvik;790:Sastamala;738:Sauvo;739:Savitaipale;740:Savonlinna;742:Savukoski;743:Seinäjoki;746:Sievi;747:Siikainen;748:Siikajoki;791:Siikalatva;749:Siilinjärvi;751:Simo;753:Sipoo;755:Siuntio;758:Sodankylä;759:Soini;761:Somero;762:Sonkajärvi;765:Sotkamo;766:Sottunga;768:Sulkava;771:Sund;777:Suomussalmi;778:Suonenjoki;781:Sysmä;783:Säkylä;831:Taipalsaari;832:Taivalkoski;833:Taivassalo;834:Tammela;837:Tampere;844:Tervo;845:Tervola;846:Teuva;848:Tohmajärvi;849:Toholampi;850:Toivakka;851:Tornio;853:Turku;857:Tuusniemi;858:Tuusula;859:Tyrnävä;886:Ulvila;887:Urjala;889:Utajärvi;890:Utsjoki;892:Uurainen;893:Uusikaarlepyy;895:Uusikaupunki;785:Vaala;905:Vaasa;908:Valkeakoski;092:Vantaa;915:Varkaus;918:Vehmaa;921:Vesanto;922:Vesilahti;924:Veteli;925:Vieremä;927:Vihti;931:Viitasaari;934:Vimpeli;935:Virolahti;936:Virrat;941:Vårdö;946:Vöyri;976:Ylitornio;977:Ylivieska;980:Ylöjärvi;981:Ypäjä;989:Ähtäri;992:Äänekoski'.split(';').forEach(function (x) { var i = x.indexOf(':'); KUNTA[x.slice(0, i)] = x.slice(i + 1); });
   function namePlace(f) {
     var g = f.geometry, c = g && (g.type === 'Point' ? g.coordinates : g.type === 'MultiPoint' ? g.coordinates[0] : null);
     var p = f.properties || {};
@@ -3454,7 +3501,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     if (!c || !nm) return null;
     var words = function (v) { return typeof v === 'string' && /[a-zåäö]/i.test(v) ? v : null; };
     var type = words(mmlProp(p, ['placeTypeDescription', 'placeTypeName', 'placeTypeDescriptionFi', 'paikkatyyppi']));
-    var muni = words(mmlProp(p, ['municipalityName', 'municipalityNameFi', 'kuntanimi', 'kunta']));
+    var muni = words(mmlProp(p, ['municipalityName', 'municipalityNameFi', 'kuntanimi', 'kunta'])) || KUNTA[String(p.municipality || '').padStart(3, '0')] || null;
     return { id: f.id, name: String(nm), info: [type, muni].filter(Boolean).join(', ') || 'paikannimi', lat: c[1], lng: c[0], kind: 'name' };
   }
   function searchNames(q, center) {
@@ -5250,32 +5297,49 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     return d.getFullYear() + '-' + p(d.getMonth() + 1, 2) + '-' + p(d.getDate(), 2) + 'T' + p(d.getHours(), 2) + ':' + p(d.getMinutes(), 2);
   }
 
-  function editTask(id, newPos, draft) {
+  // Tehtäväpaikan voi antaa koordinaatteina, poimia kartalta tai hakea nimellä. Haun tulos tarkistetaan
+  // kartalla ennen vahvistusta: numeroidut osumat näkyvät, ja merkkiä voi siirtää tai napauttaa karttaa.
+  // draft on lomakkeen keskeneräinen tila (uusi tehtävä tai muokattavan kopio); ctx säilyttää haun.
+  function editTask(id, newPos, draft, ctx) {
     var isNew = !id;
+    var orig = isNew ? null : S.taskById(id);
+    if (!isNew && !orig) return;
     var nowD = new Date();
-    var t = isNew ? (draft || { id: S.uid('tk'), name: 'Tehtävä ' + G.pad(nowD.getHours(), 2) + ':' + G.pad(nowD.getMinutes(), 2), lat: newPos ? newPos.lat : null, lng: newPos ? newPos.lng : null, time: localDT(nowD), active: true }) : S.taskById(id);
-    if (!t) return;
+    var t = draft || (isNew
+      ? { id: S.uid('tk'), name: 'Tehtävä ' + G.pad(nowD.getHours(), 2) + ':' + G.pad(nowD.getMinutes(), 2), lat: newPos ? newPos.lat : null, lng: newPos ? newPos.lng : null, time: localDT(nowD), active: true }
+      : L.extend({}, orig));
+    ctx = ctx || { q: '', results: [], ref: null, place: null };
     var body = '<div class="form">' +
       '<label for="tName">Nimi</label><input id="tName" value="' + UI.esc(t.name || '') + '" placeholder="esim. Keikka 1234 – vene karilla">' +
+      '<label for="tFind">Hae paikka</label><div class="tfind"><input id="tFind" type="search" autocomplete="off" value="' + UI.esc(ctx.q || '') + '" placeholder="saari, kylä, turvalaite tai koordinaatit">' +
+      '<div class="tsr" id="tRes" hidden></div></div>' +
       '<label for="tPos">Koordinaatit</label><div style="display:flex;gap:6px"><input id="tPos" value="' + (t.lat != null ? UI.esc(G.fmtPos(t)) : '') + '" placeholder="61°31,234\'N 023°45,678\'E"><button type="button" class="btn small" id="tPick">Poimi kartalta</button></div>' +
       '<div class="hint" id="tPrev">Asteet, minuutit ja sekunnit voi erottaa välilyönnein: <b>61 35,1N 23 45,2E</b> (asteet ja minuutit), <b>61 35 11N 23 45 30E</b> (asteet, minuutit ja sekunnit) tai <b>61,5N 23,75E</b> (asteet desimaaleina).</div>' +
       '<label for="tTime">Aika</label><input id="tTime" type="datetime-local" value="' + UI.esc(t.time || localDT(nowD)) + '">' +
       '<label for="tAct">Aktiivinen</label><div class="checks"><label><input type="checkbox" id="tAct"' + (t.active ? ' checked' : '') + '> näytä suuntima ja etäisyys asemalta</label></div>' +
       '<div class="err" id="tErr" hidden></div></div>';
+    function keepForm(md) {
+      t.name = md.querySelector('#tName').value; t.time = md.querySelector('#tTime').value; t.active = md.querySelector('#tAct').checked;
+      var p = G.parsePos(md.querySelector('#tPos').value);
+      if (p) { t.lat = p.lat; t.lng = p.lng; }
+      ctx.q = md.querySelector('#tFind').value;
+    }
+    function reopen() { editTask(isNew ? null : orig.id, null, t, ctx); }
     UI.modal({
       title: isNew ? 'Uusi tehtäväpaikka' : 'Tehtäväpaikka', body: body, enterButton: 1,
       buttons: [{ label: 'Peruuta' }, {
-        label: 'Tallenna', primary: true, action: function (md) {
+        label: isNew ? 'Luo tehtävä' : 'Tallenna', primary: true, action: function (md) {
           var pos = G.parsePos(md.querySelector('#tPos').value);
-          if (!pos) { var er = md.querySelector('#tErr'); er.textContent = 'Koordinaatteja ei tunnistettu. Tarkista muoto.'; er.hidden = false; return false; }
+          if (!pos) { var er = md.querySelector('#tErr'); er.textContent = 'Paikka puuttuu tai koordinaatteja ei tunnistettu. Hae paikka nimellä, poimi se kartalta tai tarkista koordinaattien muoto.'; er.hidden = false; return false; }
           t.name = md.querySelector('#tName').value.trim() || 'Tehtävä';
           t.lat = pos.lat; t.lng = pos.lng;
           t.time = md.querySelector('#tTime').value;
           var act = md.querySelector('#tAct').checked;
-          if (isNew) S.state.tasks.push(t);
-          if (act) S.state.tasks.forEach(function (x) { x.active = x.id === t.id; }); else t.active = false;
+          var task = t;
+          if (isNew) S.state.tasks.push(t); else { L.extend(orig, t); task = orig; }
+          if (act) S.state.tasks.forEach(function (x) { x.active = x.id === task.id; }); else task.active = false;
           S.emit('tasks');
-          App.centerOn([t.lat, t.lng], Math.max(map.getZoom(), 13));
+          App.centerOn([task.lat, task.lng], Math.max(map.getZoom(), 13));
         }
       }],
       onOpen: function (md) {
@@ -5284,8 +5348,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
           var v = inp.value.trim();
           if (!v) { prev.innerHTML = hint0; prev.className = 'hint'; return; }
           var p = G.parsePos(v);
-          if (p) { prev.innerHTML = 'Tulkinta: <b>' + UI.esc(G.fmtPos(p)) + '</b>'; prev.className = 'hint ok'; }
-          else {
+          if (p) {
+            var same = ctx.place && Math.abs(ctx.place.lat - p.lat) < 5e-5 && Math.abs(ctx.place.lng - p.lng) < 5e-5;
+            prev.innerHTML = same ? 'Paikka tarkistettu kartalla: <b>' + UI.esc(ctx.place.label) + '</b>, ' + UI.esc(G.fmtPos(p))
+              : 'Tulkinta: <b>' + UI.esc(G.fmtPos(p)) + '</b>';
+            prev.className = 'hint ok';
+          } else {
             var hasN = /[NSP]/i.test(v), hasE = /[EWIL]/i.test(v.replace(/[0-9\s,.'°"]/g, ''));
             prev.textContent = hasN && !hasE ? 'Leveys tunnistettu – lisää vielä pituus (E).' : 'Koordinaatteja ei vielä tunnistettu.';
             prev.className = 'hint bad';
@@ -5294,15 +5362,136 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         inp.addEventListener('input', preview);
         if (inp.value) preview();
         md.querySelector('#tPick').addEventListener('click', function () {
-          t.name = md.querySelector('#tName').value; t.time = md.querySelector('#tTime').value; t.active = md.querySelector('#tAct').checked;
+          keepForm(md);
           UI.closeModal();
-          pick('Tehtäväpaikka – klikkaa paikka kartalta', function (ll) {
-            t.lat = ll.lat; t.lng = ll.lng;
-            if (isNew) editTask(null, null, t); else editTask(t.id);
+          pick('Tehtäväpaikka – ' + (UI.isTouch() ? 'napauta' : 'klikkaa') + ' paikka kartalta', function (ll) {
+            t.lat = ll.lat; t.lng = ll.lng; ctx.place = null;
+            reopen();
           });
         });
+
+        // --- paikkahaku ---
+        var fin = md.querySelector('#tFind'), box = md.querySelector('#tRes'), timer = null, seq = 0;
+        function show(list, pending) {
+          if (!fin.value.trim()) { box.hidden = true; box.innerHTML = ''; return; }
+          var h = '';
+          if (!list.length) h = '<div class="sn">' + (pending ? 'Haetaan…' : 'Ei osumia. Kokeile nimen osaa, esim. viitas.') + '</div>';
+          else {
+            h = '<div class="sn">Valitse paikka, niin se näytetään kartalla tarkistettavaksi. Etäisyys ja suunta kartan keskeltä.</div>';
+            var nearDone = false;
+            list.forEach(function (it, i) {
+              if (!nearDone && it.km > global.Search.NEAR_KM) { nearDone = true; if (i) h += '<div class="sh">Kauempana</div>'; }
+              h += '<div class="sr" data-i="' + i + '"><i class="sn-no">' + (i + 1) + '</i>' +
+                '<div class="sr-t"><b>' + UI.esc(it.name) + '</b><span>' + UI.esc(it.info || '') + '</span></div>' +
+                '<em>' + G.fmtNM(it.km * 1000) + ' · ' + G.fmtBrg(it.brg, 0) + '</em></div>';
+            });
+            if (pending) h += '<div class="sn">Haetaan lisää…</div>';
+          }
+          if (!global.Search.hasNames && fin.value.trim().length >= 3) h += '<div class="sn">Paikannimet tarvitsevat Maanmittauslaitoksen avaimen (Tiedosto → Asetukset).</div>';
+          box.innerHTML = h; box.hidden = false;
+        }
+        function runFind() {
+          var q = fin.value.trim(), my = ++seq;
+          if (q.length < 2) { ctx.results = []; show([], false); return; }
+          var c = map.getCenter();
+          ctx.ref = { lat: c.lat, lng: c.lng };
+          show([], true);
+          global.Search.find(q, ctx.ref).then(function (list) {
+            if (my !== seq) return;
+            ctx.results = list.slice(0, 30); ctx.resQ = q;
+            show(ctx.results, false);
+          });
+        }
+        fin.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(runFind, 350); });
+        fin.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault(); e.stopPropagation();
+            clearTimeout(timer);
+            if (ctx.results.length && fin.value.trim() === ctx.resQ) { choose(0); return; }
+            runFind();
+          }
+        });
+        function choose(i) {
+          keepForm(md);
+          UI.closeModal();
+          verifyTaskPlace(t, ctx, i, reopen);
+        }
+        box.addEventListener('click', function (e) {
+          var el = e.target.closest('.sr');
+          if (el) choose(Number(el.dataset.i));
+        });
+        if (ctx.results.length) show(ctx.results, false);
+        // uudelle tehtävälle ilman paikkaa kohdistus suoraan hakuun
+        if (isNew && t.lat == null) setTimeout(function () { fin.focus(); }, 40);
       }
     });
+  }
+
+  // Tehtäväpaikan tarkistus kartalla: valittu hakutulos keskitetään ja merkitään siirrettävällä merkillä,
+  // muut osumat näkyvät numeroituina (napautus vaihtaa). Kartan napautus siirtää merkin siihen kohtaan.
+  var verifyLayer = null;
+  function verifyTaskPlace(t, ctx, idx, back) {
+    var list = ctx.results, cur = list[idx], pos = L.latLng(cur.lat, cur.lng), label = cur.name, moved = false, done = false;
+    if (verifyLayer) map.removeLayer(verifyLayer);
+    verifyLayer = L.layerGroup().addTo(map);
+    var cand = null;
+    function bannerText() {
+      return 'Tarkista tehtäväpaikka: ' + label + (moved ? ' (siirretty)' : '') + ', ' + G.fmtPos(pos) + '. ' +
+        (UI.isTouch() ? 'Napauta karttaa tai vedä merkkiä, jos paikkaa pitää tarkentaa.' : 'Klikkaa karttaa tai vedä merkkiä, jos paikkaa pitää tarkentaa.');
+    }
+    function draw() {
+      verifyLayer.clearLayers();
+      list.forEach(function (it, i) {
+        var on = it === cur;
+        if (on) return;          // valittu paikka näkyy tarkistusrenkaana
+        var m = L.marker([it.lat, it.lng], {
+          icon: L.divIcon({ className: 'sres-ico', html: '<span class="sres' + (on ? ' on' : '') + '">' + (i + 1) + '</span>', iconSize: [0, 0] }),
+          keyboard: false, zIndexOffset: on ? 1000 : 0, pane: 'aidPane', bubblingMouseEvents: false
+        });
+        m.bindTooltip(UI.esc(it.name) + (it.info ? ' – ' + UI.esc(it.info) : ''), { direction: 'top', offset: [0, -12] });
+        m.on('click', function (e) { L.DomEvent.stop(e); cur = it; label = it.name; moved = false; pos = L.latLng(it.lat, it.lng); draw(); App.centerOn(pos); banner(); });
+        m.addTo(verifyLayer);
+      });
+      cand = L.marker(pos, {
+        icon: L.divIcon({ className: 'tv-ico', html: '<span class="tv-ring"></span><span class="tv-dot"></span>', iconSize: [0, 0] }),
+        draggable: true, keyboard: false, zIndexOffset: 2000, bubblingMouseEvents: false
+      }).addTo(verifyLayer);
+      cand.on('dragend', function () { pos = cand.getLatLng(); moved = true; banner(); });
+    }
+    function finish(ok) {
+      done = true;
+      if (ok) {
+        t.lat = pos.lat; t.lng = pos.lng;
+        ctx.place = { lat: pos.lat, lng: pos.lng, label: label + (moved ? ' (siirretty)' : '') };
+        // oletusnimeen lisätään paikan nimi, jos käyttäjä ei ole nimennyt tehtävää itse
+        if (/^Tehtävä \d\d:\d\d$/.test(t.name || '')) t.name = t.name + ' – ' + label;
+      }
+      App.clearMode();
+    }
+    function banner() {
+      UI.banner({
+        kind: 'adding', text: bannerText(),
+        buttons: [
+          { label: 'Takaisin', action: function () { finish(false); } },
+          { label: 'Vahvista paikka', action: function () { finish(true); } }
+        ]
+      });
+    }
+    App.setMode('pick', {
+      label: 'Tehtäväpaikan tarkistus', cursor: true,
+      click: function (e) { pos = e.latlng; moved = true; cand.setLatLng(pos); banner(); },
+      cancel: function () {
+        if (verifyLayer) { map.removeLayer(verifyLayer); verifyLayer = null; }
+        UI.banner(null);
+        if (global.Routes && global.Routes.editingId) global.Routes.updateBanner();
+        // Esc ja Takaisin palaavat lomakkeelle; jos käyttäjä aloitti toisen työkalun, lomaketta ei avata
+        var confirmed = done;
+        setTimeout(function () { if (confirmed || App.mode() === 'idle') back(); }, 0);
+      }
+    });
+    draw();
+    banner();
+    App.centerOn(pos, Math.max(map.getZoom(), 13));
   }
 
   function updateTaskReadout() {
@@ -5708,14 +5897,42 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   }
 
   // etäisyys ja suunta hakupisteestä
-  function place(items) {
+  function place(items, at) {
+    at = at || ref;
     items.forEach(function (it) {
-      it.km = G.distance(ref, it) / 1000;
-      it.brg = G.bearing(ref, it);
+      it.km = G.distance(at, it) / 1000;
+      it.brg = G.bearing(at, it);
     });
     return items.sort(function (a, b) { return a.km - b.km; });
   }
-  function fmtKm(km) { return km < 10 ? G.fmtNum(km, 1) + ' km' : Math.round(km) + ' km'; }
+  function hasNames() { return !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available); }
+  // turvalaitteet ja paikannimet, etäisyysjärjestyksessä pisteestä at
+  function remote(q, at) {
+    return Promise.all([
+      aids(q),
+      hasNames() ? global.ChartAPI.searchNames(q, at).catch(function () { return []; }) : Promise.resolve([])
+    ]).then(function (res) {
+      return place(res[1].concat(res[0].map(function (a) { a.aid = true; return a; })), at);
+    });
+  }
+  // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, turvalaitteet ja paikannimet
+  // yhtenä listana lähimmästä kauimpaan. Palauttaa lupauksen.
+  function find(q, at) {
+    q = String(q || '').trim();
+    if (q.length < 2) return Promise.resolve([]);
+    var p = G.parsePos(q);
+    if (p) return Promise.resolve(place([{ name: G.fmtPos(p), info: 'koordinaatti', lat: p.lat, lng: p.lng, coord: true }], at));
+    var mine = local(q);
+    if (q.length < 3) return Promise.resolve(place(mine, at));
+    return remote(q, at).then(function (rem) {
+      var all = place(mine.concat(rem), at);
+      var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
+      var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
+      return near.concat(far);
+    });
+  }
+  // etäisyys merimaileina (alle 10 mpk kahdella desimaalilla, muuten yhdellä)
+  function fmtKm(km) { return G.fmtNM(km * 1000); }
 
   function clearMarkers() { if (resLayer) resLayer.clearLayers(); }
   function drawMarkers() {
@@ -5776,19 +5993,15 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     if (p) groups.push({ title: 'Koordinaatti', items: [{ name: G.fmtPos(p), info: 'siirry', lat: p.lat, lng: p.lng, coord: true }] });
     var mine = place(local(q)).slice(0, 8);
     groups.push({ title: 'Omat kohteet', items: mine });
-    var remote = q.length >= 3 && !p;
-    render(groups, remote);
-    if (!remote) return;
-    var hasKey = !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available);
-    Promise.all([
-      aids(q),
-      hasKey ? global.ChartAPI.searchNames(q, ref).catch(function () { return []; }) : Promise.resolve([])
-    ]).then(function (res) {
+    var more = q.length >= 3 && !p;
+    render(groups, more);
+    if (!more) return;
+    var hasKey = hasNames();
+    remote(q, ref).then(function (all) {
       if (my !== seq) return;
-      var all = place(res[1].concat(res[0].map(function (a) { a.aid = true; return a; })));
       var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
       var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
-      groups.push({ title: 'Alle ' + NEAR_KM + ' km', items: near });
+      groups.push({ title: 'Alle 27 mpk (50 km)', items: near });
       groups.push({ title: 'Kauempana', items: far });
       render(groups, false);
       if (!hasKey) box.insertAdjacentHTML('beforeend', '<div class="sn">Paikannimet haetaan Maanmittauslaitoksen nimistöstä, kun API-avain on asetettu (Tiedosto → Asetukset).</div>');
@@ -5872,7 +6085,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     input.addEventListener('focus', function () { if (box.innerHTML && input.value.trim().length >= 2) box.hidden = false; });
   }
 
-  global.Search = { init: init, run: run, get results() { return results; } };
+  global.Search = { init: init, run: run, find: find, NEAR_KM: NEAR_KM, get hasNames() { return hasNames(); }, get results() { return results; } };
 })(window);
 
 </script>
@@ -5979,7 +6192,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   // ---------- moduulit ----------
   var chart = global.Chart.init(map, st.show, { statusEl: UI.$('netStatus') });
   global.ChartAPI = chart;
-  chart.setLand(st.land || 'mml');
+  chart.setLand(st.land || 'osm');
   chart.setUnderlay(!!st.show.underlay);
   chart.setMmlKey(st.mmlKey || '');
   if (st.show.sharpen === false) chart.base.charts.setSharpen(false);
@@ -6098,6 +6311,57 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     global.Tools.pick('Uusi merkki – klikkaa paikka kartalta', function (ll) { global.Tools.editMark(null, ll); });
   });
   UI.$('tbTask').addEventListener('click', function () { global.Tools.editTask(null, null); });
+
+  // ---------- oma sijainti ----------
+  // Selaimen sijainti (GPS puhelimessa) vain käyttäjän pyynnöstä: selain kysyy luvan ensimmäisellä kerralla.
+  // Ensimmäinen sijainti keskitetään; jos sijainti on näkymän ulkopuolella, painike keskittää, muuten se lopettaa.
+  var gps = { watch: null, layer: null, last: null, first: false };
+  function gpsText(c) {
+    var t = G.fmtPos({ lat: c.latitude, lng: c.longitude });
+    if (c.speed != null && c.speed >= 0) t += ' · ' + G.fmtNum(c.speed * 3600 / G.NM, 1) + ' kn';
+    if (c.heading != null && !isNaN(c.heading) && c.speed > 0.3) t += ' · ' + G.fmtBrg(c.heading, 0);
+    return t + ' (±' + Math.round(c.accuracy) + ' m)';
+  }
+  function gpsShow(p) {
+    var c = p.coords, ll = L.latLng(c.latitude, c.longitude);
+    gps.last = ll;
+    if (!gps.layer) gps.layer = L.layerGroup().addTo(map);
+    gps.layer.clearLayers();
+    L.circle(ll, { radius: c.accuracy, color: '#1a73e8', weight: 1, fillColor: '#1a73e8', fillOpacity: 0.1, interactive: false }).addTo(gps.layer);
+    var moving = c.heading != null && !isNaN(c.heading) && c.speed > 0.3;
+    L.marker(ll, {
+      icon: L.divIcon({ className: 'gps-ico', html: (moving ? '<span class="gps-dir" style="transform:rotate(' + Math.round(c.heading) + 'deg)"></span>' : '') + '<span class="gps-dot"></span>', iconSize: [0, 0] }),
+      keyboard: false, zIndexOffset: 2000
+    }).bindTooltip('Oma sijainti<br>' + UI.esc(gpsText(c)), { direction: 'top', offset: [0, -10] }).addTo(gps.layer);
+    UI.readout({ gps: gpsText(c) });
+    if (gps.first) { gps.first = false; App.centerOn(ll, Math.max(map.getZoom(), 14)); }
+  }
+  function gpsStop() {
+    if (gps.watch != null) navigator.geolocation.clearWatch(gps.watch);
+    gps.watch = null; gps.last = null;
+    if (gps.layer) { map.removeLayer(gps.layer); gps.layer = null; }
+    UI.$('tbGps').classList.remove('on');
+    UI.readout({ gps: null });
+  }
+  function gpsStart() {
+    if (!navigator.geolocation) { UI.toast('Tämä selain ei anna sijaintia.', true); return; }
+    if (global.isSecureContext === false) { UI.toast('Selain antaa sijainnin vain suojatulle (https) sivulle. Käytä verkkoversiota.', true); return; }
+    UI.$('tbGps').classList.add('on');
+    gps.first = true;
+    UI.toast('Haetaan sijaintia…');
+    gps.watch = navigator.geolocation.watchPosition(gpsShow, function (err) {
+      var msg = err.code === 1 ? 'Sijainnin käyttö on estetty. Salli se selaimen tai puhelimen asetuksista (Safari: Asetukset → Tietosuoja → Sijaintipalvelut).'
+        : err.code === 3 ? 'Sijaintia ei saatu ajoissa. Yritetään edelleen.' : 'Sijaintia ei saatu.';
+      UI.toast(msg, true);
+      if (err.code === 1) gpsStop();
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  }
+  UI.$('tbGps').addEventListener('click', function () {
+    if (gps.watch == null) { gpsStart(); return; }
+    if (gps.last && !App.visibleBounds().pad(-0.1).contains(gps.last)) { App.centerOn(gps.last); return; }
+    gpsStop();
+  });
+  App.gps = { get position() { return gps.last; }, stop: gpsStop };
   UI.$('tbDeep').addEventListener('click', function () {
     st.show.safety = !st.show.safety; S.emit('settings');
     if (st.show.safety) UI.toast('Syvä vesi: turvasyvyys ' + fmtDepth(safetyFor()) + ' m' + (st.currentVessel ? ' (' + st.currentVessel + ')' : '') + '. Muuta arvoa valikosta Näytä → Aseta turvasyvyys.');
@@ -6204,8 +6468,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         { head: 'Maapohja ja näyttö' },
         item('Karttareunus (minuuttiasteikko)', toggleShow('border')),
         item('Maapohja merikartan alla (rasteri- ja ENC-pohjalla)', toggleShow('underlay', function (on) { chart.setUnderlay(on); })),
-        { label: 'Maapohja: Maanmittauslaitoksen taustakartta', checked: (st.land || 'mml') === 'mml', action: function () { st.land = 'mml'; chart.setLand('mml'); S.save(); } },
-        { label: 'Maapohja: OpenStreetMap', checked: st.land === 'osm', action: function () { st.land = 'osm'; chart.setLand('osm'); S.save(); } },
+        { label: 'Maapohja: Maanmittauslaitoksen taustakartta', checked: st.land === 'mml', action: function () { st.land = 'mml'; chart.setLand('mml'); S.save(); } },
+        { label: 'Maapohja: OpenStreetMap', checked: (st.land || 'osm') === 'osm', action: function () { st.land = 'osm'; chart.setLand('osm'); S.save(); } },
         { label: 'Terävä suurennus (rasteri)', checked: st.show.sharpen !== false, keepOpen: true, action: function () {
           st.show.sharpen = st.show.sharpen === false; chart.base.charts.setSharpen(st.show.sharpen); S.save();
         } },
@@ -6504,11 +6768,13 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '<h3>Karttamerkit</h3><p>Kivet, turvalaitteet ja valot piirretään Suomen merikarttojen merkeillä Traficomin virallisen merkkienselityksen mukaan, samoin kuin rasterikartassa.</p>' + legend() +
         '<h3>Loistot, sektorit ja muut väylätiedot</h3><p>Jokaisella loistolla, apuloistolla ja valaistulla viitalla on valon värinen pisara (valkoinen valo keltaisena, kuten merikartassa). Sektoriloistoilla näytetään lisäksi valosektorit värikaarina ja sektorirajat pisteviivoina sekä loistorekisterin valotunnus (esim. VQ (3) 5 s). Valotiedot tulevat Väyläviraston turvalaite- ja loistorekistereistä, myös muiden väylänpitäjien laitteista. Lisäksi näytetään nopeusrajoitusalueet ja muiden väylänpitäjien (esim. kaupunkien) väylät ja turvalaitteet. Vektoripohjalla ne ovat oletuksena näkyvissä, muilla pohjilla ne saa päälle valikosta Näytä.</p>' +
         '<h3>Laiturit ja aallonmurtajat</h3><p>Vektorikartalla laiturit, aallonmurtajat ja pengerrykset haetaan OpenStreetMapista ja piirretään veden päälle, koska maapohjan laiturit jäisivät vesialueen alle. Ensimmäinen haku uudelle alueelle voi kestää OSM:n palvelimen kuormasta riippuen puolikin minuuttia. Haetut alueet tallennetaan selaimeen 30 päiväksi, joten seuraavalla kerralla ne näkyvät heti. OpenStreetMap on vapaaehtoisten kartoittama, joten laiturit ovat yleensä oikeissa paikoissa, mutta niitä ei ole tarkastettu merenkulun tarpeisiin, ja kelluvat laiturit voivat olla kausittaisia.</p>' +
-        '<h3>Maanmittauslaitoksen kivet, karikot ja nimistö</h3><p>Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta vedenalaiset (⊤), vedenpinnassa olevat (+) ja vedenpäälliset (⊥) kivet sekä vesikivikot ja matalikot, jotka rajataan mustalla pisteviivalla (vaarakäyrä). OpenStreetMap-maapohjalla näytetään myös nimistörekisterin nimet. Tämä vaatii Maanmittauslaitoksen maksuttoman API-avaimen, joka syötetään kohtaan <b>Tiedosto → Asetukset</b>. Maastotietokannan kivet on kartoitettu maastokartoituksessa, eivät merenmittauksessa.</p>' +
+        '<h3>Maanmittauslaitoksen kivet, karikot ja nimistö</h3><p>Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta vedenalaiset (⊤), vedenpinnassa olevat (+) ja vedenpäälliset (⊥) kivet sekä vesikivikot ja matalikot, jotka rajataan mustalla pisteviivalla (vaarakäyrä). Vektorikartan maapohja on oletuksena OpenStreetMap, ja sen päällä näytetään myös nimistörekisterin paikannimet. Maanmittauslaitoksen taustakartan voi valita Näytä-valikosta. Verkkoversiossa Maanmittauslaitoksen aineisto toimii ilman omaa avainta. Tiedostona avattu versio tarvitsee maksuttoman API-avaimen, joka syötetään kohtaan <b>Tiedosto → Asetukset</b>. Maastotietokannan kivet on kartoitettu maastokartoituksessa, eivät merenmittauksessa.</p>' +
         '<h3>Vektorikartta</h3><p>Karttapohjaksi voi valita myös vektorikartan. Siinä syvyysalueet, syvyyskäyrät, syvyysluvut ja rantaviiva piirretään Traficomin merikarttatietokannasta ja väylät ja turvalaitteet Väyläviraston aineistosta, joten kartta on terävä kaikilla tasoilla ja kattaa myös Näsijärven. Maalla näkyy Maanmittauslaitoksen taustakartta. Paperikartan nimistö ja erikoismerkinnät puuttuvat.</p>' +
         '<h3>Paikkahaku ja koordinaatit</h3><p>Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, oman merkin tai tehtävän nimen tai koordinaatin. Turvalaitteet haetaan Väyläviraston aineistosta. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä, mikä vaatii Maanmittauslaitoksen API-avaimen (Tiedosto → Asetukset).</p>' +
-        '<p>Hakusanaksi riittää nimen alku: <b>viitas</b> löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten <b>salmi</b> löytää esimerkiksi lähellä olevan Viitasalmen. Samannimisiä paikkoja on paljon, joten tulokset näytetään kartalla numeroituina ja listassa lähimmät ensin. Alle 50 km:n päässä kartan keskeltä olevat ovat omana ryhmänään, ja jokaisella rivillä on etäisyys ja suunta kartan keskeltä. Jos lähialueen tuloksia ei näy kartalla, kartta siirtyy niihin. <b>Näytä kartalla</b> (tai Enter) näyttää kaikki lähialueen tulokset. Nuolinäppäimet ja hiiren vienti listan riville korostavat tuloksen kartalla, ja tuloksen voi valita listasta tai klikkaamalla sen numeroa kartalla. Numerot jäävät kartalle vertailua varten, kunnes valitset paikan tai painat Esc.</p>' +
+        '<p>Hakusanaksi riittää nimen alku: <b>viitas</b> löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten <b>salmi</b> löytää esimerkiksi lähellä olevan Viitasalmen. Samannimisiä paikkoja on paljon, joten tulokset näytetään kartalla numeroituina ja listassa lähimmät ensin. Alle 27 meripeninkulman (50 km) päässä kartan keskeltä olevat ovat omana ryhmänään, ja jokaisella rivillä on etäisyys merimaileina ja suunta kartan keskeltä. Jos lähialueen tuloksia ei näy kartalla, kartta siirtyy niihin. <b>Näytä kartalla</b> (tai Enter) näyttää kaikki lähialueen tulokset. Nuolinäppäimet ja hiiren vienti listan riville korostavat tuloksen kartalla, ja tuloksen voi valita listasta tai klikkaamalla sen numeroa kartalla. Numerot jäävät kartalle vertailua varten, kunnes valitset paikan tai painat Esc.</p>' +
         '<p>Koordinaatissa asteen ja minuutin merkit voi korvata välilyönneillä. Heti perään kirjoitettu N tai E päättää luvun: <b>61 35,1N</b> = 61°35,1′N, <b>61 35 11N</b> = 61°35′11″N ja <b>61,5N</b> = 61°30′N. Leveys ja pituus erotetaan välilyönnillä tai pilkulla, esimerkiksi <b>61 35,1N 23 45,6E</b>. Tehtävän sijaintikentän alla näkyy heti, miten syöte tulkittiin.</p>' +
+        '<h3>Tehtäväpaikan haku</h3><p>Uutta tehtävää luotaessa paikan voi hakea lomakkeen kentästä Hae paikka samalla tavalla kuin yläpalkista. Kun osuma valitaan, lomake väistyy ja paikka näytetään kartalla magentalla renkaalla. Muut osumat näkyvät numeroituina, ja numeron napautus vaihtaa paikan. Paikkaa voi tarkentaa vetämällä rengasta tai napauttamalla karttaa. Vahvista paikka palaa lomakkeelle uusi paikka valittuna, ja tehtävä luodaan vasta painikkeesta Luo tehtävä. Takaisin palaa lomakkeelle muuttamatta paikkaa.</p>' +
+        '<h3>Oma sijainti</h3><p>Työkalupalkin sijaintipainike näyttää laitteen oman sijainnin sinisenä pisteenä ja tarkkuuden vaaleana ympyränä. Liikkeessä pisteen edessä on kulkusuunnan nuoli, ja lukemissa näkyvät sijainti, nopeus solmuina, kulku ja tarkkuus. Selain kysyy luvan ensimmäisellä kerralla. Sijaintia ei tallenneta eikä lähetetä minnekään. Kun seuranta on päällä, painike keskittää kartan sijaintiin, jos se on näkymän ulkopuolella, ja muuten lopettaa seurannan. Sijainti toimii verkkoversiossa. Tiedostona avatussa sivussa selain ei välttämättä anna sijaintia.</p>' +
         '<h3>Puhelimessa ja tabletissa</h3><p>Kapealla näytöllä valikot ovat vasemman yläkulman valikkonapin takana, ja samasta valikosta valitaan alus ja näytettävät reitit. Puhelimessa valikko avautuu yläreunasta levynä, jossa on <b>Takaisin</b> ja <b>Sulje</b>, ja Näytä-valikko on jaettu osioihin. Jos valintoja on näkyvän osan alapuolella, levyn alareunassa lukee siitä. <b>Kirjasto</b> avautuu näytön alaosaan ja sulkeutuu itsestään, kun aloitat reitin tai muokkauksen. Kun kirjasto on auki, kartta keskitetään sen yläpuolelle jäävään osaan. Karttaa zoomataan nipistämällä, ja pitkä painallus vastaa hiiren oikeaa painiketta. Reittipisteitä lisättäessä ja harpilla mitattaessa ylhäällä ovat painikkeet <b>Poista viimeinen</b> ja <b>Valmis</b>, ja lukemat näyttävät juuri lisätyn välin suunnan ja pituuden.</p>' +
         '<h3>Karttapohja</h3><p>Kartan yläreunan painikkeilla <b>Rasteri</b>, <b>ENC</b>, <b>ECDIS</b> ja <b>Vektori</b>, valikosta <b>Näytä</b> tai näppäimillä <kbd>R</kbd>, <kbd>E</kbd>, <kbd>Shift</kbd>+<kbd>E</kbd> ja <kbd>V</kbd> voi valita rasterikartan (Traficomin paperikartat), vektorikartan tai ENC-kartan, jonka Traficomin palvelu piirtää ENC-aineistosta. ENC-aineistoa ei ole kaikilla vesillä, esimerkiksi Näsijärvellä. Silloin sovellus näyttää rasterikartan ja kertoo siitä kartan oikeassa yläkulmassa.</p>' +
         '<p>Rasteri- ja ENC-pohjaa näytetään tasolle 17 asti. Kun zoomaat sitä lähemmäs, kartta vaihtuu itsestään vektorikarttaan, jota voi suurentaa tasolle 20 asti (näytön leveydellä noin sata metriä). Uloszoomatessa palataan valittuun pohjaan. Kun vektorikartta on vaihtunut itsestään, Vektori-painike näkyy katkoviivoitettuna. Vektorikartan syvyysalueiden ja rantaviivan tarkkuus on merikarttatietokannan tarkkuus, joten suurennus ei tee aineistosta tarkempaa kuin se on.</p>' +

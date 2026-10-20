@@ -64,8 +64,8 @@ with sync_playwright() as pw:
     kms = [r[1] for r in rs]
     check(len(rs) == 5 and kms == sorted(kms), 'viisi samannimistä, järjestys etäisyyden mukaan: %s' % kms)
     txt = page.inner_text('#searchRes')
-    check('ALLE 50 KM' in txt.upper() and 'KAUEMPANA' in txt.upper() and txt.upper().index('ALLE 50 KM') < txt.upper().index('KAUEMPANA'), 'lähialue ennen kauempana olevia')
-    check(' km · ' in txt and '°' in txt, 'etäisyys ja suunta näkyvät')
+    check('ALLE 27 MPK' in txt.upper() and 'KAUEMPANA' in txt.upper() and txt.upper().index('ALLE 27 MPK') < txt.upper().index('KAUEMPANA'), 'lähialue ennen kauempana olevia')
+    check(' mpk · ' in txt and '°' in txt, 'etäisyys merimaileina ja suunta näkyvät')
     check(page.evaluate("document.querySelectorAll('.sres').length") == 5, 'tulokset numeroituina kartalla')
     check(any('bbox=' in u for u in mml_name_log) and any('bbox=' not in u for u in mml_name_log) and all('viitasaa' in u for u in mml_name_log),
           'haku sekä lähialueelta että koko maasta jokerihaulla')

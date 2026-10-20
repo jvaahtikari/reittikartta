@@ -67,6 +67,9 @@
       <button class="tb" id="tbMark" title="Lisää oma merkki kartalta">
         <svg viewBox="0 0 24 24"><path d="M7 21V4M7 4h10l-2.5 4L17 12H7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
       </button>
+      <button class="tb tg" id="tbGps" title="Oma sijainti – selain kysyy luvan">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
       <button class="tb" id="tbTask" title="Uusi tehtäväpaikka">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
       </button>
@@ -89,6 +92,7 @@
         <span class="empty">Reitti</span><b id="roTotal" class="empty">–</b>
         <span>Kursori</span><b id="roPos">–</b>
         <span class="ro-task" hidden>Tehtävä</span><b class="ro-task" id="roTask" hidden>–</b>
+        <span class="ro-gps" hidden>Oma</span><b class="ro-gps" id="roGps" hidden>–</b>
       </div>
       <div class="ro-clock" id="roClock" title="Tietokoneen kello – ei GNSS-aikaa">--:--:--</div>
     </div>

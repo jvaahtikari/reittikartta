@@ -297,32 +297,49 @@
     return d.getFullYear() + '-' + p(d.getMonth() + 1, 2) + '-' + p(d.getDate(), 2) + 'T' + p(d.getHours(), 2) + ':' + p(d.getMinutes(), 2);
   }
 
-  function editTask(id, newPos, draft) {
+  // Tehtäväpaikan voi antaa koordinaatteina, poimia kartalta tai hakea nimellä. Haun tulos tarkistetaan
+  // kartalla ennen vahvistusta: numeroidut osumat näkyvät, ja merkkiä voi siirtää tai napauttaa karttaa.
+  // draft on lomakkeen keskeneräinen tila (uusi tehtävä tai muokattavan kopio); ctx säilyttää haun.
+  function editTask(id, newPos, draft, ctx) {
     var isNew = !id;
+    var orig = isNew ? null : S.taskById(id);
+    if (!isNew && !orig) return;
     var nowD = new Date();
-    var t = isNew ? (draft || { id: S.uid('tk'), name: 'Tehtävä ' + G.pad(nowD.getHours(), 2) + ':' + G.pad(nowD.getMinutes(), 2), lat: newPos ? newPos.lat : null, lng: newPos ? newPos.lng : null, time: localDT(nowD), active: true }) : S.taskById(id);
-    if (!t) return;
+    var t = draft || (isNew
+      ? { id: S.uid('tk'), name: 'Tehtävä ' + G.pad(nowD.getHours(), 2) + ':' + G.pad(nowD.getMinutes(), 2), lat: newPos ? newPos.lat : null, lng: newPos ? newPos.lng : null, time: localDT(nowD), active: true }
+      : L.extend({}, orig));
+    ctx = ctx || { q: '', results: [], ref: null, place: null };
     var body = '<div class="form">' +
       '<label for="tName">Nimi</label><input id="tName" value="' + UI.esc(t.name || '') + '" placeholder="esim. Keikka 1234 – vene karilla">' +
+      '<label for="tFind">Hae paikka</label><div class="tfind"><input id="tFind" type="search" autocomplete="off" value="' + UI.esc(ctx.q || '') + '" placeholder="saari, kylä, turvalaite tai koordinaatit">' +
+      '<div class="tsr" id="tRes" hidden></div></div>' +
       '<label for="tPos">Koordinaatit</label><div style="display:flex;gap:6px"><input id="tPos" value="' + (t.lat != null ? UI.esc(G.fmtPos(t)) : '') + '" placeholder="61°31,234\'N 023°45,678\'E"><button type="button" class="btn small" id="tPick">Poimi kartalta</button></div>' +
       '<div class="hint" id="tPrev">Asteet, minuutit ja sekunnit voi erottaa välilyönnein: <b>61 35,1N 23 45,2E</b> (asteet ja minuutit), <b>61 35 11N 23 45 30E</b> (asteet, minuutit ja sekunnit) tai <b>61,5N 23,75E</b> (asteet desimaaleina).</div>' +
       '<label for="tTime">Aika</label><input id="tTime" type="datetime-local" value="' + UI.esc(t.time || localDT(nowD)) + '">' +
       '<label for="tAct">Aktiivinen</label><div class="checks"><label><input type="checkbox" id="tAct"' + (t.active ? ' checked' : '') + '> näytä suuntima ja etäisyys asemalta</label></div>' +
       '<div class="err" id="tErr" hidden></div></div>';
+    function keepForm(md) {
+      t.name = md.querySelector('#tName').value; t.time = md.querySelector('#tTime').value; t.active = md.querySelector('#tAct').checked;
+      var p = G.parsePos(md.querySelector('#tPos').value);
+      if (p) { t.lat = p.lat; t.lng = p.lng; }
+      ctx.q = md.querySelector('#tFind').value;
+    }
+    function reopen() { editTask(isNew ? null : orig.id, null, t, ctx); }
     UI.modal({
       title: isNew ? 'Uusi tehtäväpaikka' : 'Tehtäväpaikka', body: body, enterButton: 1,
       buttons: [{ label: 'Peruuta' }, {
-        label: 'Tallenna', primary: true, action: function (md) {
+        label: isNew ? 'Luo tehtävä' : 'Tallenna', primary: true, action: function (md) {
           var pos = G.parsePos(md.querySelector('#tPos').value);
-          if (!pos) { var er = md.querySelector('#tErr'); er.textContent = 'Koordinaatteja ei tunnistettu. Tarkista muoto.'; er.hidden = false; return false; }
+          if (!pos) { var er = md.querySelector('#tErr'); er.textContent = 'Paikka puuttuu tai koordinaatteja ei tunnistettu. Hae paikka nimellä, poimi se kartalta tai tarkista koordinaattien muoto.'; er.hidden = false; return false; }
           t.name = md.querySelector('#tName').value.trim() || 'Tehtävä';
           t.lat = pos.lat; t.lng = pos.lng;
           t.time = md.querySelector('#tTime').value;
           var act = md.querySelector('#tAct').checked;
-          if (isNew) S.state.tasks.push(t);
-          if (act) S.state.tasks.forEach(function (x) { x.active = x.id === t.id; }); else t.active = false;
+          var task = t;
+          if (isNew) S.state.tasks.push(t); else { L.extend(orig, t); task = orig; }
+          if (act) S.state.tasks.forEach(function (x) { x.active = x.id === task.id; }); else task.active = false;
           S.emit('tasks');
-          App.centerOn([t.lat, t.lng], Math.max(map.getZoom(), 13));
+          App.centerOn([task.lat, task.lng], Math.max(map.getZoom(), 13));
         }
       }],
       onOpen: function (md) {
@@ -331,8 +348,12 @@
           var v = inp.value.trim();
           if (!v) { prev.innerHTML = hint0; prev.className = 'hint'; return; }
           var p = G.parsePos(v);
-          if (p) { prev.innerHTML = 'Tulkinta: <b>' + UI.esc(G.fmtPos(p)) + '</b>'; prev.className = 'hint ok'; }
-          else {
+          if (p) {
+            var same = ctx.place && Math.abs(ctx.place.lat - p.lat) < 5e-5 && Math.abs(ctx.place.lng - p.lng) < 5e-5;
+            prev.innerHTML = same ? 'Paikka tarkistettu kartalla: <b>' + UI.esc(ctx.place.label) + '</b>, ' + UI.esc(G.fmtPos(p))
+              : 'Tulkinta: <b>' + UI.esc(G.fmtPos(p)) + '</b>';
+            prev.className = 'hint ok';
+          } else {
             var hasN = /[NSP]/i.test(v), hasE = /[EWIL]/i.test(v.replace(/[0-9\s,.'°"]/g, ''));
             prev.textContent = hasN && !hasE ? 'Leveys tunnistettu – lisää vielä pituus (E).' : 'Koordinaatteja ei vielä tunnistettu.';
             prev.className = 'hint bad';
@@ -341,15 +362,136 @@
         inp.addEventListener('input', preview);
         if (inp.value) preview();
         md.querySelector('#tPick').addEventListener('click', function () {
-          t.name = md.querySelector('#tName').value; t.time = md.querySelector('#tTime').value; t.active = md.querySelector('#tAct').checked;
+          keepForm(md);
           UI.closeModal();
-          pick('Tehtäväpaikka – klikkaa paikka kartalta', function (ll) {
-            t.lat = ll.lat; t.lng = ll.lng;
-            if (isNew) editTask(null, null, t); else editTask(t.id);
+          pick('Tehtäväpaikka – ' + (UI.isTouch() ? 'napauta' : 'klikkaa') + ' paikka kartalta', function (ll) {
+            t.lat = ll.lat; t.lng = ll.lng; ctx.place = null;
+            reopen();
           });
         });
+
+        // --- paikkahaku ---
+        var fin = md.querySelector('#tFind'), box = md.querySelector('#tRes'), timer = null, seq = 0;
+        function show(list, pending) {
+          if (!fin.value.trim()) { box.hidden = true; box.innerHTML = ''; return; }
+          var h = '';
+          if (!list.length) h = '<div class="sn">' + (pending ? 'Haetaan…' : 'Ei osumia. Kokeile nimen osaa, esim. viitas.') + '</div>';
+          else {
+            h = '<div class="sn">Valitse paikka, niin se näytetään kartalla tarkistettavaksi. Etäisyys ja suunta kartan keskeltä.</div>';
+            var nearDone = false;
+            list.forEach(function (it, i) {
+              if (!nearDone && it.km > global.Search.NEAR_KM) { nearDone = true; if (i) h += '<div class="sh">Kauempana</div>'; }
+              h += '<div class="sr" data-i="' + i + '"><i class="sn-no">' + (i + 1) + '</i>' +
+                '<div class="sr-t"><b>' + UI.esc(it.name) + '</b><span>' + UI.esc(it.info || '') + '</span></div>' +
+                '<em>' + G.fmtNM(it.km * 1000) + ' · ' + G.fmtBrg(it.brg, 0) + '</em></div>';
+            });
+            if (pending) h += '<div class="sn">Haetaan lisää…</div>';
+          }
+          if (!global.Search.hasNames && fin.value.trim().length >= 3) h += '<div class="sn">Paikannimet tarvitsevat Maanmittauslaitoksen avaimen (Tiedosto → Asetukset).</div>';
+          box.innerHTML = h; box.hidden = false;
+        }
+        function runFind() {
+          var q = fin.value.trim(), my = ++seq;
+          if (q.length < 2) { ctx.results = []; show([], false); return; }
+          var c = map.getCenter();
+          ctx.ref = { lat: c.lat, lng: c.lng };
+          show([], true);
+          global.Search.find(q, ctx.ref).then(function (list) {
+            if (my !== seq) return;
+            ctx.results = list.slice(0, 30); ctx.resQ = q;
+            show(ctx.results, false);
+          });
+        }
+        fin.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(runFind, 350); });
+        fin.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault(); e.stopPropagation();
+            clearTimeout(timer);
+            if (ctx.results.length && fin.value.trim() === ctx.resQ) { choose(0); return; }
+            runFind();
+          }
+        });
+        function choose(i) {
+          keepForm(md);
+          UI.closeModal();
+          verifyTaskPlace(t, ctx, i, reopen);
+        }
+        box.addEventListener('click', function (e) {
+          var el = e.target.closest('.sr');
+          if (el) choose(Number(el.dataset.i));
+        });
+        if (ctx.results.length) show(ctx.results, false);
+        // uudelle tehtävälle ilman paikkaa kohdistus suoraan hakuun
+        if (isNew && t.lat == null) setTimeout(function () { fin.focus(); }, 40);
       }
     });
+  }
+
+  // Tehtäväpaikan tarkistus kartalla: valittu hakutulos keskitetään ja merkitään siirrettävällä merkillä,
+  // muut osumat näkyvät numeroituina (napautus vaihtaa). Kartan napautus siirtää merkin siihen kohtaan.
+  var verifyLayer = null;
+  function verifyTaskPlace(t, ctx, idx, back) {
+    var list = ctx.results, cur = list[idx], pos = L.latLng(cur.lat, cur.lng), label = cur.name, moved = false, done = false;
+    if (verifyLayer) map.removeLayer(verifyLayer);
+    verifyLayer = L.layerGroup().addTo(map);
+    var cand = null;
+    function bannerText() {
+      return 'Tarkista tehtäväpaikka: ' + label + (moved ? ' (siirretty)' : '') + ', ' + G.fmtPos(pos) + '. ' +
+        (UI.isTouch() ? 'Napauta karttaa tai vedä merkkiä, jos paikkaa pitää tarkentaa.' : 'Klikkaa karttaa tai vedä merkkiä, jos paikkaa pitää tarkentaa.');
+    }
+    function draw() {
+      verifyLayer.clearLayers();
+      list.forEach(function (it, i) {
+        var on = it === cur;
+        if (on) return;          // valittu paikka näkyy tarkistusrenkaana
+        var m = L.marker([it.lat, it.lng], {
+          icon: L.divIcon({ className: 'sres-ico', html: '<span class="sres' + (on ? ' on' : '') + '">' + (i + 1) + '</span>', iconSize: [0, 0] }),
+          keyboard: false, zIndexOffset: on ? 1000 : 0, pane: 'aidPane', bubblingMouseEvents: false
+        });
+        m.bindTooltip(UI.esc(it.name) + (it.info ? ' – ' + UI.esc(it.info) : ''), { direction: 'top', offset: [0, -12] });
+        m.on('click', function (e) { L.DomEvent.stop(e); cur = it; label = it.name; moved = false; pos = L.latLng(it.lat, it.lng); draw(); App.centerOn(pos); banner(); });
+        m.addTo(verifyLayer);
+      });
+      cand = L.marker(pos, {
+        icon: L.divIcon({ className: 'tv-ico', html: '<span class="tv-ring"></span><span class="tv-dot"></span>', iconSize: [0, 0] }),
+        draggable: true, keyboard: false, zIndexOffset: 2000, bubblingMouseEvents: false
+      }).addTo(verifyLayer);
+      cand.on('dragend', function () { pos = cand.getLatLng(); moved = true; banner(); });
+    }
+    function finish(ok) {
+      done = true;
+      if (ok) {
+        t.lat = pos.lat; t.lng = pos.lng;
+        ctx.place = { lat: pos.lat, lng: pos.lng, label: label + (moved ? ' (siirretty)' : '') };
+        // oletusnimeen lisätään paikan nimi, jos käyttäjä ei ole nimennyt tehtävää itse
+        if (/^Tehtävä \d\d:\d\d$/.test(t.name || '')) t.name = t.name + ' – ' + label;
+      }
+      App.clearMode();
+    }
+    function banner() {
+      UI.banner({
+        kind: 'adding', text: bannerText(),
+        buttons: [
+          { label: 'Takaisin', action: function () { finish(false); } },
+          { label: 'Vahvista paikka', action: function () { finish(true); } }
+        ]
+      });
+    }
+    App.setMode('pick', {
+      label: 'Tehtäväpaikan tarkistus', cursor: true,
+      click: function (e) { pos = e.latlng; moved = true; cand.setLatLng(pos); banner(); },
+      cancel: function () {
+        if (verifyLayer) { map.removeLayer(verifyLayer); verifyLayer = null; }
+        UI.banner(null);
+        if (global.Routes && global.Routes.editingId) global.Routes.updateBanner();
+        // Esc ja Takaisin palaavat lomakkeelle; jos käyttäjä aloitti toisen työkalun, lomaketta ei avata
+        var confirmed = done;
+        setTimeout(function () { if (confirmed || App.mode() === 'idle') back(); }, 0);
+      }
+    });
+    draw();
+    banner();
+    App.centerOn(pos, Math.max(map.getZoom(), 13));
   }
 
   function updateTaskReadout() {

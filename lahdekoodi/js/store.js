@@ -24,7 +24,7 @@
           legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true
         },
         safetyDepths: {},
-        land: 'mml',                // maapohja: 'mml' | 'osm'
+        land: 'osm',                // maapohja: 'osm' (oletus, näyttää maa-alueiden nimet) | 'mml'
         mmlKey: '',                 // Maanmittauslaitoksen avoimen rajapinnan API-avain           // turvasyvyys aluksittain (m)
         base: 'raster',             // karttapohja: 'raster' | 'vector' | 'enc' | 'enc-ecdis'
         night: false,
@@ -58,6 +58,7 @@
       if (raw) state = deepMerge(defaults(), JSON.parse(raw));
     } catch (e) { storageOk = false; }
     dropSampleVessels();
+    osmLandDefault();
     return state;
   }
 
@@ -72,6 +73,16 @@
     s.vessels = (s.vessels || []).filter(function (v) { return SAMPLE.indexOf(v) < 0 || used[v]; });
     if (s.vessels.indexOf(s.currentVessel) < 0) s.currentVessel = s.vessels[0] || '';
     s.sampleVesselsDropped = true;
+    if (storageOk) save();
+  }
+
+  // OpenStreetMap-maapohja on oletus, jotta vektorikartalla näkyvät maa-alueiden paikannimet.
+  // Aiemmin tallennettu oletus (MML) vaihdetaan kerran; käyttäjä voi palauttaa MML:n Näytä-valikosta.
+  function osmLandDefault() {
+    var s = state.settings;
+    if (s.landOsmDefault) return;
+    s.land = 'osm';
+    s.landOsmDefault = true;
     if (storageOk) save();
   }
 

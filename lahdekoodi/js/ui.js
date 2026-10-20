@@ -168,8 +168,12 @@
       v.classList.toggle('empty', empty);
       if (v.previousElementSibling) v.previousElementSibling.classList.toggle('empty', empty);
     });
-    ['mode', 'brg', 'dist', 'total', 'task'].forEach(function (k) { if (k in o) ro.v[k] = k === 'mode' ? !!o.mode : o[k] != null && o[k] !== ''; });
-    var busy = ro.v.mode || ro.v.brg || ro.v.dist || ro.v.total || ro.v.task;
+    if ('gps' in o) {
+      document.querySelectorAll('.ro-gps').forEach(function (el) { el.hidden = !o.gps; });
+      if (o.gps) $('roGps').textContent = o.gps;
+    }
+    ['mode', 'brg', 'dist', 'total', 'task', 'gps'].forEach(function (k) { if (k in o) ro.v[k] = k === 'mode' ? !!o.mode : o[k] != null && o[k] !== ''; });
+    var busy = ro.v.mode || ro.v.brg || ro.v.dist || ro.v.total || ro.v.task || ro.v.gps;
     $('readout').classList.toggle('idle', !busy);
   }
   function clearMeasure() { readout({ brg: null, dist: null, total: null }); }
