@@ -43,6 +43,10 @@ Ensimmäisellä käynnistyskerralla sovellus näyttää lyhyen esittelyn. Pikaoh
 
 Sovellus toimii myös yhtenä tiedostona ilman verkkopalvelinta. Repon juuren `index.html` on koko sovellus yhdessä tiedostossa, ja sen voi avata tietokoneen selaimessa tuplaklikkaamalla. Tiedostona avattuna Maanmittauslaitoksen aineistot (kivet, laiturit ja paikannimet) tarvitsevat oman maksuttoman API-avaimen, joka syötetään kohtaan Tiedosto → Asetukset. Myös oma sijainti voi jäädä toimimatta. iPhonen Safari ei aja HTML-tiedostoon kirjoitettua ohjelmaa, kun tiedosto avataan Tiedostot-sovelluksesta, joten iPhonessa käytetään verkkoversiota.
 
+## Hiiren rulla ja zoomaus
+
+Karttaa zoomataan hiiren rullalla yksi taso naksausta kohti. Sovelluksella on oma rullakäsittely, koska karttakirjaston oma pyöristää jokaisen 40 millisekunnin erän ylöspäin kokonaiseen tasoon. Tarkkuusrullat, kuten Logitechin MagSpeed-rulla pehmeällä vierityksellä, pilkkovat yhden naksauksen kymmeniin pieniin tapahtumiin, jolloin kirjaston käsittely zoomasi yhdellä naksauksella useita tasoja. Nyt rullaus kertyy, yksi taso vaatii naksauksen verran liikettä, ja saman purskeen loput tapahtumat jätetään huomiotta. Kosketuslevyn nipistys on herkempi.
+
 ## Tallennus ja tietosuoja
 
 Sovellus tallentaa selaimen muistiin seuraavat tiedot:
@@ -288,6 +292,7 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 | `extra_test.py` | Karttamerkit, valosektorit, nopeusrajoitukset, suuntanuotit, käännösmerkit, maapohja ja Maanmittauslaitoksen kerros |
 | `safety_test.py` | Syvä vesi ja turvasyvyys |
 | `snap_test.py` | Reittipisteiden väyläkiinnitys |
+| `wheel_test.py` | Hiiren rullan zoomaus, myös tarkkuusrullan purskeet |
 | `route_test.py` | Reititys väylää pitkin: kulkusyvyysrajoite, lähin kelvollinen väyläpiste, linjat ilman kulkusyvyyttä, risteykset ja dialogi (`DEVICE` valitsee puhelinprofiilin) |
 | `aid_test.py` | Sivuutus- ja käännösetäisyyksien kiinnitys turvalaitteisiin |
 | `search_test.py` | Paikkahaku |

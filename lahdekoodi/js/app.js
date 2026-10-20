@@ -13,9 +13,36 @@
 
   // ---------- kartta ----------
   var map = L.map('map', {
-    minZoom: 5, maxZoom: 20, zoomSnap: 1, doubleClickZoom: false, wheelPxPerZoomLevel: 80,
+    minZoom: 5, maxZoom: 20, zoomSnap: 1, doubleClickZoom: false, scrollWheelZoom: false,
     zoomControl: true, attributionControl: true, worldCopyJump: false
   });
+  // Rullazoomaus omana käsittelynä. Leafletin oma käsittely pyöristää jokaisen 40 ms:n erän ylöspäin
+  // kokonaiseen tasoon, jolloin tarkkuusrullat (esim. Logitech MagSpeed, pehmeä vieritys), jotka
+  // pilkkovat naksauksen kymmeniin pieniin tapahtumiin, zoomaavat yhdellä naksauksella monta tasoa.
+  // Tässä rullaus kertyy pikseleinä, yksi taso vaatii naksauksen verran (100 px), ja askeleen jälkeen
+  // saman purskeen loput tapahtumat jätetään huomiotta. Kosketuslevyn nipistys (ctrl+rulla) on herkempi.
+  (function wheelZoom() {
+    var NOTCH = 100, PINCH = 40, COOLDOWN = 160, IDLE = 150;
+    var acc = 0, lastAt = 0, stepAt = 0;
+    L.DomEvent.on(map.getContainer(), 'wheel', function (e) {
+      L.DomEvent.preventDefault(e);
+      var dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 33; else if (e.deltaMode === 2) dy *= 400;
+      if (!dy) return;
+      var now = Date.now();
+      if (now - stepAt < COOLDOWN) return;            // sama purske: askel on jo otettu
+      if (now - lastAt > IDLE) acc = 0;               // uusi rullaus alkaa tyhjästä
+      lastAt = now;
+      acc += dy;
+      var th = e.ctrlKey ? PINCH : NOTCH;
+      if (Math.abs(acc) < th) return;
+      var dir = acc > 0 ? -1 : 1;
+      acc = 0; stepAt = now;
+      var z = map.getZoom(), nz = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), Math.round(z) + dir));
+      if (nz === z) return;
+      map.setZoomAround(map.mouseEventToContainerPoint(e), nz);
+    });
+  })();
   map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
   if (st.view && st.view.zoom) map.setView([st.view.lat, st.view.lng], Math.min(20, st.view.zoom));
   else map.fitBounds([[61.48, 23.55], [62.0, 24.2]]);
