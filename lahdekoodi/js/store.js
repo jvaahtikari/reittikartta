@@ -20,8 +20,9 @@
         view: { lat: 61.66, lng: 23.86, zoom: 11 },
         show: {
           notes: true, passes: true, bearings: true, depths: true, lines: false,
-          aids: false, aidNames: false, signs: false, border: true, hint: false, snap: true, safety: false,
-          legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true
+          aids: false, aidNames: false, signs: null, border: true, hint: false, snap: true, safety: false,
+          legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true,
+          bridges: null, ecdisMarks: false
         },
         safetyDepths: {},
         land: 'osm',                // maapohja: 'osm' (oletus, näyttää maa-alueiden nimet) | 'mml'
@@ -60,6 +61,7 @@
     } catch (e) { storageOk = false; }
     dropSampleVessels();
     osmLandDefault();
+    signsAutoDefault();
     return state;
   }
 
@@ -84,6 +86,16 @@
     if (s.landOsmDefault) return;
     s.land = 'osm';
     s.landOsmDefault = true;
+    if (storageOk) save();
+  }
+
+  // Vesiliikennemerkit näkyvät nyt oletuksena vektorikartalla (kuten valot). Aiempi oletus false
+  // muutetaan kerran tyhjäksi; käyttäjän itse valitsema näkyvyys (true) säilyy.
+  function signsAutoDefault() {
+    var s = state.settings;
+    if (s.signsAutoDefault) return;
+    if (s.show && s.show.signs === false) s.show.signs = null;
+    s.signsAutoDefault = true;
     if (storageOk) save();
   }
 

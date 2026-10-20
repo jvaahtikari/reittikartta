@@ -304,10 +304,16 @@ body.night .fw-d { background: #111; border-color: #ccc; color: #eee; }
 /* yönäytössä mustat karttamerkit vaaleina (valon pisarat säilyttävät värinsä) */
 body.night .aid-ico svg, body.night .rk-ico svg, body.night .mk svg { filter: invert(.9) hue-rotate(180deg); }
 .aid-name { position: absolute; left: 18px; top: 6px; white-space: nowrap; font: italic 600 11px var(--font); color: #111; text-shadow: 0 0 2px #fff, 0 0 3px #fff; }
-.sg { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 700 10.5px/1 var(--font); }
-.sg-speed { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #d7191c; background: #fff; display: grid; place-items: center; color: #111; }
-.sg-head { background: #1f4fa3; color: #fff; padding: 3px 4px; border-radius: 2px; border: 1px solid #fff; }
-.sg-gen { width: 16px; height: 16px; background: #1f4fa3; color: #fff; display: grid; place-items: center; border: 1px solid #fff; }
+/* vesiliikennemerkit: samassa paikassa olevat merkit tolppana (signs.js) */
+.sg-post { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 1px; filter: drop-shadow(0 0 1px rgba(255,255,255,.9)); cursor: pointer; }
+.sg-post svg { display: block; }
+.sg-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; }
+.sg-mini svg { width: 22px; height: auto; display: block; }
+/* sillat ja sulut */
+.st-sym { position: absolute; left: 0; top: 0; line-height: 0; cursor: pointer; }
+.st-lab { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 600 11px/1 var(--font); color: #111; background: rgba(255,255,255,.85); border: 1px solid #333; border-radius: 2px; padding: 1px 3px; font-variant-numeric: tabular-nums; }
+.st-lab-ico { pointer-events: none; }
+body.night .st-lab { background: rgba(10,14,18,.8); color: #eee; border-color: #aaa; }
 
 .pop table { border-collapse: collapse; margin-top: 4px; }
 .pop th { text-align: left; color: #555; font-weight: 600; padding: 1px 8px 1px 0; vertical-align: top; }

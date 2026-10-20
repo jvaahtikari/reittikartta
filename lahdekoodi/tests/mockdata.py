@@ -170,12 +170,23 @@ def aids():
 
 
 def signs():
+    pt = lambda x, y: {'type': 'Point', 'coordinates': [x, y]}
     return fc([
-        {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [23.745, 61.620]},
-         'properties': {'id': 1, 'nimifi': 'Nopeus', 'vlmlajityyppi': 11, 'rajoitusarvo': 9}},
-        {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [23.755, 61.622]},
-         'properties': {'id': 2, 'nimifi': 'Silta', 'vlmlajityyppi': 15, 'rajoitusarvo': 7.4}},
+        {'type': 'Feature', 'geometry': pt(23.745, 61.620), 'properties': {'id': 1, 'nimifi': 'Nopeus', 'vlmlajityyppi': 11, 'rajoitusarvo': 9}},
+        # samassa tolpassa: rajoitettu alikulkukorkeus ja ilmajohto (90 §: alikulkukorkeus ylimpänä)
+        {'type': 'Feature', 'geometry': pt(23.755, 61.622), 'properties': {'id': 3, 'nimifi': 'Johto', 'vlmlajityyppi': 24, 'lisakilventeksti1': 'Alikulkukorkeus 7,4 m'}},
+        {'type': 'Feature', 'geometry': pt(23.755, 61.622), 'properties': {'id': 2, 'nimifi': 'Silta', 'vlmlajityyppi': 15, 'rajoitusarvo': 7.4, 'sijaintifi': 'Testisalmen silta'}},
+        {'type': 'Feature', 'geometry': pt(23.760, 61.625), 'properties': {'id': 4, 'nimifi': 'Aallokko', 'vlmlajityyppi': 6, 'lisakilventeksti1': '1000'}},
+        {'type': 'Feature', 'geometry': pt(23.766, 61.626), 'properties': {'id': 5, 'nimifi': 'Kaapeli', 'vlmlajityyppi': 31, 'lisakilventeksti1': 'Puhelinkaapeli'}},
+        {'type': 'Feature', 'geometry': pt(23.770, 61.623), 'properties': {'id': 6, 'nimifi': 'Muu', 'vlmlajityyppi': 37, 'lisakilventeksti1': 'PONTTONISILTA'}},
     ])
+
+
+def bridges():
+    # silta navigointilinjalla (23.700,61.560)-(23.760,61.640), t = 0,8
+    return fc([{'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [23.748, 61.624]},
+                'properties': {'id': 6, 'nimi': 'Testisalmen silta', 'alittav_vayla_korkraj_vesiv': '4.5', 'kayttotarkoitukset_nimi': 'Vesistösilta',
+                               'nykyinen_omistaja': 'Väylävirasto', 'tunnus': 'H-28', 'sijaintikunnat': 'Testilä'}}])
 
 
 def solid_png(w, h, rgba):

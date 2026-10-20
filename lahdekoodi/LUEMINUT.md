@@ -89,12 +89,22 @@ Merkkien selitys on myös sovelluksen pikaohjeessa.
 Jokaisella loistolla, apuloistolla ja valaistulla viitalla on valon värinen pisara. Valkoinen valo on keltainen kuten merikartassa. Sektoriloistoilla näytetään valosektorit värikaarina, sektorirajat katkoviivoina ja loistorekisterin valotunnus, esimerkiksi VQ (3) 5 s. Ympäri näkyvä valo piirretään valon värisenä renkaana. Sektorien kulmat ovat loistoluettelon tapaan merelle päin katsottuina.
 
 Väyläviraston avoimesta rajapinnasta näytetään lisäksi seuraavat tiedot:
+- vesiliikennemerkit vesiliikennelain mukaisina kilpinä
+- sillat alikulkukorkeuksineen sekä sulut ja avattavat sillat
 - väylien suunnat molempiin suuntiin ja kulkusyvyydet
 - linjataulujen linjat tosisuuntineen
 - vesiliikennemerkit ja nopeusrajoitusalueet
 - muiden väylänpitäjien, kuten kaupunkien, väylät ja turvalaitteet
 
 Linjataulujen linjat piirretään vektorikartalle (ja väylälinjojen kanssa muillekin pohjille) ENC:n tapaan: ohut katkoviiva jatkuu väylän linjaosuuden päästä taulujen kautta, ja linjan tosisuunta, esimerkiksi 055,5°, on merkitty linjan ulommaiseen päähän. Aineisto on Väyläviraston taululinjat. Valosektorit piirretään ENC-kartan (S-52) mitoilla: sektorikaaren säde on näytöllä 20 mm ja sektorirajat ulottuvat 25 mm:iin zoomaustasosta riippumatta, kauempaa ja kapealla näytöllä hieman pienempinä. Väylän suunta on navigointilinjan virallinen tosisuunta, kun se on saatavilla, ja muuten se lasketaan linjan geometriasta. Vektoripohjalla valosektorit ja nopeusrajoitukset ovat oletuksena näkyvissä, ja muilla pohjilla ne saa päälle valikosta Näytä.
+
+**Vesiliikennemerkit** piirretään vesiliikennelain (782/2019) 4 luvun mukaisina merkkikilpinä pienennettyinä. Kielto-, määräys-, rajoitus- ja varoitusmerkit ovat neliöitä, joissa on punaiset reunat ja valkoisella pohjalla musta kuvio, ja kieltomerkissä lisäksi punainen diagonaaliviiva. Tiedotusmerkit ovat sinisiä neliöitä, kaapeli- ja johtotaulut keltaisia suorakaiteita ja suuntamerkit punaisia ympyröitä. Rajoitusmerkeissä näkyy rajoituksen arvo, esimerkiksi nopeusrajoitus tai alikulkukorkeus. Samassa paikassa olevat merkit pinotaan tolpaksi lain järjestyksessä, jolloin esimerkiksi rajoitetun alikulkukorkeuden merkki on ilmajohtomerkin yläpuolella. Merkin napautus näyttää lajit, arvot ja lisäkilpien tekstit. Merkit näkyvät tasolta 13 ja kaapelitaulut tasolta 14. Väyläviraston rekisterissä merkin laji on vain numerokoodina, ja koodien merkitykset on päätelty rekisterin aineistosta: koodit noudattavat lain merkkien järjestystä, ja merkkien sijainnit ja lisäkilpien tekstit vahvistavat tulkinnan. Tuntematon laji näytetään yleisenä merkkinä.
+
+**Sillat ja sulut.** Sillat, joille Väyläviraston taitorakennerekisterissä on alittavan vesiväylän alikulkukorkeus (noin 280 siltaa), piirretään INT 1:n tapaan kahtena kannen reunaviivana, joiden päät taittuvat ulospäin, ja alikulkukorkeus näkyy sillan vieressä. Rekisteri antaa vain sillan keskipisteen, joten kansi suunnataan poikki lähimmän navigointilinjan. Sulut ja avattavat sillat tulevat Väyläviraston sulkukanava-aineistosta. Avattavan sillan kannessa on aukko, ja sulun merkissä ovat kanavan seinämät ja portit. Napautus näyttää suurimman sallitun aluksen mitat, sulun mitat, putouskorkeuden ja käyttötavan. Avattavan sillan kohdalla aineiston korkeus on suurin sallittu aluksen korkeus sillan ollessa avattuna, ei suljetun sillan alikulkukorkeutta, joten sitä ei merkitä karttaan.
+
+**Viitat ECDIS-värein.** Viitat ovat oletuksena paperikartan merkkienselityksen mukaisesti mustia. Valinta Näytä → Viitat ECDIS-värein värittää ne ECDISin (S-52, IALA A) tapaan: vasen punainen, oikea vihreä, kardinaalit keltamustina värijaksoin, karimerkki mustapunamustana, turvavesimerkki punavalkoisena ja erikoismerkki keltaisena.
+
+Vesiliikennemerkit sekä sillat ja sulut ovat oletuksena näkyvissä vektorikartalla, ja muilla pohjilla ne saa päälle valikosta Näytä.
 
 Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta kivet, vesikivikot ja matalikot (Näytä → Kivet, karikot ja nimistö). Maastotietokannan kivet on kartoitettu maastokartoituksessa eikä merenmittauksessa, joten ne eivät ole navigointitarkkoja.
 
@@ -222,6 +232,7 @@ Reitti viedään GPX-tiedostoksi reitin valikosta tai reittikirjastosta, ja koko
 | ENC-karttapohja | Traficom, S-57 WMS | CC BY 4.0, ei navigointikäyttöön |
 | Syvyysalueet, -käyrät ja -luvut | Traficomin merikarttatietokanta (INSPIRE-palvelu) | Traficomin hydrografisen aineiston lisenssi: muuhun kuin navigointiin ja ei-kaupallisesti, lähdemerkintä tiedonsiirron ajankohtineen |
 | Väylät, turvalaitteet, loistot, valosektorit, vesiliikennemerkit, nopeusrajoitukset, sulut ja avattavat sillat | Väylävirasto, avoin rajapinta | CC BY 4.0 |
+| Siltojen alikulkukorkeudet | Väylävirasto, taitorakennerekisteri (avoin rajapinta) | CC BY 4.0 |
 | Luotsipaikat ja VTS-ilmoittautumispisteet (haku) | Traficom, avoin INSPIRE-palvelu | CC BY 4.0 |
 | Kivet, karikot, laiturit, aallonmurtajat ja paikannimet | Maanmittauslaitos, maastotietokanta ja nimistörekisteri (OGC API Features) | CC BY 4.0 |
 | Maanmittauslaitoksen taustakartta | Maanmittauslaitos, kartat.kapsi.fi | CC BY 4.0 |
@@ -257,6 +268,7 @@ OpenStreetMapin palvelimet estävät karttatiilet sivuilta, jotka eivät lähet�
 | `lahdekoodi/js/app.js` | Käynnistys, valikot, näppäimet, oma sijainti ja asetukset |
 | `lahdekoodi/js/chart.js` | Karttapohjat, vektorikartta, väylätiedot, valot, Maanmittauslaitoksen aineistot ja laiturit |
 | `lahdekoodi/js/symbols.js` | Suomen merikarttojen karttamerkit |
+| `lahdekoodi/js/signs.js` | Vesiliikennemerkit vesiliikennelain mukaisina kilpinä |
 | `lahdekoodi/js/rastersharp.js` | Merikarttarasterin terävä suurennus |
 | `lahdekoodi/js/routes.js` | Reittisuunnittelu ja hyväksyntä |
 | `lahdekoodi/js/routing.js` | Automaattinen reititys väylää pitkin: verkko navigointilinjoista, kulkusyvyysrajoite, lyhimmän reitin haku ja dialogi |
@@ -296,6 +308,7 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 | `snap_test.py` | Reittipisteiden väyläkiinnitys |
 | `wheel_test.py` | Hiiren rullan zoomaus, myös tarkkuusrullan purskeet |
 | `legnote_test.py` | Legien suuntanuottien sijoittelu mutkikkaalla reitillä (ei päällekkäisyyksiä) |
+| `structures_test.py` | Vesiliikennemerkit, sillat ja sulut sekä viittojen ECDIS-värit (`DEVICE` valitsee puhelinprofiilin) |
 | `route_test.py` | Reititys väylää pitkin: kulkusyvyysrajoite, lähin kelvollinen väyläpiste, linjat ilman kulkusyvyyttä, risteykset ja dialogi (`DEVICE` valitsee puhelinprofiilin) |
 | `aid_test.py` | Sivuutus- ja käännösetäisyyksien kiinnitys turvalaitteisiin |
 | `search_test.py` | Paikkahaku |

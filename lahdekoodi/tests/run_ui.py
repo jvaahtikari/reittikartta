@@ -167,7 +167,8 @@ def handle(route, request):
             if k in t:
                 return route.fulfill(status=200, headers=cors, content_type='application/json', body=fn())
         body = {'navigointilinjat': mockdata.navlines, 'vaylat_uusi': mockdata.vaylat,
-                'turvalaitteet': mockdata.aids, 'vesiliikennemerkit': mockdata.signs}
+                'turvalaitteet': mockdata.aids, 'vesiliikennemerkit': mockdata.signs,
+                'taitorakenteet:silta': mockdata.bridges, 'sulkukanavat': mockdata.canals}
         for k, fn in body.items():
             if k in t:
                 return route.fulfill(status=200, headers=cors, content_type='application/json', body=fn())

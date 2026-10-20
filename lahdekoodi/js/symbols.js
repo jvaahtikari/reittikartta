@@ -49,8 +49,29 @@
   // ---------- viitat ja muut navigointilajin merkit ----------
   // navigointilajikoodi (Väylävirasto): 1 vasen, 2 oikea, 3 pohjois, 4 etelä, 5 länsi, 6 itä,
   // 7 karimerkki, 8 turvavesimerkki, 9 erikoismerkki
-  function topmark(nl) {
+  // ECDIS-värit (S-52 / IALA A, Suomi): vasen punainen, oikea vihreä, kardinaalit keltamustia,
+  // karimerkki mustapunamusta, turvavesi punavalkoinen, erikoismerkki keltainen. Paperikartan
+  // merkkienselityksen mukaiset mustat merkit ovat oletus.
+  var EC = { r: '#e2211c', g: '#13a04a', y: '#f2c311', b: '#111', w: '#fff' };
+  // varren värijaksot ylhäältä alas
+  var BANDS = { 1: ['r'], 2: ['g'], 3: ['b', 'y'], 4: ['y', 'b'], 5: ['y', 'b', 'y'], 6: ['b', 'y', 'b'], 7: ['b', 'r', 'b'], 8: ['rw'], 9: ['y'], 0: ['b'] };
+  function body(nl, top) {
+    var bands = BANDS[nl] || ['b'], y0 = top, y1 = 24.1, hgt = (y1 - y0) / bands.length, s = '';
+    bands.forEach(function (c, i) {
+      var y = y0 + i * hgt;
+      if (c === 'rw') s += '<rect x="8.5" y="' + y + '" width="1.5" height="' + hgt + '" fill="' + EC.r + '"/><rect x="10" y="' + y + '" width="1.5" height="' + hgt + '" fill="#fff"/>';
+      else s += '<rect x="8.5" y="' + y + '" width="3" height="' + hgt + '" fill="' + EC[c] + '"/>';
+    });
+    return s + '<rect x="8.5" y="' + y0 + '" width="3" height="' + (y1 - y0) + '" fill="none" stroke="' + INK + '" stroke-width=".6"/>';
+  }
+  function topmark(nl, ec) {
     var f = ' fill="' + INK + '"';
+    if (ec) {
+      if (nl === 1) return '<rect x="8.3" y="3.6" width="3.4" height="6.4" fill="' + EC.r + '" stroke="' + INK + '" stroke-width=".7"/>';
+      if (nl === 2) return '<path d="M10 2.8L13.2 10H6.8Z" fill="' + EC.g + '" stroke="' + INK + '" stroke-width=".7"/>';
+      if (nl === 8) return '<circle cx="10" cy="6.6" r="2.7" fill="' + EC.r + '" stroke="' + INK + '" stroke-width=".7"/>';
+      if (nl === 9) return '<path d="M7.4 3.4L12.6 8.6M12.6 3.4L7.4 8.6" stroke="' + INK + '" stroke-width="2.6"/><path d="M7.4 3.4L12.6 8.6M12.6 3.4L7.4 8.6" stroke="' + EC.y + '" stroke-width="1.5"/>';
+    }
     switch (nl) {
       case 1: return '<rect x="8.3" y="3.6" width="3.4" height="6.4" fill="#fff" stroke="' + INK + '" stroke-width="1.2"/>';
       case 2: return '<path d="M10 2.8L13.2 10H6.8Z"' + f + '/>';
@@ -68,9 +89,9 @@
     return '<path d="M' + (cx - 4.6) + ' ' + cy + 'H' + (cx - 1.9) + 'M' + (cx + 1.9) + ' ' + cy + 'H' + (cx + 4.6) + '" stroke="' + INK + '" stroke-width="1.1"/>' +
       '<circle class="pos" cx="' + cx + '" cy="' + cy + '" r="1.9" fill="#fff" stroke="' + INK + '" stroke-width="1.1"/>';
   }
-  function mark(nl) {
+  function mark(nl, ec) {
     var top = (nl === 2 || nl === 8) ? 10 : 10.2;
-    var b = '<path d="M10 ' + top + 'V24.1" stroke="' + INK + '" stroke-width="1.3"/>' + topmark(nl) + base(10, 26);
+    var b = (ec ? body(nl || 0, top) : '<path d="M10 ' + top + 'V24.1" stroke="' + INK + '" stroke-width="1.3"/>') + topmark(nl, ec) + base(10, 26);
     // näytöllä 18 x 27 px; asemapiste on asemaympyrän keskellä
     return { html: svg(20, 30, 18, 27, b), w: 18, h: 27, ax: 9, ay: 23.4 };
   }

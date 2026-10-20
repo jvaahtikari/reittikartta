@@ -989,10 +989,16 @@ body.night .fw-d { background: #111; border-color: #ccc; color: #eee; }
 /* yönäytössä mustat karttamerkit vaaleina (valon pisarat säilyttävät värinsä) */
 body.night .aid-ico svg, body.night .rk-ico svg, body.night .mk svg { filter: invert(.9) hue-rotate(180deg); }
 .aid-name { position: absolute; left: 18px; top: 6px; white-space: nowrap; font: italic 600 11px var(--font); color: #111; text-shadow: 0 0 2px #fff, 0 0 3px #fff; }
-.sg { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 700 10.5px/1 var(--font); }
-.sg-speed { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #d7191c; background: #fff; display: grid; place-items: center; color: #111; }
-.sg-head { background: #1f4fa3; color: #fff; padding: 3px 4px; border-radius: 2px; border: 1px solid #fff; }
-.sg-gen { width: 16px; height: 16px; background: #1f4fa3; color: #fff; display: grid; place-items: center; border: 1px solid #fff; }
+/* vesiliikennemerkit: samassa paikassa olevat merkit tolppana (signs.js) */
+.sg-post { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 1px; filter: drop-shadow(0 0 1px rgba(255,255,255,.9)); cursor: pointer; }
+.sg-post svg { display: block; }
+.sg-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; }
+.sg-mini svg { width: 22px; height: auto; display: block; }
+/* sillat ja sulut */
+.st-sym { position: absolute; left: 0; top: 0; line-height: 0; cursor: pointer; }
+.st-lab { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 600 11px/1 var(--font); color: #111; background: rgba(255,255,255,.85); border: 1px solid #333; border-radius: 2px; padding: 1px 3px; font-variant-numeric: tabular-nums; }
+.st-lab-ico { pointer-events: none; }
+body.night .st-lab { background: rgba(10,14,18,.8); color: #eee; border-color: #aaa; }
 
 .pop table { border-collapse: collapse; margin-top: 4px; }
 .pop th { text-align: left; color: #555; font-weight: 600; padding: 1px 8px 1px 0; vertical-align: top; }
@@ -1618,8 +1624,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         view: { lat: 61.66, lng: 23.86, zoom: 11 },
         show: {
           notes: true, passes: true, bearings: true, depths: true, lines: false,
-          aids: false, aidNames: false, signs: false, border: true, hint: false, snap: true, safety: false,
-          legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true
+          aids: false, aidNames: false, signs: null, border: true, hint: false, snap: true, safety: false,
+          legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true,
+          bridges: null, ecdisMarks: false
         },
         safetyDepths: {},
         land: 'osm',                // maapohja: 'osm' (oletus, näyttää maa-alueiden nimet) | 'mml'
@@ -1658,6 +1665,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     } catch (e) { storageOk = false; }
     dropSampleVessels();
     osmLandDefault();
+    signsAutoDefault();
     return state;
   }
 
@@ -1682,6 +1690,16 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     if (s.landOsmDefault) return;
     s.land = 'osm';
     s.landOsmDefault = true;
+    if (storageOk) save();
+  }
+
+  // Vesiliikennemerkit näkyvät nyt oletuksena vektorikartalla (kuten valot). Aiempi oletus false
+  // muutetaan kerran tyhjäksi; käyttäjän itse valitsema näkyvyys (true) säilyy.
+  function signsAutoDefault() {
+    var s = state.settings;
+    if (s.signsAutoDefault) return;
+    if (s.show && s.show.signs === false) s.show.signs = null;
+    s.signsAutoDefault = true;
     if (storageOk) save();
   }
 
@@ -2432,8 +2450,29 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   // ---------- viitat ja muut navigointilajin merkit ----------
   // navigointilajikoodi (Väylävirasto): 1 vasen, 2 oikea, 3 pohjois, 4 etelä, 5 länsi, 6 itä,
   // 7 karimerkki, 8 turvavesimerkki, 9 erikoismerkki
-  function topmark(nl) {
+  // ECDIS-värit (S-52 / IALA A, Suomi): vasen punainen, oikea vihreä, kardinaalit keltamustia,
+  // karimerkki mustapunamusta, turvavesi punavalkoinen, erikoismerkki keltainen. Paperikartan
+  // merkkienselityksen mukaiset mustat merkit ovat oletus.
+  var EC = { r: '#e2211c', g: '#13a04a', y: '#f2c311', b: '#111', w: '#fff' };
+  // varren värijaksot ylhäältä alas
+  var BANDS = { 1: ['r'], 2: ['g'], 3: ['b', 'y'], 4: ['y', 'b'], 5: ['y', 'b', 'y'], 6: ['b', 'y', 'b'], 7: ['b', 'r', 'b'], 8: ['rw'], 9: ['y'], 0: ['b'] };
+  function body(nl, top) {
+    var bands = BANDS[nl] || ['b'], y0 = top, y1 = 24.1, hgt = (y1 - y0) / bands.length, s = '';
+    bands.forEach(function (c, i) {
+      var y = y0 + i * hgt;
+      if (c === 'rw') s += '<rect x="8.5" y="' + y + '" width="1.5" height="' + hgt + '" fill="' + EC.r + '"/><rect x="10" y="' + y + '" width="1.5" height="' + hgt + '" fill="#fff"/>';
+      else s += '<rect x="8.5" y="' + y + '" width="3" height="' + hgt + '" fill="' + EC[c] + '"/>';
+    });
+    return s + '<rect x="8.5" y="' + y0 + '" width="3" height="' + (y1 - y0) + '" fill="none" stroke="' + INK + '" stroke-width=".6"/>';
+  }
+  function topmark(nl, ec) {
     var f = ' fill="' + INK + '"';
+    if (ec) {
+      if (nl === 1) return '<rect x="8.3" y="3.6" width="3.4" height="6.4" fill="' + EC.r + '" stroke="' + INK + '" stroke-width=".7"/>';
+      if (nl === 2) return '<path d="M10 2.8L13.2 10H6.8Z" fill="' + EC.g + '" stroke="' + INK + '" stroke-width=".7"/>';
+      if (nl === 8) return '<circle cx="10" cy="6.6" r="2.7" fill="' + EC.r + '" stroke="' + INK + '" stroke-width=".7"/>';
+      if (nl === 9) return '<path d="M7.4 3.4L12.6 8.6M12.6 3.4L7.4 8.6" stroke="' + INK + '" stroke-width="2.6"/><path d="M7.4 3.4L12.6 8.6M12.6 3.4L7.4 8.6" stroke="' + EC.y + '" stroke-width="1.5"/>';
+    }
     switch (nl) {
       case 1: return '<rect x="8.3" y="3.6" width="3.4" height="6.4" fill="#fff" stroke="' + INK + '" stroke-width="1.2"/>';
       case 2: return '<path d="M10 2.8L13.2 10H6.8Z"' + f + '/>';
@@ -2451,9 +2490,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     return '<path d="M' + (cx - 4.6) + ' ' + cy + 'H' + (cx - 1.9) + 'M' + (cx + 1.9) + ' ' + cy + 'H' + (cx + 4.6) + '" stroke="' + INK + '" stroke-width="1.1"/>' +
       '<circle class="pos" cx="' + cx + '" cy="' + cy + '" r="1.9" fill="#fff" stroke="' + INK + '" stroke-width="1.1"/>';
   }
-  function mark(nl) {
+  function mark(nl, ec) {
     var top = (nl === 2 || nl === 8) ? 10 : 10.2;
-    var b = '<path d="M10 ' + top + 'V24.1" stroke="' + INK + '" stroke-width="1.3"/>' + topmark(nl) + base(10, 26);
+    var b = (ec ? body(nl || 0, top) : '<path d="M10 ' + top + 'V24.1" stroke="' + INK + '" stroke-width="1.3"/>') + topmark(nl, ec) + base(10, 26);
     // näytöllä 18 x 27 px; asemapiste on asemaympyrän keskellä
     return { html: svg(20, 30, 18, 27, b), w: 18, h: 27, ax: 9, ay: 23.4 };
   }
@@ -2524,6 +2563,208 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     lightStructure: lightStructure, lighthouse: lighthouse, racon: racon, generic: generic,
     flare: flare, lightColour: lightColour, lightLegend: lightLegend, icon: icon
   };
+})(window);
+
+</script>
+<script>
+/* Reittikartta – vesiliikennemerkit karttamerkkeinä.
+ *
+ * Merkit piirretään vesiliikennelain (782/2019) 4 luvun mukaisina merkkikilpinä pienennettyinä:
+ *   - kielto-, määräys-, rajoitus- ja varoitusmerkki: neliö, punaiset reunat, valkoinen keskusta
+ *     ja musta kuvio tai merkintä (59–62 §); kieltomerkissä lisäksi punainen diagonaaliviiva (59 §)
+ *   - tiedotusmerkki: neliö, sinisellä pohjalla valkoinen kuvio (63 §)
+ *   - kaapeli- ja johtotaulu: krominkeltainen suorakaide, mustat isot kirjaimet (98 §)
+ *   - suuntamerkki: punainen ympyrä valkoisella reunuksella, ylemmässä lisäksi kärjellään oleva
+ *     punareunainen neliö (99 §)
+ *
+ * Väyläviraston rekisterissä merkin laji on vain koodina (vlmlajityyppi). Koodien merkitykset on
+ * päätelty rekisterin aineistosta: koodit noudattavat lain merkkien järjestystä (kieltomerkit 1–10
+ * kuten 66–75 §, tiedotusmerkit 22–30 kuten 88–95 §), ja merkkien sijainnit ja lisäkilpien tekstit
+ * vahvistavat tulkinnan (esim. koodi 17 siltapilareissa 12,2 m = kulkuleveys, koodi 10
+ * "300 m rannasta" = vesiskootterikielto). Tuntematon koodi näytetään yleisenä merkkinä. */
+(function (global) {
+  'use strict';
+
+  var RED = '#d7191c', BLUE = '#1f5fbf', INK = '#111', YEL = '#f4c400';
+
+  // kuviot 20 × 20 -ruudukossa (merkin sisäala noin 4…16); c = kuvion väri
+  var P = {
+    anchor: function (c) {
+      return '<circle cx="10" cy="4.6" r="1.4" fill="none" stroke="' + c + '" stroke-width="1.2"/>' +
+        '<path d="M10 6V15.6M7.4 7.8H12.6M5.4 11.6Q10 18.2 14.6 11.6" fill="none" stroke="' + c + '" stroke-width="1.5" stroke-linecap="round"/>';
+    },
+    letterP: function (c) { return '<text x="10" y="14.6" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="12" fill="' + c + '">P</text>'; },
+    bollard: function (c) {
+      return '<path d="M7.6 8.4H12.4V15.4H7.6Z M6.6 7H13.4V8.6H6.6Z" fill="' + c + '"/>' +
+        '<path d="M4 7.6Q6.4 9.8 7.6 11.4" fill="none" stroke="' + c + '" stroke-width="1.3"/>';
+    },
+    arrowsSame: function (c) {
+      return '<path d="M7 15.5V6.2M13 15.5V6.2" stroke="' + c + '" stroke-width="1.6"/>' +
+        '<path d="M7 4L4.9 7.4H9.1ZM13 4L10.9 7.4H15.1Z" fill="' + c + '"/>';
+    },
+    arrowsOpp: function (c) {
+      return '<path d="M7 15.5V6.2M13 4.5V13.8" stroke="' + c + '" stroke-width="1.6"/>' +
+        '<path d="M7 4L4.9 7.4H9.1ZM13 16L10.9 12.6H15.1Z" fill="' + c + '"/>';
+    },
+    waves: function (c) {
+      return '<path d="M4 8.4Q5.5 6.6 7 8.4T10 8.4T13 8.4T16 8.4M4 12.6Q5.5 10.8 7 12.6T10 12.6T13 12.6T16 12.6" fill="none" stroke="' + c + '" stroke-width="1.4"/>';
+    },
+    skier: function (c) {
+      return '<circle cx="12.4" cy="5" r="1.4" fill="' + c + '"/>' +
+        '<path d="M12.2 6.6L10.6 11.2L12.6 13.6M11.4 8.4L5 7.4M7.4 14.6H16" fill="none" stroke="' + c + '" stroke-width="1.4" stroke-linecap="round"/>';
+    },
+    windsurf: function (c) {
+      return '<path d="M10.2 4L15 13.4H10.2Z" fill="' + c + '"/><path d="M4.6 15H15.6M10.2 4V15" stroke="' + c + '" stroke-width="1.3"/>';
+    },
+    propeller: function (c) {
+      return '<circle cx="10" cy="10" r="1.5" fill="' + c + '"/>' +
+        '<path d="M10 10C7.6 7.4 8.4 4 10.6 4.4C12.4 4.8 11.6 7.6 10 10ZM10 10C12.4 12.6 11.6 16 9.4 15.6C7.6 15.2 8.4 12.4 10 10Z" fill="' + c + '"/>';
+    },
+    jetski: function (c) {
+      return '<circle cx="9.6" cy="5.4" r="1.4" fill="' + c + '"/>' +
+        '<path d="M9.4 7L8.6 10.6L11 11.6M9.2 8.4L13 9.6" fill="none" stroke="' + c + '" stroke-width="1.3" stroke-linecap="round"/>' +
+        '<path d="M4.4 12.4H14.6L16 11.2L15 14.4H5.6Z" fill="' + c + '"/>';
+    },
+    hline: function (c) { return '<path d="M4.2 10H15.8" stroke="' + c + '" stroke-width="2.4"/>'; },
+    vline: function (c) { return '<path d="M10 4.2V15.8" stroke="' + c + '" stroke-width="2.4"/>'; },
+    circle: function (c) { return '<circle cx="10" cy="10" r="3.6" fill="' + c + '"/>'; },
+    current: function (c) {
+      return '<path d="M4 11.4Q6 7.4 8.4 10.6T12.8 9.8" fill="none" stroke="' + c + '" stroke-width="1.5"/>' +
+        '<path d="M16.2 8.6L12 7.6L13.4 11.8Z" fill="' + c + '"/>';
+    },
+    lightning: function (c) { return '<path d="M11.6 3.6L6.4 11H9.8L8.2 16.4L13.8 8.6H10.4Z" fill="' + c + '"/>'; },
+    phone: function (c) {
+      return '<path d="M6 5.2C5 6.2 5.2 9.4 7.8 12.2C10.6 15 13.8 15.2 14.8 14.2L15.4 13.4L12.8 11.2L11.6 12.2C10.4 11.6 8.4 9.6 7.8 8.4L8.8 7.2L6.6 4.6Z" fill="' + c + '"/>';
+    },
+    ferry: function (c, cable) {
+      return (cable ? '<path d="M3.6 8.2H16.4" stroke="' + c + '" stroke-width="1"/>' : '') +
+        '<path d="M4.2 11.4H15.8L14.2 14.6H5.8Z M7.4 9.2H12.6V11.4H7.4Z" fill="' + c + '"/>';
+    },
+    vhf: function (c) { return '<text x="10" y="12.6" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="6.6" fill="' + c + '">VHF</text>'; },
+    tap: function (c) {
+      return '<path d="M5 7H11.4V9.4H8.4V10.6H6.8V9.4H5Z M11.4 7.6H13.6V9H11.4Z" fill="' + c + '"/>' +
+        '<path d="M7.6 12.4Q6.6 14 7.6 15Q8.6 14 7.6 12.4Z" fill="' + c + '"/>';
+    }
+  };
+
+  function txt(v, y, size, c) {
+    return '<text x="10" y="' + y + '" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="' + size + '" fill="' + c + '">' + v + '</text>';
+  }
+  function fmt(v) { var n = Number(v); return isFinite(n) ? String(Math.round(n * 10) / 10).replace('.', ',') : ''; }
+  function numSize(s) { return s.length >= 4 ? 5.6 : s.length === 3 ? 6.8 : 8.4; }
+
+  // rajoitusmerkkien kuviot arvon kanssa (80–83 §, väylän reuna 86 §)
+  var V = {
+    speed: function (v) { var s = fmt(v); return s ? txt(s, 13.2, numSize(s) + 0.6, INK) : ''; },
+    headroom: function (v) { var s = fmt(v); return '<path d="M7.2 3.8H12.8L10 6.8Z" fill="' + INK + '"/>' + (s ? txt(s, 14.4, numSize(s), INK) : ''); },
+    depth: function (v) { var s = fmt(v); return '<path d="M7.2 16.2H12.8L10 13.2Z" fill="' + INK + '"/>' + (s ? txt(s, 11.4, numSize(s), INK) : ''); },
+    width: function (v) {
+      var s = fmt(v);
+      return '<path d="M3.6 7.2V12.8L6.4 10ZM16.4 7.2V12.8L13.6 10Z" fill="' + INK + '"/>' + (s ? txt(s, 12.3, Math.min(6.4, numSize(s)), INK) : '');
+    },
+    edge: function (v) {
+      var s = fmt(v);
+      return '<path d="M3.6 15.4L10 4.2L16.4 15.4Z" fill="none" stroke="' + INK + '" stroke-width="1.3"/>' + (s ? txt(s, 14, Math.min(5.8, numSize(s)), INK) : '');
+    }
+  };
+
+  // lajikoodi → { nimi, luokka, kuvio, yksikkö }
+  var K = {
+    1: ['Ankkurin käyttökielto', 'kielto', 'anchor'],
+    2: ['Pysäköimiskielto', 'kielto', 'letterP'],
+    3: ['Kiinnittymiskielto', 'kielto', 'bollard'],
+    4: ['Ohittamiskielto', 'kielto', 'arrowsSame'],
+    5: ['Kohtaamiskielto', 'kielto', 'arrowsOpp'],
+    6: ['Aallokon aiheuttamisen kielto', 'kielto', 'waves'],
+    7: ['Vesihiihtokielto', 'kielto', 'skier'],
+    8: ['Purjelautailukielto', 'kielto', 'windsurf'],
+    9: ['Kulkeminen moottorivoimaa käyttäen kielletty', 'kielto', 'propeller'],
+    10: ['Vesiskootterilla ajo kielletty', 'kielto', 'jetski'],
+    11: ['Nopeusrajoitus', 'rajoitus', 'speed', 'km/h'],
+    12: ['Pysähtymismerkki', 'maarays', 'hline'],
+    13: ['Yleinen varoitusmerkki', 'varoitus', 'vline'],
+    14: ['Annettava äänimerkki', 'maarays', 'circle'],
+    15: ['Rajoitettu alikulkukorkeus', 'rajoitus', 'headroom', 'm'],
+    16: ['Rajoitettu kulkusyvyys', 'rajoitus', 'depth', 'm'],
+    17: ['Rajoitettu kulkuleveys', 'rajoitus', 'width', 'm'],
+    18: ['Voimakas virtaus', 'varoitus', 'current'],
+    19: ['Väylän reuna', 'varoitus', 'edge', 'm'],
+    22: ['Pysäköiminen sallittu', 'tiedotus', 'letterP'],
+    23: ['Kiinnittyminen sallittu', 'tiedotus', 'bollard'],
+    24: ['Ilmajohto', 'tiedotus', 'lightning'],
+    25: ['Puhelin', 'tiedotus', 'phone'],
+    26: ['Lauttaväylän risteäminen', 'tiedotus', 'ferry'],
+    27: ['Lauttaväylän risteäminen', 'tiedotus', 'ferry'],
+    28: ['Mahdollisuus radiopuhelinyhteyteen', 'tiedotus', 'vhf'],
+    29: ['Juomavesipiste', 'tiedotus', 'tap'],
+    30: ['Kiellon, määräyksen tai rajoituksen päättyminen', 'paattyminen'],
+    31: ['Kaapelitaulu', 'taulu'],
+    32: ['Johtotaulu', 'taulu'],
+    33: ['Kaapelin tai johdon suuntamerkki, alempi', 'suunta'],
+    34: ['Kaapelin tai johdon suuntamerkki, ylempi', 'suunta2'],
+    35: ['Kaapeli- tai johtotaulu', 'taulu']
+  };
+  // pinon järjestys tolpassa: kielto, määräys, rajoitus, varoitus ylimpänä ja tiedotus alla
+  // (90 §: rajoitettu alikulkukorkeus ylimpänä ilmajohtomerkin päällä)
+  var ORDER = { kielto: 1, maarays: 2, rajoitus: 3, varoitus: 4, tiedotus: 5, paattyminen: 6, muu: 7, taulu: 8, suunta2: 9, suunta: 9 };
+
+  function svg(w, h, vw, vh, body) {
+    return '<svg viewBox="0 0 ' + vw + ' ' + vh + '" width="' + w + '" height="' + h + '" aria-hidden="true">' + body + '</svg>';
+  }
+  function plate(cat, body) {
+    if (cat === 'tiedotus') return '<rect x=".8" y=".8" width="18.4" height="18.4" rx="1" fill="' + BLUE + '" stroke="#fff" stroke-width="1.2"/>' + body;
+    var s = '<rect x="1.2" y="1.2" width="17.6" height="17.6" rx=".8" fill="#fff" stroke="' + RED + '" stroke-width="2.4"/>' + body;
+    if (cat === 'kielto') s += '<path d="M3.2 3.2L16.8 16.8" stroke="' + RED + '" stroke-width="2"/>';
+    return s;
+  }
+  // taulun teksti: lisäkilven sana, jos se on lyhyt (esim. VESIJOHTO, MAAKAASU), muuten lajin mukaan
+  function boardText(code, p) {
+    var t = String(p.lisakilventeksti1 || '').trim();
+    if (/^[A-Za-zÅÄÖåäö-]{3,16}$/.test(t)) return t.toUpperCase();
+    return code === 31 ? 'KAAPELI' : 'JOHTO';
+  }
+
+  // p = rekisterin ominaisuudet; size = kilven koko näytöllä (px)
+  function info(p, size) {
+    size = size || 18;
+    var code = Number(p.vlmlajityyppi), k = K[code];
+    var name = k ? k[0] : 'Vesiliikennemerkki', cat = k ? k[1] : 'muu';
+    var unit = k && k[3] ? k[3] : '', val = p.rajoitusarvo;
+    var html, w = size, h = size;
+    if (cat === 'taulu') {
+      var t = boardText(code, p), tw = Math.max(26, t.length * 4.3 + 6);
+      w = Math.round(size * tw / 20); h = Math.round(size * 0.6);
+      html = svg(w, h, tw, 12, '<rect x=".6" y=".6" width="' + (tw - 1.2) + '" height="10.8" fill="' + YEL + '" stroke="' + INK + '" stroke-width="1"/>' +
+        '<text x="' + (tw / 2) + '" y="8.6" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="7" fill="' + INK + '">' + t + '</text>');
+    } else if (cat === 'suunta' || cat === 'suunta2') {
+      var ring = '<circle cx="10" cy="7" r="5.6" fill="' + RED + '" stroke="#fff" stroke-width="1.4"/><circle cx="10" cy="7" r="6.4" fill="none" stroke="' + INK + '" stroke-width=".5"/>';
+      w = Math.round(size * 0.8);
+      if (cat === 'suunta2') { h = Math.round(w * 1.3); html = svg(w, h, 20, 26, ring + '<path d="M10 13.4L15.4 18.8L10 24.2L4.6 18.8Z" fill="#fff" stroke="' + RED + '" stroke-width="1.6"/>'); }
+      else { h = Math.round(w * 0.7); html = svg(w, h, 20, 14, ring); }
+    } else if (cat === 'paattyminen') {
+      html = svg(w, h, 20, 20, '<rect x="1.2" y="1.2" width="17.6" height="17.6" rx=".8" fill="#fff" stroke="#444" stroke-width="1.4"/><path d="M4 16L16 4" stroke="' + INK + '" stroke-width="2.6"/>');
+    } else if (cat === 'muu') {
+      html = svg(w, Math.round(size * 0.7), 20, 14, '<rect x=".8" y=".8" width="18.4" height="12.4" rx="1" fill="#fff" stroke="#444" stroke-width="1.2"/>' + txt('…', 9.6, 9, INK));
+      h = Math.round(size * 0.7);
+    } else {
+      var col = cat === 'tiedotus' ? '#fff' : INK;
+      var body = V[k[2]] ? V[k[2]](val) : P[k[2]](col, code === 26 || /vaijer/i.test(String(p.lisakilventeksti1 || '') + String(p.lisakilventeksti2 || '')));
+      html = svg(w, h, 20, 20, plate(cat, body));
+    }
+    var valTxt = val != null && val !== '' && unit ? fmt(val) + ' ' + unit : '';
+    return { code: code, name: name, cat: cat, order: ORDER[cat] || 7, html: html, w: w, h: h, value: valTxt };
+  }
+
+  // selitykseen: kukin luokka yhdellä esimerkillä
+  function legend() {
+    var ex = [[{ vlmlajityyppi: 1 }, 'Kieltomerkki (ankkurin käyttökielto)'], [{ vlmlajityyppi: 14 }, 'Määräysmerkki (annettava äänimerkki)'],
+      [{ vlmlajityyppi: 11, rajoitusarvo: 10 }, 'Rajoitusmerkki (nopeusrajoitus km/h)'], [{ vlmlajityyppi: 15, rajoitusarvo: 4.5 }, 'Rajoitettu alikulkukorkeus (m)'],
+      [{ vlmlajityyppi: 13 }, 'Varoitusmerkki (yleinen)'], [{ vlmlajityyppi: 24 }, 'Tiedotusmerkki (ilmajohto)'],
+      [{ vlmlajityyppi: 31 }, 'Kaapelitaulu'], [{ vlmlajityyppi: 30 }, 'Kiellon päättyminen']];
+    return ex.map(function (e) { var s = info(e[0], 18); return { html: s.html, label: e[1] }; });
+  }
+
+  global.ChartSigns = { info: info, legend: legend, names: K };
 })(window);
 
 </script>
@@ -3006,7 +3247,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     if (z >= LAYERS.aids.minZoom && (show.aids || vecOn() || show.snap !== false)) { w.push('aids'); w.push('aids2'); }
     if (z >= LAYERS.lights.minZoom && lightsOn()) { w.push('lights'); w.push('sectors'); }
     if (z >= LAYERS.speed.minZoom && speedOn()) w.push('speed');
-    if (z >= LAYERS.signs.minZoom && show.signs) w.push('signs');
+    if (z >= LAYERS.signs.minZoom && signsOn()) w.push('signs');
     return w;
   }
 
@@ -3112,7 +3353,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   }
 
   // ---------------- väylien suunnat ja kulkusyvyydet ----------------
-  var labelLayer, lineLayer, aidLayer, signLayer;
+  var labelLayer, lineLayer, aidLayer, signLayer, structLayer;
 
   function firstJnro(jnro) { return String(jnro == null ? '' : jnro).split(/\s+/)[0]; }
   function fairway(jnro) {
@@ -3700,14 +3941,15 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   // loistokerrokseen (renderLights), jotta ne ovat samat kaikille valaistuille laitteille.
   function aidSymbol(p) {
     var CS = global.ChartSymbols, t = (p.turvalaitetyyppifi || '').toLowerCase(), n = Number(p.navigointilajikoodi);
-    if (n >= 1 && n <= 9) return CS.mark(n);
+    var ec = !!show.ecdisMarks;
+    if (n >= 1 && n <= 9) return CS.mark(n, ec);
     if (t.indexOf('kummeli') >= 0) return CS.cairn();
     if (t.indexOf('tunnusmajakka') >= 0) return CS.beaconTower();
     if (t.indexOf('linjamerkki') >= 0 || t.indexOf('linjataulu') >= 0) return CS.leadingMark();
     if (t.indexOf('tutkamajakka') >= 0) return CS.racon();
     if (t.indexOf('merimajakka') >= 0) return CS.lighthouse();
     if (t.indexOf('loisto') >= 0 || t.indexOf('majakka') >= 0) return CS.lightStructure();
-    if (t.indexOf('viitta') >= 0 || t.indexOf('poiju') >= 0) return CS.mark(0);
+    if (t.indexOf('viitta') >= 0 || t.indexOf('poiju') >= 0) return CS.mark(0, ec);
     return CS.generic();
   }
   function aidIcon(p) {
@@ -3742,34 +3984,182 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     });
   }
 
-  function signIcon(p) {
-    var t = p.vlmlajityyppi, v = p.rajoitusarvo;
-    var html;
-    if (t === 11 && v != null) html = '<div class="sg sg-speed">' + G.fmtNum(Number(v), Number(v) % 1 ? 1 : 0) + '</div>';
-    else if (t === 15 && v != null) html = '<div class="sg sg-head">↕ ' + G.fmtNum(Number(v), 1) + ' m</div>';
-    else html = '<div class="sg sg-gen">!</div>';
-    return L.divIcon({ className: 'sg-ico', html: html, iconSize: [0, 0] });
+  // Vesiliikennemerkit vesiliikennelain mukaisina kilpinä (signs.js). Samassa paikassa olevat merkit
+  // pinotaan tolpaksi lain järjestyksessä, ja ponnahdusikkuna luettelee ne lisäkilpineen.
+  // Merkit näytetään tasolta 13 ja kaapeli- ja johtotaulut ja suuntamerkit tasolta 14, koska niitä on
+  // rannoilla paljon (Helsingin keskustan näkymässä tasolla 12 olisi noin 600 merkkitolppaa).
+  function signsOn() { return show.signs === true || (show.signs == null && vecOn()); }
+  function signPopupRow(p, s) {
+    var extra = [p.lisakilventeksti1, p.lisakilventeksti2].filter(function (t) { return t && String(t).trim(); });
+    return '<div class="sg-row"><span class="sg-mini">' + s.html + '</span><div><b>' + escapeHtml(s.name) + (s.value ? ' ' + escapeHtml(s.value) : '') + '</b>' +
+      (extra.length ? '<div>Lisäkilpi: ' + escapeHtml(extra.join(' · ')) + '</div>' : '') + '</div></div>';
   }
-
   function renderSigns() {
     signLayer.clearLayers();
-    if (!show.signs || map.getZoom() < LAYERS.signs.minZoom) return;
-    var view = map.getBounds().pad(0.1);
+    var z = map.getZoom();
+    if (!signsOn() || z < 13) return;
+    var CSg = global.ChartSigns;
+    if (!CSg) return;
+    var view = map.getBounds().pad(0.1), size = z >= 14 ? 20 : 16;
+    var groups = {};
     Object.keys(store.signs).forEach(function (id) {
       var f = store.signs[id];
+      var c = f.geometry && (f.geometry.type === 'MultiPoint' ? f.geometry.coordinates[0] : f.geometry.coordinates);
+      if (!c) return;
+      var ll = L.latLng(c[1], c[0]);
+      if (!view.contains(ll)) return;
+      var p = f.properties || {}, s = CSg.info(p, size);
+      if ((s.cat === 'taulu' || s.cat === 'suunta' || s.cat === 'suunta2') && z < 14) return;
+      var key = c[1].toFixed(5) + ',' + c[0].toFixed(5);
+      (groups[key] = groups[key] || { ll: ll, items: [] }).items.push({ p: p, s: s });
+    });
+    Object.keys(groups).forEach(function (key) {
+      var g = groups[key];
+      g.items.sort(function (a, b) { return a.s.order - b.s.order || a.s.code - b.s.code; });
+      var html = '<div class="sg-post">' + g.items.map(function (it) { return it.s.html; }).join('') + '</div>';
+      var p0 = g.items[0].p;
+      var vn = String(p0.vaylan_nimi || '').replace(/^\[\d+:\s*/, '').replace(/\]\(.*$/, '');
+      var pop = '<div class="pop">' + g.items.map(function (it) { return signPopupRow(it.p, it.s); }).join('') +
+        (p0.sijaintifi ? '<div class="muted">' + escapeHtml(p0.sijaintifi) + '</div>' : '') +
+        (vn ? '<div class="muted">' + escapeHtml(vn) + '</div>' : '') +
+        (p0.nimifi ? '<div class="muted">Merkki ' + escapeHtml(p0.nimifi) + '</div>' : '') +
+        '<div class="pop-src">Väylävirasto, vesiliikennemerkit</div></div>';
+      L.marker(g.ll, { icon: L.divIcon({ className: 'sg-ico', html: html, iconSize: [0, 0] }), pane: 'aidPane', keyboard: false })
+        .bindPopup(pop).addTo(signLayer);
+    });
+  }
+
+  // ---------------- sillat ja sulut ----------------
+  // Sillat, joille taitorakennerekisterissä on alittavan vesiväylän alikulkukorkeus, sekä sulut ja
+  // avattavat sillat Väyläviraston sulkukanava-aineistosta. Molemmat aineistot ovat pieniä (noin 280 ja
+  // 60 kohdetta), joten ne haetaan kerran. Silta piirretään INT 1:n tapaan kahtena kannen reunaviivana,
+  // joiden päät taittuvat ulospäin; kansi suunnataan poikki lähimmän navigointilinjan, koska rekisteri
+  // antaa vain sillan keskipisteen. Avattavan sillan kannessa on aukko, ja sulun merkki on kanavan
+  // seinämät ja portit. Alikulkukorkeus näytetään sillan vieressä.
+  var structs = { bridges: null, locks: null, loading: false };
+  function structuresOn() { return show.bridges === true || (show.bridges == null && vecOn()); }
+  function loadStructures() {
+    if (!structuresOn() || map.getZoom() < 11 || structs.bridges || structs.loading) return;
+    structs.loading = true; pending++; setStatus();
+    function get(u) { return fetch(u).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) { return j.features || []; }); }
+    Promise.all([
+      get(VAYLA_WFS + '&TYPENAME=taitorakenteet:silta&CQL_FILTER=' + encodeURIComponent("alittav_vayla_korkraj_vesiv <> ''") +
+        '&PROPERTYNAME=nimi,alittav_vayla_korkraj_vesiv,kayttotarkoitukset_nimi,nykyinen_omistaja,tunnus,sijaintikunnat,geom'),
+      get(VAYLA_WFS + '&TYPENAME=vesivaylatiedot:sulkukanavat_uusi')
+    ]).then(function (res) {
+      structs.bridges = res[0]; structs.locks = res[1];
+      structs.loading = false; pending--; setStatus(); renderStructures();
+    }, function () {
+      structs.loading = false; pending--; failed++; setStatus();
+      setTimeout(function () { failed = Math.max(0, failed - 1); setStatus(); }, 8000);
+    });
+  }
+  // lähimmän navigointilinjan suunta näytöllä (astetta, x-akselista) enintään maxPx:n päästä, tai null
+  function fairwayAngle(ll, maxPx) {
+    var P = map.latLngToContainerPoint(ll), best = null, bd = maxPx;
+    Object.keys(store.navlines).forEach(function (id) {
+      lineCoords(store.navlines[id]).forEach(function (c) {
+        for (var i = 0; i < c.length - 1; i++) {
+          var A = map.latLngToContainerPoint([c[i][1], c[i][0]]), B = map.latLngToContainerPoint([c[i + 1][1], c[i + 1][0]]);
+          var vx = B.x - A.x, vy = B.y - A.y, len2 = vx * vx + vy * vy;
+          if (!len2) continue;
+          var t = Math.max(0, Math.min(1, ((P.x - A.x) * vx + (P.y - A.y) * vy) / len2));
+          var d = Math.hypot(P.x - (A.x + vx * t), P.y - (A.y + vy * t));
+          if (d < bd) { bd = d; best = Math.atan2(vy, vx) * 180 / Math.PI; }
+        }
+      });
+    });
+    return best;
+  }
+  function bridgeSvg(opening, len) {
+    var e = len - 3, m = len / 2;
+    var deck = opening
+      ? 'M5 5H' + (m - 3) + 'M' + (m + 3) + ' 5H' + (e - 2) + 'M5 11H' + (m - 3) + 'M' + (m + 3) + ' 11H' + (e - 2) +
+        'M' + (m - 3) + ' 3.6V12.4M' + (m + 3) + ' 3.6V12.4'
+      : 'M5 5H' + (e - 2) + 'M5 11H' + (e - 2);
+    var ends = 'M5 5L2 2M' + (e - 2) + ' 5L' + (e + 1) + ' 2M5 11L2 14M' + (e - 2) + ' 11L' + (e + 1) + ' 14';
+    return '<svg viewBox="0 0 ' + len + ' 16" width="' + len + '" height="16" aria-hidden="true">' +
+      '<path d="' + deck + ends + '" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>' +
+      '<path d="' + deck + ends + '" fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+  function lockSvg() {
+    var d = 'M2 3H28M2 11H28M9 3L12.4 7L9 11M21 3L17.6 7L21 11';
+    return '<svg viewBox="0 0 30 14" width="30" height="14" aria-hidden="true">' +
+      '<path d="' + d + '" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="' + d + '" fill="none" stroke="#111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  function num(v) { var n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : null; }
+  function fm(v, u) { var n = num(v); return n == null ? null : G.fmtNum(n, n % 1 ? 1 : 0) + (u ? ' ' + u : ''); }
+  function popTable(rows) {
+    return '<table>' + rows.filter(function (r) { return r[1] != null && r[1] !== ''; })
+      .map(function (r) { return '<tr><th>' + r[0] + '</th><td>' + escapeHtml(String(r[1])) + '</td></tr>'; }).join('') + '</table>';
+  }
+  function bridgePopup(p) {
+    return '<div class="pop"><b>' + escapeHtml(p.nimi || 'Silta') + '</b>' + popTable([
+      ['Alikulkukorkeus', fm(p.alittav_vayla_korkraj_vesiv, 'm')], ['Käyttötarkoitus', p.kayttotarkoitukset_nimi ? String(p.kayttotarkoitukset_nimi).split(/\\n|\n/)[0] : null],
+      ['Kunta', p.sijaintikunnat], ['Omistaja', p.nykyinen_omistaja], ['Tunnus', p.tunnus]
+    ]) + '<div class="muted">Alikulkukorkeus taitorakennerekisterin mukaan. Tarkista sillan merkintä ja vedenkorkeus.</div>' +
+      '<div class="pop-src">Väylävirasto, taitorakennerekisteri</div></div>';
+  }
+  function lockPopup(p) {
+    var ves = [fm(p.aluspituus, 'm') && 'pituus ' + fm(p.aluspituus, 'm'), fm(p.alusleveys, 'm') && 'leveys ' + fm(p.alusleveys, 'm'),
+      fm(p.alussyvyys, 'm') && 'syväys ' + fm(p.alussyvyys, 'm'), fm(p.aluskorkeus, 'm') && 'korkeus ' + fm(p.aluskorkeus, 'm')].filter(Boolean).join(', ');
+    var lock = [fm(p.sulkuleveys, 'm') && 'leveys ' + fm(p.sulkuleveys, 'm'), fm(p.sulkuleveyspituus, 'm') && 'pituus ' + fm(p.sulkuleveyspituus, 'm')].filter(Boolean).join(', ');
+    var fall = [num(p.putouskorkeus1), num(p.putouskorkeus2)].filter(function (v) { return v != null; });
+    return '<div class="pop"><b>' + escapeHtml(p.nimi || 'Kanava') + '</b><div>' + escapeHtml(p.kanavaaluetyyppi || '') + (p.vesisto ? ', ' + escapeHtml(p.vesisto) : '') + '</div>' + popTable([
+      ['Väli', p.mista && p.mihin ? p.mista + ' – ' + p.mihin : null], ['Suurin alus', ves || null],
+      ['Sulku', lock || null], ['Putouskorkeus', fall.length ? fall.map(function (v) { return G.fmtNum(v, v % 1 ? 2 : 0); }).join(' / ') + ' m' : null],
+      ['Käyttö', p.kayttoselite], ['Portit', p.porttiselite], ['Kiinnittyminen', p.kiinnittyminenselite ? String(p.kiinnittyminenselite).trim() : null],
+      ['Numero', p.numero], ['Omistaja', p.omistaja]
+    ]) + (/silta/i.test(p.kanavaaluetyyppi || '') ? '<div class="muted">Suurin aluksen korkeus sillan ollessa avattuna. Suljetun sillan alikulkukorkeus on sillan merkinnässä.</div>' : '') +
+      '<div class="pop-src">Väylävirasto, sulkukanavat</div></div>';
+  }
+  function centroid(g) {
+    var ring = g && (g.type === 'Polygon' ? g.coordinates[0] : g.type === 'MultiPolygon' ? g.coordinates[0][0] : null);
+    if (!ring || !ring.length) return g && g.type === 'Point' ? L.latLng(g.coordinates[1], g.coordinates[0]) : null;
+    var sx = 0, sy = 0; ring.forEach(function (p) { sx += p[0]; sy += p[1]; });
+    return L.latLng(sy / ring.length, sx / ring.length);
+  }
+  function structMarker(ll, html, rot, cls) {
+    return L.marker(ll, {
+      icon: L.divIcon({ className: 'st-ico ' + (cls || ''), html: '<div class="st-sym" style="transform:translate(-50%,-50%) rotate(' + Math.round(rot) + 'deg)">' + html + '</div>', iconSize: [0, 0] }),
+      pane: 'aidPane', keyboard: false
+    });
+  }
+  function structLabel(ll, ang, text, along) {
+    // merkintä vesialueelle sillan viereen (väylän suuntaan) tai sulun sivuun (poikki väylän)
+    var P = map.latLngToContainerPoint(ll), a = (ang == null ? -90 : ang + (along ? 0 : 90)) * Math.PI / 180, d = along ? 26 : 16;
+    var Q = map.containerPointToLatLng([P.x + Math.cos(a) * d, P.y + Math.sin(a) * d]);
+    L.marker(Q, { icon: L.divIcon({ className: 'st-lab-ico', html: '<span class="st-lab">' + text + '</span>', iconSize: [0, 0] }), interactive: false, keyboard: false, pane: 'labelPane' }).addTo(structLayer);
+  }
+  function renderStructures() {
+    if (!structLayer) return;
+    structLayer.clearLayers();
+    var z = map.getZoom();
+    if (!structuresOn() || z < 11 || !structs.bridges) return;
+    var view = map.getBounds().pad(0.1), len = z >= 13 ? 36 : 28;
+    structs.bridges.forEach(function (f) {
       var c = f.geometry && f.geometry.coordinates;
       if (!c) return;
       var ll = L.latLng(c[1], c[0]);
       if (!view.contains(ll)) return;
-      var p = f.properties;
-      var kind = p.vlmlajityyppi === 11 ? 'Nopeusrajoitus ' + p.rajoitusarvo + ' km/h' :
-        p.vlmlajityyppi === 15 ? 'Alikulkukorkeus ' + G.fmtNum(Number(p.rajoitusarvo), 1) + ' m' :
-          'Vesiliikennemerkki (laji ' + p.vlmlajityyppi + ')';
-      var txt = '<div class="pop"><b>' + escapeHtml(p.nimifi || 'Vesiliikennemerkki') + '</b><div>' + escapeHtml(kind) + '</div>' +
-        (p.lisakilventeksti1 ? '<div>' + escapeHtml(p.lisakilventeksti1) + '</div>' : '') +
-        (p.sijaintifi ? '<div class="muted">' + escapeHtml(p.sijaintifi) + '</div>' : '') +
-        '<div class="pop-src">Väylävirasto</div></div>';
-      L.marker(ll, { icon: signIcon(p), pane: 'aidPane', keyboard: false }).bindPopup(txt).addTo(signLayer);
+      var p = f.properties || {}, ang = fairwayAngle(ll, 60);
+      structMarker(ll, bridgeSvg(false, len), ang == null ? 0 : ang + 90).bindPopup(bridgePopup(p)).addTo(structLayer);
+      var h = fm(p.alittav_vayla_korkraj_vesiv, 'm');
+      if (h && z >= 12) structLabel(ll, ang, '↕ ' + escapeHtml(h), true);
+    });
+    structs.locks.forEach(function (f) {
+      var ll = centroid(f.geometry);
+      if (!ll || !view.contains(ll)) return;
+      var p = f.properties || {}, ang = fairwayAngle(ll, 60), isBridge = /silta/i.test(p.kanavaaluetyyppi || '');
+      if (z >= 15 && f.geometry && /Polygon/.test(f.geometry.type)) {
+        L.geoJSON(f.geometry, { style: { color: '#111', weight: 1.4, fillColor: '#fff', fillOpacity: 0.35, interactive: false } }).addTo(structLayer);
+      }
+      var m = isBridge ? structMarker(ll, bridgeSvg(true, len), ang == null ? 0 : ang + 90, 'st-open') : structMarker(ll, lockSvg(), ang == null ? 0 : ang, 'st-lock');
+      m.bindPopup(lockPopup(p)).addTo(structLayer);
+      // aineiston aluskorkeus on suurin sallittu aluksen korkeus (avattavalla sillalla avattuna), ei
+      // suljetun sillan alikulkukorkeus, joten sitä ei merkitä karttaan vaan vain ponnahdusikkunaan
+      if (z >= 13) structLabel(ll, ang, escapeHtml(p.nimi || '') + (isBridge ? ' (avattava)' : ''), isBridge);
     });
   }
 
@@ -4116,6 +4506,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     labelLayer = L.layerGroup().addTo(map);
     aidLayer = L.layerGroup().addTo(map);
     signLayer = L.layerGroup().addTo(map);
+    structLayer = L.layerGroup().addTo(map);
     snapLayer = L.layerGroup().addTo(map);
     aidSnapLayer = L.layerGroup().addTo(map);
     soundLayer = L.layerGroup().addTo(map);
@@ -4127,11 +4518,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     borderCanvas = L.DomUtil.create('canvas', 'chart-border', map.getContainer());
     new ScaleNM().addTo(map);
 
-    var renderAll = function () { renderFairways(); renderAids(); renderSigns(); renderSnapMarkers(); renderAidSnapMarkers(); renderSoundings(); renderLights(); renderSpeed(); renderMml(); renderPiers(); };
+    var renderAll = function () { renderFairways(); renderAids(); renderSigns(); renderStructures(); renderSnapMarkers(); renderAidSnapMarkers(); renderSoundings(); renderLights(); renderSpeed(); renderMml(); renderPiers(); };
     var t = null;
     map.on('moveend zoomend', function () {
       if (shownMode() !== lastShown) applyBase();
       loadVisible();
+      loadStructures();
       checkEncCoverage();
       loadSoundings();
       loadMml();
@@ -4158,14 +4550,14 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         if (k.signs) renderSigns();
         if (k.lights || k.sectors) renderLights();
         if (k.speed) renderSpeed();
-        if (k.navlines || k.vaylat || k.taulu) { vcache = null; renderFairways(); renderSnapMarkers(); }
+        if (k.navlines || k.vaylat || k.taulu) { vcache = null; renderFairways(); renderSnapMarkers(); renderStructures(); }
       }, 60);
     });
-    loadVisible(); renderAll(); setTimeout(drawBorder, 0);
+    loadVisible(); loadStructures(); renderAll(); setTimeout(drawBorder, 0);
 
     return {
       base: base,
-      refresh: function () { loadVisible(); loadPiers(); renderAll(); drawBorder(); },
+      refresh: function () { loadVisible(); loadStructures(); loadPiers(); renderAll(); drawBorder(); },
       drawBorder: drawBorder,
       fairwayName: fairwayName,
       fairwayClass: fairwayClass,
@@ -7571,7 +7963,11 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         item('Väylälinjat (ajantasainen aineisto)', toggleShow('lines')),
         item('Turvalaitteet (ajantasainen aineisto)', toggleShow('aids')),
         item('Turvalaitteiden nimet', toggleShow('aidNames')),
-        item('Vesiliikennemerkit', toggleShow('signs')),
+        { label: 'Vesiliikennemerkit', checked: st.show.signs === true || (st.show.signs == null && st.base === 'vector'), keepOpen: true, action: function () {
+          var cur = st.show.signs === true || (st.show.signs == null && st.base === 'vector'); st.show.signs = !cur; chart.refresh(); S.save(); } },
+        { label: 'Sillat ja sulut', checked: st.show.bridges === true || (st.show.bridges == null && st.base === 'vector'), keepOpen: true, action: function () {
+          var cur = st.show.bridges === true || (st.show.bridges == null && st.base === 'vector'); st.show.bridges = !cur; chart.refresh(); S.save(); } },
+        item('Viitat ECDIS-värein', toggleShow('ecdisMarks')),
         { label: 'Loistot ja valosektorit', checked: st.show.lights === true || (st.show.lights == null && st.base === 'vector'), keepOpen: true, action: function () {
           var cur = st.show.lights === true || (st.show.lights == null && st.base === 'vector'); st.show.lights = !cur; chart.refresh(); S.save(); } },
         { label: 'Nopeusrajoitusalueet', checked: st.show.speed === true || (st.show.speed == null && st.base === 'vector'), keepOpen: true, action: function () {
@@ -7867,6 +8263,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         cell(C.rock('above', true), 'Vedenpäällinen kivikko'), cell(C.rock('awash', true), 'Vedenrajassa oleva kivikko'), cell(C.rock('under', true), 'Vedenalainen kivikko')]) +
       grp('Viitat', [cell(C.mark(1), 'Vasen'), cell(C.mark(2), 'Oikea'), cell(C.mark(3), 'Pohjois'), cell(C.mark(4), 'Etelä'), cell(C.mark(6), 'Itä'), cell(C.mark(5), 'Länsi'),
         cell(C.mark(7), 'Karimerkki'), cell(C.mark(8), 'Turvavesi'), cell(C.mark(9), 'Erikoismerkki')]) +
+      grp('Viitat ECDIS-värein (valinta Näytä-valikossa)', [cell(C.mark(1, true), 'Vasen'), cell(C.mark(2, true), 'Oikea'), cell(C.mark(3, true), 'Pohjois'), cell(C.mark(4, true), 'Etelä'),
+        cell(C.mark(6, true), 'Itä'), cell(C.mark(5, true), 'Länsi'), cell(C.mark(7, true), 'Karimerkki'), cell(C.mark(8, true), 'Turvavesi'), cell(C.mark(9, true), 'Erikoismerkki')]) +
+      (global.ChartSigns ? grp('Vesiliikennemerkit', global.ChartSigns.legend().map(function (e) { return cell(e, e.label); })) : '') +
+      grp('Sillat ja sulut', [cell({ html: '<svg viewBox="0 0 36 16" width="36" height="16"><path d="M5 5H31M5 11H31M5 5L2 2M31 5L34 2M5 11L2 14M31 11L34 14" fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round"/></svg>' }, 'Silta (↕ alikulkukorkeus)'),
+        cell({ html: '<svg viewBox="0 0 36 16" width="36" height="16"><path d="M5 5H15M21 5H31M5 11H15M21 11H31M15 3.6V12.4M21 3.6V12.4M5 5L2 2M31 5L34 2M5 11L2 14M31 11L34 14" fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round"/></svg>' }, 'Avattava silta'),
+        cell({ html: '<svg viewBox="0 0 30 14" width="30" height="14"><path d="M2 3H28M2 11H28M9 3L12.4 7L9 11M21 3L17.6 7L21 11" fill="none" stroke="#111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' }, 'Sulku')]) +
       grp('Muut turvalaitteet ja valot', [cell(C.cairn(), 'Kummeli'), cell(C.beaconTower(), 'Tunnusmajakka'), cell(C.leadingMark(), 'Linjamerkki'), cell(C.lightStructure(), 'Loisto, apuloisto'),
         cell(C.lightLegend('v'), 'Valkoinen valo'), cell(C.lightLegend('p'), 'Punainen valo'), cell(C.lightLegend('vi'), 'Vihreä valo')]);
   }
@@ -7897,6 +8299,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '<h3>Reitin suunnat ja käännösmerkit</h3><p>Jokaiselle kuvassa näkyvälle legille piirretään automaattisesti suuntanuotti: kulkusuunta isolla, nuoli kulkusuuntaan sekä vastasuunta ja legin pituus. Nuotti siirtyy legin näkyvälle osalle, kun karttaa liikutetaan, ja pitkällä legillä nuotteja on useampia. Jokaisen käännöksen eteen piirretään seuran käytännön mukaiset merkit 2 ja 1 kaapelia ennen käännöspistettä. Molemmat voi kytkeä pois valikosta Näytä.</p>' +
         '<h3>Karttamerkit</h3><p>Kivet, turvalaitteet ja valot piirretään Suomen merikarttojen merkeillä Traficomin virallisen merkkienselityksen mukaan, samoin kuin rasterikartassa.</p>' + legend() +
         '<h3>Loistot, sektorit ja muut väylätiedot</h3><p>Jokaisella loistolla, apuloistolla ja valaistulla viitalla on valon värinen pisara (valkoinen valo keltaisena, kuten merikartassa). Sektoriloistoilla näytetään lisäksi valosektorit värikaarina ja sektorirajat pisteviivoina sekä loistorekisterin valotunnus (esim. VQ (3) 5 s). Kaaret ja sektorirajat ovat ENC-kartan (S-52) mitoissa: kaari 20 mm ja rajat 25 mm näytöllä. Linjataulujen linjat piirretään ENC:n tapaan katkoviivana väylän jatkeeksi, ja linjan tosisuunta on merkitty linjan päähän. Ympäri näkyvä valo piirretään valon värisenä renkaana. Valotiedot tulevat Väyläviraston turvalaite- ja loistorekistereistä, myös muiden väylänpitäjien laitteista. Lisäksi näytetään nopeusrajoitusalueet ja muiden väylänpitäjien (esim. kaupunkien) väylät ja turvalaitteet. Vektoripohjalla ne ovat oletuksena näkyvissä, muilla pohjilla ne saa päälle valikosta Näytä.</p>' +
+        '<h3>Vesiliikennemerkit, sillat ja sulut</h3><p>Vesiliikennemerkit piirretään vesiliikennelain mukaisina kilpinä: kielto-, määräys-, rajoitus- ja varoitusmerkit punareunaisina neliöinä (kieltomerkissä punainen diagonaaliviiva), tiedotusmerkit sinisinä neliöinä ja kaapelitaulut keltaisina. Samassa paikassa olevat merkit ovat tolppana, ja napautus näyttää lajit ja lisäkilvet. Merkit näkyvät tasolta 13 ja kaapelitaulut tasolta 14. Sillat, joille taitorakennerekisterissä on alikulkukorkeus, piirretään poikki väylän ja alikulkukorkeus (↕) niiden viereen. Sulut ja avattavat sillat ovat omilla merkeillään, ja napautus näyttää suurimman sallitun aluksen mitat. Vektorikartalla nämä ovat oletuksena näkyvissä, muilla pohjilla ne saa päälle valikosta <b>Näytä</b>. Samasta valikosta <b>Viitat ECDIS-värein</b> värittää viitat ECDISin tapaan.</p>' +
         '<h3>Laiturit ja aallonmurtajat</h3><p>Vektorikartalla laiturit ja aallonmurtajat haetaan Maanmittauslaitoksen maastotietokannasta ja OpenStreetMapista ja piirretään veden päälle, koska maapohjan laiturit jäisivät vesialueen alle. Maanmittauslaitoksen laituriviivat tulevat aina, OpenStreetMapista lisätään alueina kartoitetut laiturit, aallonmurtajat ja pengerrykset, kun OpenStreetMapin Overpass-palvelu vastaa. Ensimmäinen haku uudelle alueelle voi kestää OSM:n palvelimen kuormasta riippuen puolikin minuuttia. Haetut alueet tallennetaan selaimeen 30 päiväksi, joten seuraavalla kerralla ne näkyvät heti. OpenStreetMap on vapaaehtoisten kartoittama, joten laiturit ovat yleensä oikeissa paikoissa, mutta niitä ei ole tarkastettu merenkulun tarpeisiin, ja kelluvat laiturit voivat olla kausittaisia.</p>' +
         '<h3>Maanmittauslaitoksen kivet, karikot ja nimistö</h3><p>Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta vedenalaiset (⊤), vedenpinnassa olevat (+) ja vedenpäälliset (⊥) kivet sekä vesikivikot ja matalikot, jotka rajataan mustalla pisteviivalla (vaarakäyrä). Vektorikartan maapohja on oletuksena OpenStreetMap, ja sen päällä näytetään myös nimistörekisterin paikannimet. Maanmittauslaitoksen taustakartan voi valita Näytä-valikosta. Verkkoversiossa Maanmittauslaitoksen aineisto toimii ilman omaa avainta. Tiedostona avattu versio tarvitsee maksuttoman API-avaimen, joka syötetään kohtaan <b>Tiedosto → Asetukset</b>. Maastotietokannan kivet on kartoitettu maastokartoituksessa, eivät merenmittauksessa.</p>' +
         '<h3>Vektorikartta</h3><p>Karttapohjaksi voi valita myös vektorikartan. Siinä syvyysalueet, syvyyskäyrät, syvyysluvut ja rantaviiva piirretään Traficomin merikarttatietokannasta ja väylät ja turvalaitteet Väyläviraston aineistosta, joten kartta on terävä kaikilla tasoilla ja kattaa myös Näsijärven. Maalla näkyy oletuksena OpenStreetMap ja sen päällä Maanmittauslaitoksen paikannimet. Paperikartan nimistö ja erikoismerkinnät puuttuvat.</p>' +
