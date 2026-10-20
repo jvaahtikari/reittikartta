@@ -118,11 +118,28 @@ def navlines():
 
 def vaylat():
     return fc([
-        {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9215, 'nimifi': 'Tampere - Virrat väylä', 'vaylaluokkakoodi': 3}},
-        {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9250, 'nimifi': 'Tuomisto - Vahantalahti väylä', 'vaylaluokkakoodi': 5}},
+        {'type': 'Feature', 'geometry': {'type': 'LineString', 'coordinates': [[23.700, 61.560], [23.760, 61.640], [23.900, 61.800]]},
+         'properties': {'jnro': 9215, 'nimifi': 'Tampere - Virrat väylä', 'vaylaluokkakoodi': 3, 'vaylaluokkafi': 'VL3: Hyötyliikenteen matalaväylä', 'mitoitussyvays': 2.4}},
+        {'type': 'Feature', 'geometry': {'type': 'LineString', 'coordinates': [[23.800, 61.700], [23.650, 61.760]]},
+         'properties': {'jnro': 9250, 'nimifi': 'Tuomisto - Vahantalahti väylä', 'vaylaluokkakoodi': 5, 'vaylaluokkafi': 'VL5: Paikallisveneväylä', 'mitoitussyvays': 1.8}},
         {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9260, 'nimifi': 'Testioikotie', 'vaylaluokkakoodi': 5}},
         {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9270, 'nimifi': 'Testilinja ilman syvyyttä', 'vaylaluokkakoodi': 5}},
     ])
+
+
+def canals():
+    return fc([
+        {'type': 'Feature', 'geometry': {'type': 'Polygon', 'coordinates': [[[23.790, 61.690], [23.792, 61.690], [23.792, 61.692], [23.790, 61.692], [23.790, 61.690]]]},
+         'properties': {'id': 1, 'nimi': 'Testisulku', 'kanavaaluetyyppi': 'Sulku', 'vesisto': 'Kokemäenjoen vesistö', 'alussyvyys': 2.4}},
+        {'type': 'Feature', 'geometry': {'type': 'Polygon', 'coordinates': [[[23.650, 61.760], [23.652, 61.760], [23.652, 61.762], [23.650, 61.762], [23.650, 61.760]]]},
+         'properties': {'id': 2, 'nimi': 'Testisilta', 'kanavaaluetyyppi': 'Avattava silta', 'vesisto': 'Kokemäenjoen vesistö', 'alussyvyys': None}},
+    ])
+
+
+def traficom_points(layer):
+    if 'Pilot' in layer:
+        return fc([{'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [23.70, 61.56]}, 'properties': {'OBJNAM': 'Testiluotsi', 'INFORM': 'www.pilotorder.fi'}}])
+    return fc([{'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [23.88, 61.74]}, 'properties': {'OBJNAM': 'Testisalmi (10 min)', 'INFORM': 'Testi VTS, VHF 71'}}])
 
 
 def aids():

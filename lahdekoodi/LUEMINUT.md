@@ -150,7 +150,7 @@ Syvyysalueet tulevat Traficomin merikarttatietokannasta. Aineiston syvyysvälit 
 
 ## Paikkahaku ja koordinaatit
 
-Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, oman merkin tai tehtävän nimen tai koordinaatin. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä ja turvalaitteet Väyläviraston aineistosta. Jos paikannimiä ei tule, hakutulosten alla kerrotaan syy: tiedostoversiossa puuttuva API-avain tai verkkoversiossa julkaisu, jonka palvelimelle ei ole asetettu avainta (Vercelin ympäristömuuttuja `MML_API_KEY` pitää olla käytössä myös Preview-ympäristössä, jotta haaran esikatselujulkaisussa nimistöhaku toimii).
+Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, väylän, sulun, kanavan tai avattavan sillan nimen, luotsipaikan tai VTS-ilmoittautumispisteen nimen, oman merkin tai tehtävän nimen tai koordinaatin. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä, turvalaitteet, väylät, sulut ja sillat Väyläviraston aineistosta sekä luotsipaikat ja VTS-ilmoittautumispisteet Traficomin avoimesta aineistosta. Haku ei lue nimiä karttakuvasta, joten se toimii samoin rasteri-, ENC- ja vektoripohjalla. Väylän valinta korostaa koko väylän ja sovittaa sen näkymään. Jos paikannimiä ei tule, hakutulosten alla kerrotaan syy: tiedostoversiossa puuttuva API-avain tai verkkoversiossa julkaisu, jonka palvelimelle ei ole asetettu avainta (Vercelin ympäristömuuttuja `MML_API_KEY` pitää olla käytössä myös Preview-ympäristössä, jotta haaran esikatselujulkaisussa nimistöhaku toimii).
 
 Hakusanaksi riittää nimen alku: viitas löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten salmi löytää esimerkiksi lähellä olevan Viitasalmen.
 
@@ -220,7 +220,8 @@ Reitti viedään GPX-tiedostoksi reitin valikosta tai reittikirjastosta, ja koko
 | Rasterimerikartat | Traficom, rasteripalvelu (WMTS) | CC BY 4.0, ei navigointikäyttöön |
 | ENC-karttapohja | Traficom, S-57 WMS | CC BY 4.0, ei navigointikäyttöön |
 | Syvyysalueet, -käyrät ja -luvut | Traficomin merikarttatietokanta (INSPIRE-palvelu) | Traficomin hydrografisen aineiston lisenssi: muuhun kuin navigointiin ja ei-kaupallisesti, lähdemerkintä tiedonsiirron ajankohtineen |
-| Väylät, turvalaitteet, loistot, valosektorit, vesiliikennemerkit, nopeusrajoitukset | Väylävirasto, avoin rajapinta | CC BY 4.0 |
+| Väylät, turvalaitteet, loistot, valosektorit, vesiliikennemerkit, nopeusrajoitukset, sulut ja avattavat sillat | Väylävirasto, avoin rajapinta | CC BY 4.0 |
+| Luotsipaikat ja VTS-ilmoittautumispisteet (haku) | Traficom, avoin INSPIRE-palvelu | CC BY 4.0 |
 | Kivet, karikot, laiturit, aallonmurtajat ja paikannimet | Maanmittauslaitos, maastotietokanta ja nimistörekisteri (OGC API Features) | CC BY 4.0 |
 | Maanmittauslaitoksen taustakartta | Maanmittauslaitos, kartat.kapsi.fi | CC BY 4.0 |
 | Maapohja ja laiturialueet | OpenStreetMap-tekijät, tiilet ja Overpass-rajapinta | ODbL |
@@ -308,4 +309,4 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 - **Syvyysvälit:** vektorikartan ja syvän veden syvyysvälit ovat paikoin karkeita.
 - **Reititys:** reitti alkaa ja päättyy väylällä, eikä se huomioi väylän ulkopuolisia vesialueita, nopeusrajoituksia, siltojen alikulkukorkeuksia tai kanavia. Linjat ilman kulkusyvyystietoa eivät kelpaa. Hakualue on enintään noin 4° × 2,5°, joten hyvin pitkä matka jaetaan osiin.
 - **Overpass:** OpenStreetMapin Overpass-palvelu on usein ruuhkainen, jolloin OpenStreetMapin laiturialueet tulevat viiveellä tai jäävät tulematta. Maanmittauslaitoksen laituriviivat näkyvät silti.
-- **Paikannimihaku:** nimistörekisterin paikan lajia ei vielä näytetä tuloksissa sanallisesti, vaan rivillä on kunta.
+- **Paikannimihaku:** nimistörekisterin paikan lajia ei vielä näytetä tuloksissa sanallisesti, vaan rivillä on kunta. Väylät, sulut ja sillat haetaan vain Väyläviraston aineistosta ja luotsipaikat Traficomin aineistosta, joten muiden toimijoiden kohteet voivat puuttua.

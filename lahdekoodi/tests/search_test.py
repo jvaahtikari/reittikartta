@@ -54,6 +54,34 @@ with sync_playwright() as pw:
     txt = page.inner_text('#searchRes')
     print('nimet:', txt.replace('\n', ' | ')); check('Testisaari' in txt, 'paikannimi löytyy nimistöstä')
     page.keyboard.press('Escape')
+    # haku ei riipu karttapohjasta: nimet tulevat nimistöstä ja turvalaitteet Väylävirastolta myös rasteri- ja ENC-pohjalla
+    for base in ('raster', 'enc', 'enc-ecdis', 'vector'):
+        page.evaluate("ChartAPI.setBase(%r)" % base); page.wait_for_timeout(400)
+        page.fill('#searchIn', 'testisaa'); page.wait_for_timeout(1200)
+        ok_name = 'Testisaari' in page.inner_text('#searchRes')
+        page.fill('#searchIn', 'testi 3'); page.wait_for_timeout(1200)
+        ok_aid = 'Testi 3' in page.inner_text('#searchRes')
+        check(ok_name and ok_aid, 'paikannimi ja turvalaite löytyvät karttapohjalla %s' % base)
+        page.keyboard.press('Escape')
+    page.evaluate("ChartAPI.setBase('raster')"); page.wait_for_timeout(300)
+
+    # muut paikkatietolähteet: väylä nimellä, sulku ja silta, luotsipaikka, VTS-piste, turvalaite numerolla
+    def found(q, name):
+        page.fill('#searchIn', q); page.wait_for_timeout(1200)
+        txt = page.inner_text('#searchRes'); page.keyboard.press('Escape')
+        return name in txt, txt
+    ok, txt = found('virrat', 'Tampere - Virrat väylä'); check(ok and 'väylä, VL3' in txt and '2,4 m' in txt, 'väylä löytyy nimellä luokkineen ja kulkusyvyyksineen')
+    ok, txt = found('testisul', 'Testisulku'); check(ok and 'sulku, Kokemäenjoen' in txt, 'sulku löytyy')
+    ok, txt = found('testisil', 'Testisilta'); check(ok and 'avattava silta' in txt, 'avattava silta löytyy')
+    ok, txt = found('testiluo', 'Testiluotsi'); check(ok and 'luotsipaikka' in txt, 'luotsipaikka löytyy (Traficom)')
+    ok, txt = found('testisalmi', 'Testisalmi (10 min)'); check(ok and 'VTS-ilmoittautumispiste' in txt, 'VTS-ilmoittautumispiste löytyy (Traficom)')
+    ok, txt = found('38003', 'Testi 3'); check(ok and 'turvalaite' in txt, 'turvalaite löytyy numerolla')
+    # väylän valinta korostaa koko väylän ja sovittaa sen näkymään
+    page.fill('#searchIn', 'virrat'); page.wait_for_timeout(1200)
+    page.locator('#searchRes .sr', has_text='Tampere - Virrat').first.click(); page.wait_for_timeout(600)
+    bb = page.evaluate('(() => { const b = App.map.getBounds(); return [b.getSouth(), b.getNorth(), b.getWest(), b.getEast()]; })()')
+    check(bb[0] <= 61.56 and bb[1] >= 61.80 and bb[2] <= 23.70 and bb[3] >= 23.90, 'väylän valinta sovittaa koko väylän näkymään')
+    check(page.evaluate("document.querySelectorAll('path.leaflet-interactive, path').length") > 0, 'väylän korostusviiva piirretty')
 
     # samannimiset paikat: lähialue ensin, etäisyys ja suunta, numerot kartalla
     page.evaluate("App.map.setView([61.70, 23.90], 11)"); page.wait_for_timeout(500)

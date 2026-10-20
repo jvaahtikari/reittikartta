@@ -1,5 +1,7 @@
-/* Reittikartta – paikkahaku: koordinaatit, omat kohteet, Väyläviraston turvalaitteet nimellä
- * ja (API-avaimella) Maanmittauslaitoksen nimistörekisteri.
+/* Reittikartta – paikkahaku: koordinaatit, omat kohteet, Väyläviraston turvalaitteet nimellä ja
+ * numerolla, väylät, sulut ja avattavat sillat, Traficomin luotsipaikat ja VTS-ilmoittautumispisteet
+ * sekä (API-avaimella tai välityspalvelulla) Maanmittauslaitoksen nimistörekisteri.
+ * Haku ei lue nimiä karttakuvasta, joten se toimii samoin kaikilla karttapohjilla.
  *
  * Suomessa on paljon samannimisiä paikkoja (esim. kymmeniä Viitasaaria), joten tulokset
  * järjestetään etäisyyden mukaan hakuhetken kartan keskipisteestä ja näytetään kartalla
@@ -27,24 +29,98 @@
     if (s0 && norm(s0.name || 'asema').indexOf(n) >= 0) out.push({ name: s0.name || 'Asema', info: 'asema', lat: s0.lat, lng: s0.lng });
     return out;
   }
+  function wfs(layer, cql) {
+    return fetch(VAYLA + '&TYPENAME=' + layer + '&CQL_FILTER=' + encodeURIComponent(cql))
+      .then(function (r) { return r.ok ? r.json() : { features: [] }; })
+      .then(function (j) { return j.features || []; }, function () { return []; });
+  }
+  function esc(q) { return q.replace(/'/g, "''"); }
+  // geometrian edustava piste: piste sellaisenaan, viivalta keskimmäinen piste, alueelta reunan keskiarvo
+  function repPoint(g) {
+    if (!g) return null;
+    var c = g.coordinates;
+    if (g.type === 'Point') return c;
+    if (g.type === 'MultiPoint') return c[0];
+    if (g.type === 'LineString') return c[Math.floor(c.length / 2)];
+    if (g.type === 'MultiLineString') { var all = [].concat.apply([], c); return all[Math.floor(all.length / 2)]; }
+    var ring = g.type === 'Polygon' ? c[0] : g.type === 'MultiPolygon' ? c[0][0] : null;
+    if (!ring || !ring.length) return null;
+    var sx = 0, sy = 0; ring.forEach(function (p) { sx += p[0]; sy += p[1]; });
+    return [sx / ring.length, sy / ring.length];
+  }
+  function lineOf(g) {
+    if (!g) return null;
+    if (g.type === 'LineString') return g.coordinates.map(function (p) { return [p[1], p[0]]; });
+    if (g.type === 'MultiLineString') return g.coordinates.map(function (c) { return c.map(function (p) { return [p[1], p[0]]; }); });
+    return null;
+  }
+  // Väyläviraston turvalaitteet nimellä; pelkkä numero hakee turvalaitenumerolla (alusta)
   function aids(q) {
-    var cql = "nimifi ILIKE '%" + q.replace(/'/g, "''") + "%'";
+    var num = /^\d{2,}$/.test(q);
+    var cql = num ? "turvalaitenumero LIKE '" + esc(q) + "%'" : "nimifi ILIKE '%" + esc(q) + "%'";
     var layers = ['vesivaylatiedot:turvalaitteet_uusi', 'vesivaylatiedot:turvalaitteet_muut_vaylanpitajat'];
-    return Promise.all(layers.map(function (l) {
-      return fetch(VAYLA + '&TYPENAME=' + l + '&CQL_FILTER=' + encodeURIComponent(cql))
-        .then(function (r) { return r.ok ? r.json() : { features: [] }; })
-        .then(function (j) { return j.features || []; }, function () { return []; });
-    })).then(function (lists) {
+    return Promise.all(layers.map(function (l) { return wfs(l, cql); })).then(function (lists) {
       var out = [];
       lists.forEach(function (fs) {
         fs.forEach(function (f) {
-          var g = f.geometry, c = g && (g.type === 'MultiPoint' ? g.coordinates[0] : g.coordinates), p = f.properties || {};
+          var c = repPoint(f.geometry), p = f.properties || {};
           if (!c) return;
-          out.push({ name: p.nimifi || 'Turvalaite', info: 'turvalaite, ' + (p.turvalaitetyyppifi || '').toLowerCase() + (p.turvalaitenumero ? ' ' + p.turvalaitenumero : ''), lat: c[1], lng: c[0] });
+          out.push({ name: p.nimifi || 'Turvalaite', info: 'turvalaite, ' + (p.turvalaitetyyppifi || '').toLowerCase() + (p.turvalaitenumero ? ' ' + p.turvalaitenumero : ''), lat: c[1], lng: c[0], aid: true });
         });
       });
       return out;
     });
+  }
+  // Väyläviraston väylät nimellä: osuma osoittaa väylän keskikohtaan, ja valinta korostaa koko väylän
+  function fairways(q) {
+    if (/^\d+$/.test(q)) return Promise.resolve([]);
+    return wfs('vesivaylatiedot:vaylat_uusi', "nimifi ILIKE '%" + esc(q) + "%'").then(function (fs) {
+      var out = [];
+      fs.forEach(function (f) {
+        var c = repPoint(f.geometry), p = f.properties || {};
+        if (!c) return;
+        out.push({ name: p.nimifi || 'Väylä', info: 'väylä' + (p.vaylaluokkafi ? ', ' + p.vaylaluokkafi : '') + (p.mitoitussyvays != null ? ', ' + G.fmtNum(Number(p.mitoitussyvays), 1) + ' m' : ''), lat: c[1], lng: c[0], line: lineOf(f.geometry) });
+      });
+      return out;
+    });
+  }
+  // sulut, kanavat ja avattavat sillat
+  function canals(q) {
+    if (/^\d+$/.test(q)) return Promise.resolve([]);
+    return wfs('vesivaylatiedot:sulkukanavat_uusi', "nimi ILIKE '%" + esc(q) + "%'").then(function (fs) {
+      var out = [];
+      fs.forEach(function (f) {
+        var c = repPoint(f.geometry), p = f.properties || {};
+        if (!c) return;
+        var kind = (p.kanavaaluetyyppi || 'kanava').toLowerCase();
+        out.push({ name: p.nimi || 'Kanava', info: kind + (p.vesisto ? ', ' + p.vesisto : '') + (p.alussyvyys != null ? ', syväys ' + G.fmtNum(Number(p.alussyvyys), 1) + ' m' : ''), lat: c[1], lng: c[0] });
+      });
+      return out;
+    });
+  }
+  // Traficomin luotsipaikat ja VTS-ilmoittautumispisteet: palvelu ei vastaa selaimen suodatettuihin
+  // kyselyihin, joten koko pieni aineisto (noin sata pistettä) haetaan kerran ja suodatetaan täällä.
+  var TRAFICOM = 'https://julkinen.traficom.fi/inspirepalvelu/avoin/wfs?SERVICE=WFS&VERSION=1.0.0&REQUEST=GetFeature&OUTPUTFORMAT=application/json&SRSNAME=EPSG:4326&TYPENAME=';
+  var traficomCache = null;
+  function traficomPoints() {
+    if (traficomCache) return traficomCache;
+    var layers = [['avoin:PilotBoardingPlace_P', 'luotsipaikka'], ['avoin:Rdocal_P', 'VTS-ilmoittautumispiste']];
+    traficomCache = Promise.all(layers.map(function (l) {
+      return fetch(TRAFICOM + l[0]).then(function (r) { return r.ok ? r.json() : { features: [] }; }).then(function (j) {
+        return (j.features || []).map(function (f) {
+          var c = repPoint(f.geometry), p = f.properties || {};
+          if (!c || !p.OBJNAM) return null;
+          return { name: p.OBJNAM, info: l[1] + (p.INFORM ? ', ' + p.INFORM : ''), lat: c[1], lng: c[0] };
+        }).filter(Boolean);
+      }, function () { return []; });
+    })).then(function (lists) { return lists[0].concat(lists[1]); });
+    traficomCache.then(function (all) { if (!all.length) traficomCache = null; });   // yritetään uudelleen seuraavalla haulla
+    return traficomCache;
+  }
+  function traficom(q) {
+    if (/^\d+$/.test(q)) return Promise.resolve([]);
+    var n = norm(q);
+    return traficomPoints().then(function (all) { return all.filter(function (it) { return norm(it.name).indexOf(n) >= 0; }); });
   }
 
   // etäisyys ja suunta hakupisteestä
@@ -62,10 +138,10 @@
   // turvalaitteet ja paikannimet, etäisyysjärjestyksessä pisteestä at
   function remote(q, at) {
     return Promise.all([
-      aids(q),
+      aids(q), fairways(q), canals(q), traficom(q),
       hasNames() ? global.ChartAPI.searchNames(q, at).catch(function () { return []; }) : Promise.resolve([])
     ]).then(function (res) {
-      return place(res[1].concat(res[0].map(function (a) { a.aid = true; return a; })), at);
+      return place(res[4].concat(res[0], res[1], res[2], res[3]), at);
     });
   }
   // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, turvalaitteet ja paikannimet
@@ -178,6 +254,11 @@
       L.circleMarker([it.lat, it.lng], { radius: 16, color: '#c2188b', weight: 3, fill: false, interactive: false }),
       L.circleMarker([it.lat, it.lng], { radius: 3, color: '#c2188b', weight: 2, fillOpacity: 1, interactive: false })
     ]).addTo(map);
+    // väylä korostetaan koko pituudeltaan ja sovitetaan näkymään
+    if (it.line) {
+      var pl = L.polyline(it.line, { color: '#c2188b', weight: 5, opacity: 0.6, interactive: false }).addTo(hlLayer);
+      global.App.fitTo(pl.getBounds().pad(0.2), { maxZoom: 14 });
+    }
     var lay = hlLayer;
     setTimeout(function () { if (hlLayer === lay) { map.removeLayer(lay); hlLayer = null; } }, 8000);
   }

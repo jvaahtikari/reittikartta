@@ -44,6 +44,9 @@ def handle(route, request):
         if key not in tile_cache:
             tile_cache[key] = mockdata.make_tile(z, x, y)
         return route.fulfill(status=200, headers=cors, content_type='image/png', body=tile_cache[key])
+    if 'inspirepalvelu/avoin' in url:
+        t = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get('TYPENAME', [''])[0]
+        return route.fulfill(status=200, headers=cors, content_type='application/json', body=mockdata.traficom_points(t))
     if 'inspirepalvelu/rajoitettu' in url:
         q = {k.upper(): v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlparse(url).query).items()}
         if q.get('SERVICE', '').upper() == 'WFS' and 'Sounding_P' in q.get('TYPENAME', ''):
@@ -147,12 +150,17 @@ def handle(route, request):
             return route.fulfill(status=200, headers=cors, content_type='application/json', body=mockdata.fc([]))
         qq = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
         cql = qq.get('CQL_FILTER', [''])[0]
-        if cql and 'turvalaitteet' in t:
+        if cql and ('turvalaitteet' in t or 'vaylat_uusi' in t or 'sulkukanavat' in t):
             import re
-            m = re.search(r"%([^%]*)%", cql)
-            term = (m.group(1) if m else '').lower()
-            data = json.loads(mockdata.aids())
-            data['features'] = [f for f in data['features'] if term in (f['properties'].get('nimifi') or '').lower()]
+            m = re.search(r"'([^']*)'", cql)
+            term = (m.group(1) if m else '').replace('%', '').lower()
+            src = mockdata.aids if 'turvalaitteet' in t else mockdata.vaylat if 'vaylat_uusi' in t else mockdata.canals
+            field = 'turvalaitenumero' if 'turvalaitenumero' in cql else 'nimi' if 'sulkukanavat' in t else 'nimifi'
+            data = json.loads(src())
+            if field == 'turvalaitenumero':
+                data['features'] = [f for f in data['features'] if str(f['properties'].get('turvalaitenumero') or '').startswith(term)]
+            else:
+                data['features'] = [f for f in data['features'] if term in (f['properties'].get(field) or '').lower()]
             return route.fulfill(status=200, headers=cors, content_type='application/json', body=json.dumps(data))
         extra = {'loistot_uusi': mockdata.lights, 'valosektorit_uusi': mockdata.sectors, 'nopeusrajoitusalueet': mockdata.speed}
         for k, fn in extra.items():
