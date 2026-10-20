@@ -138,6 +138,7 @@
   App.safetyDialog = safetyDialog;
   applySafety();
   global.Routes.init(map, App);
+  if (global.Routing) global.Routing.init(map, App);
   global.Tools.init(map, App);
   global.Library.init(map, App);
   if (global.Search) global.Search.init(map);
@@ -205,6 +206,7 @@
   UI.$('tbMeasure').addEventListener('click', toggleMeasure);
   UI.$('tbEbl').addEventListener('click', toggleEbl);
   UI.$('tbRoute').addEventListener('click', function () { if (mode === 'add') App.clearMode(); else global.Routes.startNew(); });
+  UI.$('tbAuto').addEventListener('click', function () { global.Routing.dialog(); });
   UI.$('tbNotes').addEventListener('click', function () {
     st.show.notes = !st.show.notes;
     if (!st.show.notes) st.show.passes = false;           // sivuutukset eivät näy ilman nuotteja
@@ -310,6 +312,7 @@
     tools: function () {
       return [
         { label: 'Uusi reitti', key: 'Ctrl+R', action: function () { global.Routes.startNew(); } },
+        { label: 'Reititä väylää pitkin…', key: 'Ctrl+Shift+R', action: function () { global.Routing.dialog(); } },
         { label: 'Harppi', key: 'M', action: toggleMeasure },
         { label: 'Suuntima', key: 'F6', action: toggleEbl },
         { sep: true },
@@ -516,7 +519,7 @@
       return;
     }
     if (typing || UI.modalOpen) return;
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); global.Routes.startNew(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); if (e.shiftKey) global.Routing.dialog(); else global.Routes.startNew(); return; }
     if (e.key === 'F6') { e.preventDefault(); toggleEbl(); return; }
     if (handlers && handlers.key && handlers.key(e)) return;
     if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'm' || e.key === 'M')) { toggleMeasure(); return; }
@@ -668,6 +671,7 @@
         '<li><b>Suuntanuotit</b> ilmestyvät punaisina legien keskelle. Siirrä nuotti reittiviivan viereen, jolloin se vahvistuu vihreäksi.</li>' +
         '<li><b>Ominaisuudet</b>: Mistä – Kautta – Mihin muodostavat nimen. <b>Hyväksy omaan kirjastoon</b> kirjaa hyväksyjän ja alukset; reitti muuttuu pinkiksi.</li>' +
         '<li>Hyväksytyn reitin muokkaus aloitetaan erikseen kirjastosta, ja muutokset hyväksytään uudelleen.</li></ol>' +
+        '<h3>Reititys väylää pitkin</h3><p>Työkalupalkin reitityspainike, <b>Työkalut → Reititä väylää pitkin</b> tai <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> laskee reitin automaattisesti. Anna lähtöpaikka (oma sijainti, asema, haku tai poiminta kartalta), määränpää ja pienin kulkusyvyys. Reitti kulkee Väyläviraston navigointilinjoja pitkin ja käyttää vain linjoja, joiden kulkusyvyys on vähintään annettu; linjat, joilta kulkusyvyystieto puuttuu, jätetään pois. Lähtö- ja saapumispiste ovat lähimmät kelvolliset väyläpisteet annettujen paikkojen lähellä, joten väylän ulkopuoliset osuudet lisätään käsin. Laskettu reitti avautuu muokkaustilaan tarkistettavaksi ja säädettäväksi, ja yhteenveto kertoo reitin pienimmän kulkusyvyyden ja käytetyt väylät. Kartan oikea painike tarjoaa myös <b>Reititä tähän väylää pitkin</b>, ja tehtäväpaikan valikko reitin asemalta tehtävään.</p>' +
         '<h3>Työkalut</h3><table>' +
         '<tr><td><kbd>M</kbd></td><td>Harppi – matka usean legin kautta (oikea painike: muuta reitiksi)</td></tr>' +
         '<tr><td><kbd>R</kbd></td><td>Karttapohjaksi rasterikartta</td></tr>' +

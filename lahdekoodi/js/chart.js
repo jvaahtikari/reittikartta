@@ -494,6 +494,15 @@
     });
   }
 
+  function ingest(kind, feats) {
+    var idKey = LAYERS[kind].id, into = LAYERS[kind].into || kind, pre = LAYERS[kind].prefix || '';
+    feats.forEach(function (f) {
+      var id = f.properties && f.properties[idKey];
+      if (id == null) id = f.id;
+      store[into][pre + id] = f;
+    });
+  }
+
   function fetchCell(kind, cx, cy, key) {
     var bbox = [cx * CELL_W, cy * CELL_H, (cx + 1) * CELL_W, (cy + 1) * CELL_H].map(function (v) { return v.toFixed(5); }).join(',');
     var url = VAYLA_WFS + '&TYPENAME=' + LAYERS[kind].type + '&BBOX=' + bbox + ',EPSG:4326';
@@ -502,12 +511,7 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (j) {
-      var idKey = LAYERS[kind].id, into = LAYERS[kind].into || kind, pre = LAYERS[kind].prefix || '';
-      (j.features || []).forEach(function (f) {
-        var id = f.properties && f.properties[idKey];
-        if (id == null) id = f.id;
-        store[into][pre + id] = f;
-      });
+      ingest(kind, j.features || []);
       loaded[key] = true;
       pending--; setStatus();
       onDataCbs.forEach(function (fn) { fn(LAYERS[kind].into || kind); });
@@ -516,6 +520,62 @@
       pending--; failed++; setStatus();
       setTimeout(function () { failed = Math.max(0, failed - 1); setStatus(); }, 8000);
     });
+  }
+
+  // ---------------- aluehaku reititystä varten ----------------
+  // Automaattinen reititys tarvitsee navigointilinjat koko lähtö- ja määräpaikan väliseltä alueelta
+  // zoomaustasosta riippumatta. Puuttuvat solut haetaan yhdellä pyynnöllä niiden yhteiseltä alueelta.
+  // Jos palvelin katkaisee vastauksen (palautettuja vähemmän kuin osumia), alue jaetaan neljään osaan.
+  function fetchBox(kind, bbox, depth) {
+    var url = VAYLA_WFS + '&TYPENAME=' + LAYERS[kind].type + '&BBOX=' + bbox.map(function (v) { return v.toFixed(5); }).join(',') + ',EPSG:4326';
+    pending++; setStatus();
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      pending--; setStatus();
+      var feats = j.features || [];
+      var total = j.totalFeatures != null ? Number(j.totalFeatures) : (j.numberMatched != null ? Number(j.numberMatched) : null);
+      if (total != null && isFinite(total) && feats.length < total && depth < 4) {
+        var mx = (bbox[0] + bbox[2]) / 2, my = (bbox[1] + bbox[3]) / 2;
+        return Promise.all([[bbox[0], bbox[1], mx, my], [mx, bbox[1], bbox[2], my], [bbox[0], my, mx, bbox[3]], [mx, my, bbox[2], bbox[3]]]
+          .map(function (b) { return fetchBox(kind, b, depth + 1); }));
+      }
+      ingest(kind, feats);
+    }, function (e) {
+      pending--; failed++; setStatus();
+      setTimeout(function () { failed = Math.max(0, failed - 1); setStatus(); }, 8000);
+      throw e;
+    });
+  }
+  // Lataa navigointilinjat (myös muiden väylänpitäjien) ja väylät alueelta bounds. Palauttaa lupauksen.
+  function loadRegion(bounds) {
+    var kinds = ['navlines', 'navlines2', 'vaylat'];
+    var cx0 = Math.floor(bounds.getWest() / CELL_W), cx1 = Math.floor(bounds.getEast() / CELL_W);
+    var cy0 = Math.floor(bounds.getSouth() / CELL_H), cy1 = Math.floor(bounds.getNorth() / CELL_H);
+    var jobs = [];
+    kinds.forEach(function (kind) {
+      var missing = [];
+      for (var cx = cx0; cx <= cx1; cx++) for (var cy = cy0; cy <= cy1; cy++) {
+        var key = kind + ':' + cx + ':' + cy;
+        if (loaded[key] === true) continue;
+        missing.push({ cx: cx, cy: cy, key: key });
+      }
+      if (!missing.length) return;
+      var mx0 = Infinity, mx1 = -Infinity, my0 = Infinity, my1 = -Infinity;
+      missing.forEach(function (c) { mx0 = Math.min(mx0, c.cx); mx1 = Math.max(mx1, c.cx); my0 = Math.min(my0, c.cy); my1 = Math.max(my1, c.cy); });
+      jobs.push(fetchBox(kind, [mx0 * CELL_W, my0 * CELL_H, (mx1 + 1) * CELL_W, (my1 + 1) * CELL_H], 0).then(function () {
+        missing.forEach(function (c) { loaded[c.key] = true; });
+      }));
+    });
+    return Promise.all(jobs).then(function () {
+      vcache = null;
+      onDataCbs.forEach(function (fn) { fn('navlines'); });
+    });
+  }
+  // Navigointilinjat reititystä varten (Väyläviraston ja muiden väylänpitäjien linjat yhdessä).
+  function navlineFeatures() {
+    return Object.keys(store.navlines).map(function (id) { return store.navlines[id]; });
   }
 
   // ---------------- väylien suunnat ja kulkusyvyydet ----------------
@@ -1523,6 +1583,10 @@
       refresh: function () { loadVisible(); loadPiers(); renderAll(); drawBorder(); },
       drawBorder: drawBorder,
       fairwayName: fairwayName,
+      fairwayClass: fairwayClass,
+      loadRegion: loadRegion,
+      navlineFeatures: navlineFeatures,
+      lineCoords: lineCoords,
       snap: snap,
       setSnapMarkers: function (on) { snapMarkersOn = !!on; renderSnapMarkers(); },
       snapAid: snapAid,

@@ -578,3 +578,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 .tv-ring { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; border: 3px solid #c2188b; box-sizing: border-box; box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
 .tv-dot { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: #c2188b; border: 1.5px solid #fff; }
 .form label[for=tFind] { align-self: start; padding-top: 9px; }
+
+/* automaattinen reititys */
+.rt-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.rt-row input { flex: 1 1 200px; min-width: 0; }
+.help table th { text-align: left; font-weight: 600; padding: 2px 10px 2px 0; }
+.help table td { padding: 2px 10px 2px 0; }

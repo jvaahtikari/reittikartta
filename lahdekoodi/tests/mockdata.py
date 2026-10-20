@@ -105,6 +105,9 @@ def navlines():
         (9215, 2.4, 'Suora linja', [[23.700, 61.560], [23.760, 61.640]], 23.5),
         (9215, 2.4, 'Murtoviiva', [[23.760, 61.640], [23.800, 61.700], [23.880, 61.740], [23.900, 61.800]], None),
         (9250, 1.8, 'Murtoviiva', [[23.800, 61.700], [23.700, 61.720], [23.650, 61.760]], None),
+        # reititystestit: matala oikotie (1,8 m) pääväylän mutkan ohi ja linja ilman kulkusyvyystietoa
+        (9260, 1.8, 'Suora linja', [[23.760, 61.640], [23.900, 61.800]], None),
+        (9270, None, 'Suora linja', [[23.900, 61.800], [23.950, 61.850]], None),
     ]
     for k, (jnro, d, typ, coords, tos) in enumerate(lines):
         feats.append({'type': 'Feature', 'id': 'nl.%d' % k, 'geometry': {'type': 'LineString', 'coordinates': coords},
@@ -117,6 +120,8 @@ def vaylat():
     return fc([
         {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9215, 'nimifi': 'Tampere - Virrat väylä', 'vaylaluokkakoodi': 3}},
         {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9250, 'nimifi': 'Tuomisto - Vahantalahti väylä', 'vaylaluokkakoodi': 5}},
+        {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9260, 'nimifi': 'Testioikotie', 'vaylaluokkakoodi': 5}},
+        {'type': 'Feature', 'geometry': None, 'properties': {'jnro': 9270, 'nimifi': 'Testilinja ilman syvyyttä', 'vaylaluokkakoodi': 5}},
     ])
 
 

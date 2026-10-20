@@ -23,6 +23,7 @@ Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusse
   - sivuutus- ja käännösetäisyydet
   - reittipisteiden kiinnitys väylän pisteisiin
   - hyväksyntä aluskohtaiseen reittikirjastoon
+- **Reititys väylää pitkin:** reitti lasketaan automaattisesti lähtöpisteestä määränpäähän Väyläviraston navigointilinjoja pitkin, ja vain annetun kulkusyvyyden täyttävät väylät kelpaavat. Reitti avautuu muokkaustilaan tarkistettavaksi.
 - **Syvä vesi:** vesialueet väritetään aluksen turvasyvyyden mukaan ECDISin turvakäyrän tapaan.
 - **Paikkahaku:** paikannimet, turvalaitteet, omat kohteet ja koordinaatit. Samannimiset paikat näytetään kartalla numeroituina, ja niille annetaan kunta sekä etäisyys meripeninkulmina ja suunta.
 - **Tehtäväpaikat ja asema:** tehtäväpaikka haetaan nimellä ja tarkistetaan kartalla ennen luomista. Aktiivisen tehtävän suuntima ja etäisyys näytetään asemalta.
@@ -109,6 +110,16 @@ Jokaiselle näkyvälle legille piirretään automaattisesti SARNavin tapaan suun
 Reitin ominaisuuksissa nimi muodostuu kentistä Mistä, Kautta ja Mihin. Hyväksy omaan kirjastoon kirjaa hyväksyjän ja alukset, ja hyväksytty reitti näkyy pinkkinä. Hyväksytyn reitin muokkaus aloitetaan erikseen kirjastosta, ja muutokset hyväksytään uudelleen.
 
 Alus valitaan yläpalkista tai puhelimessa valikosta. Kirjasto näyttää valinnan mukaan joko valitun aluksen reitit tai kaikki reitit. Jos alusta ei ole valittu, kaikki hyväksytyt reitit näytetään yhdessä.
+
+## Reititys väylää pitkin
+
+Reitin voi myös laskea automaattisesti. Työkalupalkin reitityspainike, valikko Työkalut → Reititä väylää pitkin tai Ctrl+Shift+R avaa dialogin, jossa annetaan lähtöpiste, määränpää ja pienin kulkusyvyys. Lähtöpisteeksi voi valita oman sijainnin tai aseman, hakea paikan nimellä, poimia sen kartalta tai kirjoittaa koordinaatit. Määränpää annetaan samoilla tavoilla. Kartan oikea painike tarjoaa kohdan Reititä tähän väylää pitkin, ja tehtäväpaikan valikosta reitin voi laskea asemalta tehtävään.
+
+Reitti kulkee aina virallista väylää pitkin. Sovellus hakee Väyläviraston navigointilinjat lähtöpisteen ja määränpään väliseltä alueelta, rakentaa niistä verkon ja hakee lyhimmän reitin. Verkkoon otetaan vain linjat, joiden kulkusyvyys on vähintään annettu pienin kulkusyvyys, joten vaatimusta ei voi rikkoa. Linjat, joilta kulkusyvyystieto puuttuu, jätetään pois, koska vaatimuksen täyttymistä ei voi silloin todentaa. Mukana ovat myös muiden väylänpitäjien, kuten kuntien, väylät, ja yhteenveto kertoo, jos reitti kulkee osin niillä. Jos reittiä ei löydy, hakualuetta laajennetaan kahdesti, koska väylä voi kiertää kauempaa kuin suora linja.
+
+Lähtöpiste ja saapumispiste ovat lähimmät kelvolliset väyläpisteet annettujen paikkojen lähellä. Reitti alkaa ja päättyy siis väylällä, ja esimerkiksi laiturilta väylälle johtava osuus lisätään käsin. Yhteenveto kertoo, kuinka kaukana nämä pisteet ovat annetuista paikoista.
+
+Laskettu reitti avautuu muokkaustilaan, ja sitä säädetään kuten muitakin reittejä. Reittipisteet ovat väyläaineiston pisteitä, ja ne näkyvät kiinnitettyinä. Suorat jatkokohdat ja kaarien välipisteet on harvennettu niin, että reittiviiva poikkeaa navigointilinjasta enintään viisi metriä. Yhteenveto näyttää reitin pienimmän kulkusyvyyden, käytetyt väylät kulkusyvyyksineen ja osuuksineen sekä muistutuksen, että reitti tarkistetaan ennen käyttöä. Samat tiedot kirjataan reitin huomioihin. Oletuksena pienin kulkusyvyys on aluksen turvasyvyys.
 
 ## Väyläkiinnitys ja sijaintitarkkuus
 
@@ -240,6 +251,7 @@ OpenStreetMapin palvelimet estävät karttatiilet sivuilta, jotka eivät lähet�
 | `lahdekoodi/js/symbols.js` | Suomen merikarttojen karttamerkit |
 | `lahdekoodi/js/rastersharp.js` | Merikarttarasterin terävä suurennus |
 | `lahdekoodi/js/routes.js` | Reittisuunnittelu ja hyväksyntä |
+| `lahdekoodi/js/routing.js` | Automaattinen reititys väylää pitkin: verkko navigointilinjoista, kulkusyvyysrajoite, lyhimmän reitin haku ja dialogi |
 | `lahdekoodi/js/tools.js` | Harppi, suuntima, omat merkit, tehtäväpaikat ja asema |
 | `lahdekoodi/js/search.js` | Paikkahaku |
 | `lahdekoodi/js/library.js` | Reittikirjasto |
@@ -274,6 +286,7 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 | `extra_test.py` | Karttamerkit, valosektorit, nopeusrajoitukset, suuntanuotit, käännösmerkit, maapohja ja Maanmittauslaitoksen kerros |
 | `safety_test.py` | Syvä vesi ja turvasyvyys |
 | `snap_test.py` | Reittipisteiden väyläkiinnitys |
+| `route_test.py` | Reititys väylää pitkin: kulkusyvyysrajoite, lähin kelvollinen väyläpiste, linjat ilman kulkusyvyyttä, risteykset ja dialogi (`DEVICE` valitsee puhelinprofiilin) |
 | `aid_test.py` | Sivuutus- ja käännösetäisyyksien kiinnitys turvalaitteisiin |
 | `search_test.py` | Paikkahaku |
 | `task_gps_test.py` | Tehtäväpaikan haku, merimailit ja oma sijainti |
@@ -286,5 +299,6 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 - **Laitekohtaiset tiedot:** reitit ja merkit eivät ole jaettuja käyttäjien tai laitteiden kesken, vaan ne siirretään varmuuskopiolla.
 - **ENC:n kattavuus:** ENC-aineistoa ei ole kaikilla vesillä, esimerkiksi Näsijärvellä.
 - **Syvyysvälit:** vektorikartan ja syvän veden syvyysvälit ovat paikoin karkeita.
+- **Reititys:** reitti alkaa ja päättyy väylällä, eikä se huomioi väylän ulkopuolisia vesialueita, nopeusrajoituksia, siltojen alikulkukorkeuksia tai kanavia. Linjat ilman kulkusyvyystietoa eivät kelpaa. Hakualue on enintään noin 4° × 2,5°, joten hyvin pitkä matka jaetaan osiin.
 - **Overpass:** OpenStreetMapin Overpass-palvelu on usein ruuhkainen, jolloin OpenStreetMapin laiturialueet tulevat viiveellä tai jäävät tulematta. Maanmittauslaitoksen laituriviivat näkyvät silti.
 - **Paikannimihaku:** nimistörekisterin paikan lajia ei vielä näytetä tuloksissa sanallisesti, vaan rivillä on kunta.

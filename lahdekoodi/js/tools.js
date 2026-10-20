@@ -278,6 +278,10 @@
         S.emit('routes'); global.Routes.enterEdit(r.id);
         UI.toast('Suora reittiluonnos luotu. Lisää reittipisteitä oikealla napilla reittiviivasta.');
       } },
+      { label: 'Reititä asemalta tehtävään väylää pitkin…', action: function () {
+        var st = S.state.settings.station;
+        global.Routing.dialog({ from: st ? { lat: st.lat, lng: st.lng, label: st.name || 'Asema' } : null, to: { lat: t.lat, lng: t.lng, label: t.name || 'Tehtävä' } });
+      } },
       { sep: true },
       { label: 'Poista tehtävä…', action: function () {
         UI.confirm('Poistetaanko tehtävä "' + (t.name || 'Tehtävä') + '"?', 'Poista', function () {
@@ -518,6 +522,7 @@
       UI.menu(e.originalEvent.clientX, e.originalEvent.clientY, [
         { label: 'Suuntima asemalta', action: function () { startEbl({ lat: st.lat, lng: st.lng }); } },
         { label: 'Uusi reitti asemalta', action: function () { startRouteAt(L.latLng(st.lat, st.lng)); } },
+        { label: 'Reititä asemalta väylää pitkin…', action: function () { global.Routing.dialog({ from: { lat: st.lat, lng: st.lng, label: st.name || 'Asema' } }); } },
         { label: 'Nimeä asema…', action: function () { nameStation(st); } },
         { sep: true },
         { label: 'Poista asema', action: function () { S.state.settings.station = null; S.emit('settings'); } }
@@ -554,6 +559,7 @@
       { label: 'Aseta asema tähän', action: function () { nameStation({ lat: ll.lat, lng: ll.lng, name: (S.state.settings.station || {}).name || 'Asema' }, true); } },
       { sep: true },
       { label: 'Uusi reitti tästä', key: 'Ctrl+R', action: function () { startRouteAt(ll); } },
+      { label: 'Reititä tähän väylää pitkin…', action: function () { global.Routing.dialog({ to: { lat: ll.lat, lng: ll.lng, label: '' } }); } },
       { label: 'Harppi tästä', key: 'M', action: function () { startMeasure(ll); } },
       { label: 'Suuntima tästä', key: 'F6', action: function () { startEbl({ lat: ll.lat, lng: ll.lng }); } },
       { sep: true },
