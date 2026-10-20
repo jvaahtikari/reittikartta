@@ -109,7 +109,7 @@ Uusi reitti aloitetaan työkalupalkin reittipainikkeella, kirjaston painikkeella
 
 Reitti siirtyy muokkaustilaan, jonka tunnistaa ruskeasta ilmoituksesta. Muokkaustilassa reittipisteitä voi vetää. Reittiviivan valikosta (hiiren oikea painike tai pitkä painallus) lisätään reittipiste, suuntanuotti tai sivuutusetäisyys. Reittipisteen valikosta poistetaan piste, lisätään käännösetäisyys tai jatketaan reittiä.
 
-Jokaiselle näkyvälle legille piirretään automaattisesti SARNavin tapaan suuntanuotti: kulkusuunta isolla, nuoli kulkusuuntaan sekä vastasuunta ja legin pituus. Nuotti sijoittuu legin näkyvälle osalle, ja pitkällä legillä nuotteja on useampia. Jokaisen käännöksen eteen piirretään seuran käytännön mukaiset merkit 2 ja 1 kaapelia ennen käännöspistettä.
+Jokaiselle näkyvälle legille piirretään automaattisesti SARNavin tapaan suuntanuotti: kulkusuunta isolla, nuoli kulkusuuntaan sekä vastasuunta ja legin pituus. Nuotti sijoittuu legin näkyvälle osalle, ja pitkällä legillä nuotteja on useampia. Mutkikkaalla väylällä nuotit sijoitetaan pisimmistä legeistä alkaen, eikä nuottia piirretä, jos legi on näkymässä alle 60 pikseliä tai laatikko osuisi toisen päälle. Lähemmäs zoomattaessa puuttuvat nuotit tulevat näkyviin. Jokaisen käännöksen eteen piirretään seuran käytännön mukaiset merkit 2 ja 1 kaapelia ennen käännöspistettä.
 
 Reitin ominaisuuksissa nimi muodostuu kentistä Mistä, Kautta ja Mihin. Hyväksy omaan kirjastoon kirjaa hyväksyjän ja alukset, ja hyväksytty reitti näkyy pinkkinä. Hyväksytyn reitin muokkaus aloitetaan erikseen kirjastosta, ja muutokset hyväksytään uudelleen.
 
@@ -294,6 +294,7 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 | `safety_test.py` | Syvä vesi ja turvasyvyys |
 | `snap_test.py` | Reittipisteiden väyläkiinnitys |
 | `wheel_test.py` | Hiiren rullan zoomaus, myös tarkkuusrullan purskeet |
+| `legnote_test.py` | Legien suuntanuottien sijoittelu mutkikkaalla reitillä (ei päällekkäisyyksiä) |
 | `route_test.py` | Reititys väylää pitkin: kulkusyvyysrajoite, lähin kelvollinen väyläpiste, linjat ilman kulkusyvyyttä, risteykset ja dialogi (`DEVICE` valitsee puhelinprofiilin) |
 | `aid_test.py` | Sivuutus- ja käännösetäisyyksien kiinnitys turvalaitteisiin |
 | `search_test.py` | Paikkahaku |

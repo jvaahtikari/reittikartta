@@ -148,8 +148,20 @@
     }, opts || {}));
   }
 
+  // Suuntanuottien törmäystarkistus: näkymän aikana sijoitetut laatikot (pikseleinä), jotta
+  // mutkikkaalla väylällä laatikot eivät kasaudu päällekkäin. Nollataan jokaisessa piirrossa.
+  var placedBoxes = [];
+  var NOTE_W = 96, NOTE_H = 42;       // laatikon koko pikseleinä (likimain)
+  function boxFree(x, y) {
+    for (var i = 0; i < placedBoxes.length; i++) {
+      var b = placedBoxes[i];
+      if (Math.abs(b.x - x) < NOTE_W && Math.abs(b.y - y) < NOTE_H) return false;
+    }
+    return true;
+  }
   function render() {
     root.clearLayers();
+    placedBoxes = [];
     if (global.ChartAPI) global.ChartAPI.setSnapMarkers(!!adding || !!editingId);
     S.state.routes.forEach(function (r) {
       if (r.points.length < 1) return;
@@ -187,6 +199,10 @@
     var z = map.getZoom();
     if (sh.legBrg !== false && !isAdding) {
       var vs = map.getSize(), M = 70;
+      // Ehdokkaat kerätään ja sijoitetaan pisimmästä näkyvästä legistä alkaen. Laatikko jätetään pois,
+      // jos legi on näkymässä liian lyhyt tai laatikko osuisi jo sijoitetun päälle (myös toisen reitin).
+      // Lähemmäs zoomattaessa legit pitenevät ja laatikot tulevat näkyviin.
+      var cands = [];
       for (var li = 0; li < r.points.length - 1; li++) {
         var pa = r.points[li], pb = r.points[li + 1];
         var A = map.latLngToContainerPoint([pa.lat, pa.lng]), B = map.latLngToContainerPoint([pb.lat, pb.lng]);
@@ -194,11 +210,16 @@
         if (!vis) continue;
         var plen = A.distanceTo(B);
         if (plen < 1) continue;
-        var rh = G.rhumb(pa, pb);
-        var ux = (B.x - A.x) / plen, uy = (B.y - A.y) / plen, nx = -uy, ny = ux;
-        var off = 12 + Math.abs(nx) * 52 + Math.abs(ny) * 21;      // laatikko ei peitä reittiviivaa missään kulmassa
         var vlen = Math.hypot(vis[1].x - vis[0].x, vis[1].y - vis[0].y);
-        var reps = Math.max(1, Math.min(6, Math.floor(vlen / 520)));
+        if (vlen < 60) continue;
+        cands.push({ pa: pa, pb: pb, A: A, B: B, plen: plen, vis: vis, vlen: vlen });
+      }
+      cands.sort(function (a, b) { return b.vlen - a.vlen; });
+      cands.forEach(function (c) {
+        var rh = G.rhumb(c.pa, c.pb);
+        var ux = (c.B.x - c.A.x) / c.plen, uy = (c.B.y - c.A.y) / c.plen, nx = -uy, ny = ux;
+        var off = 12 + Math.abs(nx) * 52 + Math.abs(ny) * 21;      // laatikko ei peitä reittiviivaa missään kulmassa
+        var reps = Math.max(1, Math.min(6, Math.floor(c.vlen / 520)));
         var html = '<div class="legnote ' + (r.status === 'approved' ? 'ap' : 'dr') + '">' +
           '<span class="ln-top"><svg class="ln-arr" viewBox="-7 -7 14 14" style="transform:rotate(' + Math.round(rh.brg) + 'deg)">' +
           '<path d="M0,-6.5 L4.8,5.5 L0,3 L-4.8,5.5 Z"/></svg>' +
@@ -206,13 +227,17 @@
           '<small>' + G.fmtBrg(rh.brg + 180, 0) + ' \u00B7 ' + G.fmtNM(rh.dist) + '</small></div>';
         for (var k = 1; k <= reps; k++) {
           var tt = k / (reps + 1);
-          var mx = vis[0].x + (vis[1].x - vis[0].x) * tt + nx * off, my = vis[0].y + (vis[1].y - vis[0].y) * tt + ny * off;
+          var bx = c.vis[0].x + (c.vis[1].x - c.vis[0].x) * tt, by = c.vis[0].y + (c.vis[1].y - c.vis[0].y) * tt;
+          // ensisijaisesti legin oikealle puolelle, muuten vasemmalle; jos kumpikaan ei ole vapaa, laatikko jää pois
+          var mx = bx + nx * off, my = by + ny * off;
+          if (!boxFree(mx, my)) { mx = bx - nx * off; my = by - ny * off; if (!boxFree(mx, my)) continue; }
+          placedBoxes.push({ x: mx, y: my });
           L.marker(map.containerPointToLatLng([mx, my]), {
             icon: L.divIcon({ className: 'leg-anchor', html: html, iconSize: [0, 0] }),
             interactive: false, keyboard: false, pane: 'labelPane'
           }).addTo(g);
         }
-      }
+      });
     }
 
     // käännösmerkit seuran käytännön mukaan: 2 ja 1 kaapelia ennen jokaista käännöstä
