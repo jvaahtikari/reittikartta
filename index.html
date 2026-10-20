@@ -826,14 +826,14 @@ body.night #map .leaflet-tile-pane, body.night #map .leaflet-chart-pane, body.ni
 #editBanner {
   position: absolute; top: 20px; right: 20px; z-index: 800;
   display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px;
-  color: #fff; background: var(--draft); box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 60%;
+  color: #fff; background: var(--draft); box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 70%;
 }
 #editBanner.approved { background: #e8c21b; color: #1b1b1b; }
 #editBanner.adding { background: var(--draft); }
 #editBanner .eb-txt { font-weight: 600; }
 #editBanner button {
   border: 1px solid currentColor; background: rgba(255,255,255,.15); color: inherit;
-  border-radius: 4px; padding: 2px 9px;
+  border-radius: 4px; padding: 2px 9px; white-space: nowrap;
 }
 
 /* lukemat oikeassa alakulmassa */
@@ -4156,7 +4156,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       status: r.status, from: r.from, via: r.via, to: r.to, speed: r.speed,
       approver: r.approver, approvedAt: r.approvedAt, vessels: r.vessels,
       notes: r.notes, passes: r.passes, turns: r.turns,
-      snaps: r.points.map(function (p) { return p.snap || null; })
+      snaps: r.points.map(function (p) { return p.snap || null; }),
+      auto: r.auto || null
     };
     var s = '  <rte>\n    <name>' + esc(r.name || 'Reitti') + '</name>\n';
     if (r.desc) s += '    <desc>' + esc(r.desc) + '</desc>\n';
@@ -4607,6 +4608,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         { label: 'Suuntanuotti', action: function () { placeNote(r, leg); } },
         { label: 'Sivuutusetäisyys', action: function () { placePass(r, leg); } },
         { sep: true },
+        r.auto ? { label: 'Muuta kulkusyvyyttä ja reititä uudelleen…', action: function () { global.Routing.changeDepth(r.id); } } : null,
         { label: 'Ominaisuudet…', action: function () { openProperties(r.id); } },
         { label: 'Lopeta muokkaus', action: finishEdit },
         { sep: true },
@@ -4616,6 +4618,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       UI.menu(x, y, [
         { label: 'Ominaisuudet…', action: function () { openProperties(r.id); } },
         { label: r.status === 'approved' ? 'Muokkaa kirjastoreittiä' : 'Muokkaa reittiä', action: function () { enterEdit(r.id); } },
+        r.auto ? { label: 'Muuta kulkusyvyyttä ja reititä uudelleen…', action: function () { enterEdit(r.id); global.Routing.changeDepth(r.id); } } : null,
         { label: 'Korosta', action: function () { setHighlight(r.id, true); } },
         { label: 'Keskitä reittiin', action: function () { center(r.id); } },
         { label: 'Vie GPX-tiedostoksi', action: function () { exportRoute(r.id); } },
@@ -4911,9 +4914,10 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       kind: r.status === 'approved' ? 'approved' : 'draft',
       text: r.status === 'approved' ? 'Kirjastoreitin muokkaus aktiivinen' : 'Luonnosreitin muokkaus aktiivinen',
       buttons: [
+        global.Routing && global.Routing.bannerButton ? global.Routing.bannerButton(r) : null,
         { label: 'Ominaisuudet', action: function () { openProperties(r.id); } },
         { label: 'Lopeta muokkaus', action: function () { finishEdit(); } }
-      ]
+      ].filter(Boolean)
     });
   }
 
@@ -5100,6 +5104,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       r.passes = Array.isArray(m.passes) ? m.passes : [];
       r.turns = Array.isArray(m.turns) ? m.turns : [];
       if (Array.isArray(m.snaps)) r.points.forEach(function (p, i) { if (m.snaps[i]) p.snap = m.snaps[i]; });
+      if (m.auto && m.auto.from && m.auto.to) r.auto = m.auto;
     }
     return r;
   }
@@ -5472,16 +5477,36 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   function fmtD(v) { return G.fmtNum(v, v % 1 ? 1 : 0); }
   function today() { var d = new Date(); return d.getDate() + '.' + (d.getMonth() + 1) + '.' + d.getFullYear(); }
 
+  function descText(res, minDepth) {
+    var fw = res.fairways.map(function (f) { return (f.name || ('väylä ' + f.jnro)) + ' ' + fmtD(f.depth) + ' m'; });
+    return 'Automaattinen reititys ' + today() + ' väylää pitkin, vaadittu kulkusyvyys ' + fmtD(minDepth) + ' m. ' +
+      'Reitin pienin kulkusyvyys ' + fmtD(res.minDepth) + ' m' + (res.minName ? ' (' + res.minName + ')' : '') + '. ' +
+      'Lähtöpiste on väylällä ' + G.fmtNM(res.near.from.dist) + ' annetusta paikasta ja saapumispiste ' + G.fmtNM(res.near.to.dist) + ' määränpäästä. ' +
+      'Väylät: ' + fw.join('; ') + '. Tarkista reitti ennen käyttöä.';
+  }
+  // Reititysparametrit tallennetaan reitille (r.auto), jotta kulkusyvyyttä voi muuttaa tarkastelun aikana.
+  function autoOf(from, to, minDepth) {
+    return { from: { lat: from.lat, lng: from.lng, label: from.label || '' }, to: { lat: to.lat, lng: to.lng, label: to.label || '' }, depth: minDepth };
+  }
   function createRoute(res, from, to, minDepth) {
     var r = S.newRoute(res.points);
     r.points.forEach(function (p, i) { p.snap = res.points[i].snap; });
     r.from = from.label || G.fmtPos(from); r.to = to.label || G.fmtPos(to);
     r.name = S.autoName(r);
-    var fw = res.fairways.map(function (f) { return (f.name || ('väylä ' + f.jnro)) + ' ' + fmtD(f.depth) + ' m'; });
-    r.desc = 'Automaattinen reititys ' + today() + ' väylää pitkin, vaadittu kulkusyvyys ' + fmtD(minDepth) + ' m. ' +
-      'Reitin pienin kulkusyvyys ' + fmtD(res.minDepth) + ' m' + (res.minName ? ' (' + res.minName + ')' : '') + '. ' +
-      'Lähtöpiste on väylällä ' + G.fmtNM(res.near.from.dist) + ' annetusta paikasta ja saapumispiste ' + G.fmtNM(res.near.to.dist) + ' määränpäästä. ' +
-      'Väylät: ' + fw.join('; ') + '. Tarkista reitti ennen käyttöä.';
+    r.desc = descText(res, minDepth);
+    r.auto = autoOf(from, to, minDepth);
+    S.emit('routes');
+    return r;
+  }
+  // Korvaa olemassa olevan reitin pisteet uudella laskennalla. Suuntanuotit, sivuutukset ja
+  // käännösetäisyydet poistetaan, koska ne viittaavat vanhoihin legeihin. Nimi ja tila säilyvät.
+  function replaceRoute(r, res, minDepth) {
+    var old = r.desc || '';
+    r.points = res.points.map(function (p) { return { lat: p.lat, lng: p.lng, snap: p.snap }; });
+    r.notes = []; r.passes = []; r.turns = [];
+    r.desc = /^Automaattinen reititys /.test(old) ? descText(res, minDepth) : (old ? old + '\n' : '') + descText(res, minDepth);
+    r.auto.depth = minDepth;
+    r.modified = new Date().toISOString();
     S.emit('routes');
     return r;
   }
@@ -5502,10 +5527,13 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       '<p class="meta">Reitti on muokkaustilassa: tarkista se ja säädä reittipisteet, suuntanuotit ja sivuutusetäisyydet. ' +
       'Reitti kulkee navigointilinjoilla, joiden kulkusyvyys on vähintään vaadittu; linjat, joilla ei ole kulkusyvyystietoa, on jätetty pois' +
       (res.stats.unknown ? ' (' + res.stats.unknown + ' kpl alueella)' : '') + '. Ei navigointikäyttöön.</p></div>';
-    UI.modal({ title: 'Reitti laskettu', body: body, buttons: [{ label: 'Tarkista reitti', primary: true }] });
+    UI.modal({
+      title: 'Reitti laskettu', body: body,
+      buttons: [{ label: 'Muuta kulkusyvyyttä…', action: function () { setTimeout(function () { changeDepth(r.id); }, 0); } }, { label: 'Tarkista reitti', primary: true }]
+    });
   }
 
-  function failModal(res, from, to, minDepth) {
+  function failModal(res, from, to, minDepth, retry) {
     var why;
     if (res.reason === 'far') {
       var dfar = res.near.from.dist > res.near.to.dist ? 'Lähtöpaikka' : 'Määränpää';
@@ -5524,11 +5552,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     UI.modal({
       title: 'Reittiä ei löytynyt',
       body: '<div class="help"><p>' + UI.esc(why) + '</p><p class="meta">Kokeile pienempää kulkusyvyyttä, lähempänä väylää olevaa lähtö- tai määräpaikkaa tai jaa matka osiin. Linjat ilman kulkusyvyystietoa eivät kelpaa, koska vaatimusta ei voi silloin todentaa.</p></div>',
-      buttons: [{ label: 'Muuta hakua', primary: true, action: function () { setTimeout(function () { dialog({ from: from, to: to, depth: minDepth }); }, 0); } }, { label: 'Sulje' }]
+      buttons: [{ label: retry ? 'Muuta kulkusyvyyttä' : 'Muuta hakua', primary: true, action: function () { setTimeout(retry || function () { dialog({ from: from, to: to, depth: minDepth }); }, 0); } }, { label: 'Sulje' }]
     });
   }
 
-  function run(from, to, minDepth) {
+  // Laskenta ilmoituksineen. onDone(res) saa tuloksen; palauttaa lupauksen reitistä tai null.
+  function compute(from, to, minDepth, onDone) {
     var st = S.state.settings;
     st.routeDepth = minDepth; S.save();
     UI.banner({ kind: 'adding', text: 'Reititetään väylää pitkin: ' + (from.label || G.fmtPos(from)) + ' → ' + (to.label || G.fmtPos(to)) + ', kulkusyvyys ≥ ' + fmtD(minDepth) + ' m. Haetaan väylätietoja…' });
@@ -5539,19 +5568,67 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     }).then(function (res) {
       App.setLabel('');
       UI.banner(null);
-      if (!res.ok) { if (global.Routes.editingId) global.Routes.updateBanner(); failModal(res, from, to, minDepth); return null; }
-      var r = createRoute(res, from, to, minDepth);
-      global.Routes.enterEdit(r.id);
-      App.fitTo(L.latLngBounds(r.points.map(function (p) { return [p.lat, p.lng]; })).pad(0.15), { maxZoom: 15 });
-      if (global.console && console.debug) console.debug('Reititys', Date.now() - t0, 'ms', res.rawPoints, 'pistettä →', r.points.length);
-      summary(r, res, minDepth);
-      return r;
+      if (global.console && console.debug && res.ok) console.debug('Reititys', Date.now() - t0, 'ms', res.rawPoints, 'pistettä →', res.points.length);
+      return onDone(res);
     }, function (e) {
       App.setLabel('');
       UI.banner(null);
       if (global.Routes.editingId) global.Routes.updateBanner();
       UI.toast('Reititys epäonnistui: ' + (e && e.message ? e.message : 'väylätietojen haku ei onnistunut.'), true);
       return null;
+    });
+  }
+  function fitRoute(r) {
+    App.fitTo(L.latLngBounds(r.points.map(function (p) { return [p.lat, p.lng]; })).pad(0.15), { maxZoom: 15 });
+  }
+  function run(from, to, minDepth) {
+    return compute(from, to, minDepth, function (res) {
+      if (!res.ok) { if (global.Routes.editingId) global.Routes.updateBanner(); failModal(res, from, to, minDepth); return null; }
+      var r = createRoute(res, from, to, minDepth);
+      global.Routes.enterEdit(r.id);
+      fitRoute(r);
+      summary(r, res, minDepth);
+      return r;
+    });
+  }
+  // Uudelleenreititys samalla lähtö- ja määräpaikalla mutta uudella kulkusyvyydellä. Nykyinen reitti
+  // säilyy, jos uutta ei löydy.
+  function reroute(id, minDepth) {
+    var r = S.routeById(id);
+    if (!r || !r.auto) return Promise.resolve(null);
+    var a = r.auto;
+    return compute(a.from, a.to, minDepth, function (res) {
+      if (global.Routes.editingId === id) global.Routes.updateBanner();
+      if (!res.ok) { failModal(res, a.from, a.to, minDepth, function () { changeDepth(id); }); return null; }
+      replaceRoute(r, res, minDepth);
+      if (global.Routes.editingId !== id) global.Routes.enterEdit(id); else global.Routes.updateBanner();
+      fitRoute(r);
+      summary(r, res, minDepth);
+      return r;
+    });
+  }
+  // Kulkusyvyyden muutos reitin tarkastelun aikana: pieni dialogi, joka reitittää uudelleen.
+  function changeDepth(id) {
+    var r = S.routeById(id);
+    if (!r || !r.auto) { UI.toast('Reittiä ei ole laskettu automaattisesti, joten kulkusyvyyttä ei voi vaihtaa.', true); return; }
+    var a = r.auto;
+    var body = '<div class="form">' +
+      '<label for="rdDepth">Pienin kulkusyvyys (m)</label><input id="rdDepth" type="number" min="0.1" max="30" step="0.1" value="' + a.depth + '">' +
+      '<div class="hint">Nykyinen reitti on laskettu kulkusyvyydellä ' + fmtD(a.depth) + ' m. Reitti lasketaan uudelleen samalla lähtöpaikalla (' + UI.esc(a.from.label || G.fmtPos(a.from)) + ') ja määränpäällä (' + UI.esc(a.to.label || G.fmtPos(a.to)) + ').</div>' +
+      '<div class="hint full">Reittipisteet korvataan uusilla, ja suuntanuotit, sivuutus- ja käännösetäisyydet poistetaan, koska ne viittaavat vanhoihin legeihin. Jos reittiä ei löydy, nykyinen reitti säilyy.</div>' +
+      '<div class="err" id="rdErr" hidden></div></div>';
+    UI.modal({
+      title: 'Muuta kulkusyvyyttä', body: body, enterButton: 1,
+      buttons: [{ label: 'Peruuta' }, {
+        label: 'Reititä uudelleen', primary: true, action: function (md) {
+          var d = parseFloat(String(md.querySelector('#rdDepth').value).replace(',', '.'));
+          if (!isFinite(d) || d < 0.1 || d > 30) { var er = md.querySelector('#rdErr'); er.textContent = 'Anna pienin kulkusyvyys väliltä 0,1–30 m.'; er.hidden = false; return false; }
+          d = Math.round(d * 10) / 10;
+          if (d === a.depth) { UI.toast('Kulkusyvyys on jo ' + fmtD(d) + ' m.'); return; }
+          setTimeout(function () { reroute(id, d); }, 0);
+        }
+      }],
+      onOpen: function (md) { var i = md.querySelector('#rdDepth'); setTimeout(function () { i.focus(); i.select(); }, 40); }
     });
   }
 
@@ -5697,7 +5774,11 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   function init(m, app) { map = m; App = app; }
 
   global.Routing = {
-    init: init, dialog: dialog, run: run, plan: plan,
+    init: init, dialog: dialog, run: run, plan: plan, changeDepth: changeDepth, reroute: reroute,
+    // reitin muokkausilmoituksen lisäpainike, kun reitti on laskettu automaattisesti
+    bannerButton: function (r) {
+      return r && r.auto ? { label: 'Kulkusyvyys ' + fmtD(r.auto.depth) + ' m', action: function () { changeDepth(r.id); } } : null;
+    },
     // testattavaksi
     buildGraph: buildGraph, astar: astar, nearestOnGraph: nearestOnGraph, attach: attach, lineDepth: lineDepth
   };

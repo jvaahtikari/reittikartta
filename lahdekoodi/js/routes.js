@@ -370,6 +370,7 @@
         { label: 'Suuntanuotti', action: function () { placeNote(r, leg); } },
         { label: 'Sivuutusetäisyys', action: function () { placePass(r, leg); } },
         { sep: true },
+        r.auto ? { label: 'Muuta kulkusyvyyttä ja reititä uudelleen…', action: function () { global.Routing.changeDepth(r.id); } } : null,
         { label: 'Ominaisuudet…', action: function () { openProperties(r.id); } },
         { label: 'Lopeta muokkaus', action: finishEdit },
         { sep: true },
@@ -379,6 +380,7 @@
       UI.menu(x, y, [
         { label: 'Ominaisuudet…', action: function () { openProperties(r.id); } },
         { label: r.status === 'approved' ? 'Muokkaa kirjastoreittiä' : 'Muokkaa reittiä', action: function () { enterEdit(r.id); } },
+        r.auto ? { label: 'Muuta kulkusyvyyttä ja reititä uudelleen…', action: function () { enterEdit(r.id); global.Routing.changeDepth(r.id); } } : null,
         { label: 'Korosta', action: function () { setHighlight(r.id, true); } },
         { label: 'Keskitä reittiin', action: function () { center(r.id); } },
         { label: 'Vie GPX-tiedostoksi', action: function () { exportRoute(r.id); } },
@@ -674,9 +676,10 @@
       kind: r.status === 'approved' ? 'approved' : 'draft',
       text: r.status === 'approved' ? 'Kirjastoreitin muokkaus aktiivinen' : 'Luonnosreitin muokkaus aktiivinen',
       buttons: [
+        global.Routing && global.Routing.bannerButton ? global.Routing.bannerButton(r) : null,
         { label: 'Ominaisuudet', action: function () { openProperties(r.id); } },
         { label: 'Lopeta muokkaus', action: function () { finishEdit(); } }
-      ]
+      ].filter(Boolean)
     });
   }
 
@@ -863,6 +866,7 @@
       r.passes = Array.isArray(m.passes) ? m.passes : [];
       r.turns = Array.isArray(m.turns) ? m.turns : [];
       if (Array.isArray(m.snaps)) r.points.forEach(function (p, i) { if (m.snaps[i]) p.snap = m.snaps[i]; });
+      if (m.auto && m.auto.from && m.auto.to) r.auto = m.auto;
     }
     return r;
   }

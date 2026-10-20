@@ -19,7 +19,8 @@
       status: r.status, from: r.from, via: r.via, to: r.to, speed: r.speed,
       approver: r.approver, approvedAt: r.approvedAt, vessels: r.vessels,
       notes: r.notes, passes: r.passes, turns: r.turns,
-      snaps: r.points.map(function (p) { return p.snap || null; })
+      snaps: r.points.map(function (p) { return p.snap || null; }),
+      auto: r.auto || null
     };
     var s = '  <rte>\n    <name>' + esc(r.name || 'Reitti') + '</name>\n';
     if (r.desc) s += '    <desc>' + esc(r.desc) + '</desc>\n';

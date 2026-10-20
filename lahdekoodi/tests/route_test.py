@@ -103,6 +103,36 @@ with sync_playwright() as pw:
         check(len(r['points']) == 2 and r['points'][0]['snap']['kind'] == 'line', 'kaksi pistettä samalla linjalla, kiinnitys linjaan')
         page.keyboard.press('Escape'); page.wait_for_timeout(200)
 
+    # 4b) kulkusyvyyden muutos tarkastelun aikana: 2,0 m (5 pistettä) → 1,5 m (3 pistettä) → 3,0 m ei löydy, reitti säilyy
+    r = route_via_dialog(page, '61 33.6N 23 42.0E', '61 48.0N 23 54.0E', 2.0)
+    if r:
+        rid = r['id']
+        check(r.get('auto') and r['auto']['depth'] == 2.0, 'reititysparametrit tallessa reitillä')
+        btn = page.locator('#editBanner button', has_text='Kulkusyvyys')
+        check(btn.count() == 1 and '2 m' in btn.inner_text(), 'muokkausilmoituksessa painike Kulkusyvyys 2 m')
+        page.evaluate("Store.state.routes[Store.state.routes.length-1].notes.push({leg:0,lat:61.6,lng:23.73,ok:false})")
+        btn.click()
+        page.wait_for_selector('#rdDepth')
+        shot(page, 'r4b-kulkusyvyys-dialogi')
+        page.fill('#rdDepth', '1.5')
+        page.click('.modal .btn.primary')
+        page.wait_for_selector('.modal h2', timeout=15000)
+        check(page.inner_text('.modal h2') == 'Reitti laskettu', 'uudelleenreititys näyttää yhteenvedon')
+        page.click('.modal .btn.primary'); page.wait_for_timeout(200)
+        r2 = page.evaluate("Store.routeById(%r)" % rid)
+        check(len(r2['points']) == 3 and r2['auto']['depth'] == 1.5, 'sama reitti korvattiin oikotiereitillä (3 pistettä, 1,5 m)')
+        check(r2['name'] == r['name'] and not r2['notes'], 'nimi säilyi, vanhat suuntanuotit poistettiin')
+        check(page.evaluate('Routes.editingId') == rid, 'reitti on edelleen muokkaustilassa')
+        check('1,5 m' in page.locator('#editBanner button', has_text='Kulkusyvyys').inner_text(), 'painike näyttää uuden kulkusyvyyden')
+        page.locator('#editBanner button', has_text='Kulkusyvyys').click()
+        page.wait_for_selector('#rdDepth'); page.fill('#rdDepth', '3'); page.click('.modal .btn.primary')
+        page.wait_for_selector('.modal h2', timeout=15000)
+        check(page.inner_text('.modal h2') == 'Reittiä ei löytynyt', 'kelvoton kulkusyvyys antaa virheilmoituksen')
+        page.click('.modal .btn:not(.primary)'); page.wait_for_timeout(200)
+        r3 = page.evaluate("Store.routeById(%r)" % rid)
+        check(len(r3['points']) == 3 and r3['auto']['depth'] == 1.5, 'nykyinen reitti säilyi, kun uutta ei löytynyt')
+        page.keyboard.press('Escape'); page.wait_for_timeout(200)
+
     # 5) kulkusyvyys 3,0 m: ei yhtään kelvollista linjaa
     body = route_via_dialog(page, '61 33.6N 23 42.0E', '61 48.0N 23 54.0E', 3.0, expect_ok=False)
     check('3 m' in body, 'virheilmoitus mainitsee vaaditun kulkusyvyyden')
