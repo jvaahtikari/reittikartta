@@ -6,6 +6,14 @@ Reittikartta on selainpohjainen reittisuunnittelun työkalu suomalaisella merika
 
 **Ei navigointikäyttöön.** Kartta-aineistot ovat avointa dataa, jota ei ole tarkoitettu navigointiin. Traficomin määritelmän mukaan myös reitin suunnittelu on navigointikäyttöä. Ajettavat reitit tarkistetaan ja hyväksytään SARNavissa virallista ENC-karttaa vasten.
 
+## Suhde SARNaviin
+
+Reittikartta ei ole SARNavin kanssa kilpaileva hanke, eikä sen tarkoituksena ole korvata SARNavia. SARNav on Meripelastusseuran virallinen karttaohjelma, ja ajettavat reitit tarkistetaan ja hyväksytään siinä.
+
+Reittikartta on reittien luonnosteluun tarkoitettu apuväline. Valmiit reitit siirretään SARNaviin GPX-tiedostona. Sovelluksen toiminnot ja nimitykset mukailevat SARNavia, jotta siirtyminen sovelluksesta toiseen olisi luontevaa.
+
+Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusseuran tuote, eikä sitä ole tehty seuran toimeksiannosta.
+
 ## Ominaisuudet lyhyesti
 
 - **Kolme karttapohjaa:** Traficomin rasterimerikartta, ENC-kartta perinteisin tai ECDIS-symbolein sekä vektorikartta, joka on terävä tasolle 20 asti. Rasterista ja ENC:stä siirrytään vektorikarttaan itsestään, kun zoomataan tasoa 17 lähemmäs.
