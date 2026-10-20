@@ -186,7 +186,11 @@ def bridges():
     # silta navigointilinjalla (23.700,61.560)-(23.760,61.640), t = 0,8
     return fc([{'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [23.748, 61.624]},
                 'properties': {'id': 6, 'nimi': 'Testisalmen silta', 'alittav_vayla_korkraj_vesiv': '4.5', 'kayttotarkoitukset_nimi': 'Vesistösilta',
-                               'nykyinen_omistaja': 'Väylävirasto', 'tunnus': 'H-28', 'sijaintikunnat': 'Testilä'}}])
+                               'nykyinen_omistaja': 'Väylävirasto', 'tunnus': 'H-28', 'sijaintikunnat': 'Testilä'}},
+               # sama avattava silta kuin sulkukanava-aineiston Testisilta: yhdistetään, ei piirretä kahdesti
+               {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [23.6512, 61.7612]},
+                'properties': {'id': 7, 'nimi': 'Testisillan kääntösilta', 'alittav_vayla_korkraj_vesiv': '1', 'kayttotarkoitukset_nimi': 'Vesistösilta',
+                               'nykyinen_omistaja': 'Väylävirasto', 'tunnus': 'H-1214', 'sijaintikunnat': 'Testilä'}}])
 
 
 def solid_png(w, h, rgba):

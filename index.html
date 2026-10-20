@@ -4047,7 +4047,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '&PROPERTYNAME=nimi,alittav_vayla_korkraj_vesiv,kayttotarkoitukset_nimi,nykyinen_omistaja,tunnus,sijaintikunnat,geom'),
       get(VAYLA_WFS + '&TYPENAME=vesivaylatiedot:sulkukanavat_uusi')
     ]).then(function (res) {
-      structs.bridges = res[0]; structs.locks = res[1];
+      structs.bridges = res[0]; structs.locks = res[1]; structs.merged = false;
       structs.loading = false; pending--; setStatus(); renderStructures();
     }, function () {
       structs.loading = false; pending--; failed++; setStatus();
@@ -4126,41 +4126,98 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       pane: 'aidPane', keyboard: false
     });
   }
-  function structLabel(ll, ang, text, along) {
-    // merkintä vesialueelle sillan viereen (väylän suuntaan) tai sulun sivuun (poikki väylän)
-    var P = map.latLngToContainerPoint(ll), a = (ang == null ? -90 : ang + (along ? 0 : 90)) * Math.PI / 180, d = along ? 26 : 16;
-    var Q = map.containerPointToLatLng([P.x + Math.cos(a) * d, P.y + Math.sin(a) * d]);
-    L.marker(Q, { icon: L.divIcon({ className: 'st-lab-ico', html: '<span class="st-lab">' + text + '</span>', iconSize: [0, 0] }), interactive: false, keyboard: false, pane: 'labelPane' }).addTo(structLayer);
+  // Merkinnät sijoitetaan törmäystarkistuksella: ensin kaikkien merkkien paikat, sitten merkinnät
+  // vapaaseen kohtaan (sillalla ensisijaisesti väylän suuntaan, sululla sivulle). Jos tilaa ei ole,
+  // merkintä jää pois ja tulee näkyviin lähemmäs zoomattaessa.
+  function placeLabels(items) {
+    var boxes = items.map(function (it) { var P = map.latLngToContainerPoint(it.ll); return { x: P.x, y: P.y, w: it.sym, h: it.sym }; });
+    function free(b) {
+      for (var i = 0; i < boxes.length; i++) {
+        var o = boxes[i];
+        if (Math.abs(o.x - b.x) < (o.w + b.w) / 2 && Math.abs(o.y - b.y) < (o.h + b.h) / 2) return false;
+      }
+      return true;
+    }
+    items.forEach(function (it) {
+      if (!it.label) return;
+      var P = map.latLngToContainerPoint(it.ll), w = it.label.replace(/<[^>]+>/g, '').length * 6.3 + 10, h = 17;
+      var a0 = it.ang == null ? -90 : it.ang;
+      var dirs = it.ang == null ? [-90, 90, 0, 180] : it.along ? [a0, a0 + 180, a0 + 90, a0 - 90] : [a0 + 90, a0 - 90, a0, a0 + 180];
+      for (var k = 0; k < dirs.length * 2; k++) {
+        var a = dirs[k % dirs.length] * Math.PI / 180, ext = Math.abs(Math.cos(a)) * w / 2 + Math.abs(Math.sin(a)) * h / 2;
+        var d = it.sym / 2 + ext + (k < dirs.length ? 3 : 14);
+        var b = { x: P.x + Math.cos(a) * d, y: P.y + Math.sin(a) * d, w: w, h: h };
+        if (!free(b)) continue;
+        boxes.push(b);
+        L.marker(map.containerPointToLatLng([b.x, b.y]), { icon: L.divIcon({ className: 'st-lab-ico', html: '<span class="st-lab">' + it.label + '</span>', iconSize: [0, 0] }), interactive: false, keyboard: false, pane: 'labelPane' }).addTo(structLayer);
+        return;
+      }
+    });
+  }
+  // Sama avattava silta voi olla sekä sulkukanava-aineistossa että taitorakennerekisterissä
+  // (esim. Muroleen kanavan kääntösilta). Ne yhdistetään: rekisteristä saadaan suljetun sillan
+  // alikulkukorkeus, ja silta piirretään kerran avattavan sillan merkillä.
+  var OPENING_RE = /kääntö|nosto|avattav|läppä|siirto|sillan avaus/i;
+  function mergeStructures() {
+    structs.locks.forEach(function (f) {
+      if (!/silta/i.test((f.properties || {}).kanavaaluetyyppi || '')) return;
+      var c = centroid(f.geometry), best = null, bd = 150;
+      if (!c) return;
+      structs.bridges.forEach(function (b) {
+        var g = b.geometry && b.geometry.coordinates;
+        if (!g || b._merged) return;
+        var d = G.distance(c, { lat: g[1], lng: g[0] });
+        if (d < bd) { bd = d; best = b; }
+      });
+      if (best) { best._merged = true; f._reg = best.properties || {}; }
+    });
+  }
+  function openingPopup(p, reg) {
+    var base = lockPopup(p);
+    if (!reg) return base;
+    var extra = popTable([['Alikulkukorkeus suljettuna', fm(reg.alittav_vayla_korkraj_vesiv, 'm')], ['Rekisterissä', reg.nimi], ['Tunnus', reg.tunnus]]);
+    return base.replace('<div class="pop-src">', extra + '<div class="pop-src">').replace('Väylävirasto, sulkukanavat', 'Väylävirasto, sulkukanavat ja taitorakennerekisteri');
   }
   function renderStructures() {
     if (!structLayer) return;
     structLayer.clearLayers();
     var z = map.getZoom();
     if (!structuresOn() || z < 11 || !structs.bridges) return;
-    var view = map.getBounds().pad(0.1), len = z >= 13 ? 36 : 28;
-    structs.bridges.forEach(function (f) {
-      var c = f.geometry && f.geometry.coordinates;
-      if (!c) return;
-      var ll = L.latLng(c[1], c[0]);
-      if (!view.contains(ll)) return;
-      var p = f.properties || {}, ang = fairwayAngle(ll, 60);
-      structMarker(ll, bridgeSvg(false, len), ang == null ? 0 : ang + 90).bindPopup(bridgePopup(p)).addTo(structLayer);
-      var h = fm(p.alittav_vayla_korkraj_vesiv, 'm');
-      if (h && z >= 12) structLabel(ll, ang, '↕ ' + escapeHtml(h), true);
-    });
+    if (!structs.merged) { mergeStructures(); structs.merged = true; }
+    var view = map.getBounds().pad(0.1), len = z >= 13 ? 36 : 28, items = [];
     structs.locks.forEach(function (f) {
       var ll = centroid(f.geometry);
       if (!ll || !view.contains(ll)) return;
       var p = f.properties || {}, ang = fairwayAngle(ll, 60), isBridge = /silta/i.test(p.kanavaaluetyyppi || '');
-      if (z >= 15 && f.geometry && /Polygon/.test(f.geometry.type)) {
-        L.geoJSON(f.geometry, { style: { color: '#111', weight: 1.4, fillColor: '#fff', fillOpacity: 0.35, interactive: false } }).addTo(structLayer);
+      if (isBridge) {
+        structMarker(ll, bridgeSvg(true, len), ang == null ? 0 : ang + 90, 'st-open').bindPopup(openingPopup(p, f._reg)).addTo(structLayer);
+        var hc = f._reg ? fm(f._reg.alittav_vayla_korkraj_vesiv, 'm') : null;
+        // aineiston aluskorkeus on suurin aluksen korkeus sillan ollessa avattuna, ei suljetun sillan
+        // alikulkukorkeus, joten karttaan merkitään vain rekisterin alikulkukorkeus
+        items.push({ ll: ll, ang: ang, sym: len * 0.8, along: true, label: z >= 12 ? (hc ? '↕ ' + escapeHtml(hc) + ' · avattava' : 'avattava') : null });
+        return;
       }
-      var m = isBridge ? structMarker(ll, bridgeSvg(true, len), ang == null ? 0 : ang + 90, 'st-open') : structMarker(ll, lockSvg(), ang == null ? 0 : ang, 'st-lock');
-      m.bindPopup(lockPopup(p)).addTo(structLayer);
-      // aineiston aluskorkeus on suurin sallittu aluksen korkeus (avattavalla sillalla avattuna), ei
-      // suljetun sillan alikulkukorkeus, joten sitä ei merkitä karttaan vaan vain ponnahdusikkunaan
-      if (z >= 13) structLabel(ll, ang, escapeHtml(p.nimi || '') + (isBridge ? ' (avattava)' : ''), isBridge);
+      // sulku: tasolta 15 kammion ääriviiva (napautettava), kauempana kanavan merkki
+      if (z >= 15 && f.geometry && /Polygon/.test(f.geometry.type)) {
+        L.geoJSON(f.geometry, { style: { color: '#111', weight: 1.6, fillColor: '#fff', fillOpacity: 0.35 } }).bindPopup(lockPopup(p)).addTo(structLayer);
+        items.push({ ll: ll, ang: ang, sym: 14, along: false, label: escapeHtml(p.nimi || 'Sulku') + ' (sulku)' });
+      } else {
+        structMarker(ll, lockSvg(), ang == null ? 0 : ang, 'st-lock').bindPopup(lockPopup(p)).addTo(structLayer);
+        items.push({ ll: ll, ang: ang, sym: 24, along: false, label: z >= 13 ? escapeHtml(p.nimi || '') : null });
+      }
     });
+    structs.bridges.forEach(function (f) {
+      if (f._merged) return;
+      var c = f.geometry && f.geometry.coordinates;
+      if (!c) return;
+      var ll = L.latLng(c[1], c[0]);
+      if (!view.contains(ll)) return;
+      var p = f.properties || {}, ang = fairwayAngle(ll, 60), opening = OPENING_RE.test(p.nimi || '');
+      structMarker(ll, bridgeSvg(opening, len), ang == null ? 0 : ang + 90, opening ? 'st-open' : '').bindPopup(bridgePopup(p)).addTo(structLayer);
+      var h = fm(p.alittav_vayla_korkraj_vesiv, 'm');
+      items.push({ ll: ll, ang: ang, sym: len * 0.8, along: true, label: h && z >= 12 ? '↕ ' + escapeHtml(h) + (opening ? ' · avattava' : '') : null });
+    });
+    placeLabels(items);
   }
 
   function escapeHtml(s) {

@@ -78,17 +78,33 @@ with sync_playwright() as pw:
     page.evaluate("document.querySelector('.st-ico:not(.st-lock):not(.st-open) .st-sym').click()"); page.wait_for_timeout(300)
     pop = page.inner_text('.leaflet-popup-content')
     check('Testisalmen silta' in pop and 'Alikulkukorkeus' in pop and '4,5 m' in pop, 'sillan ponnahdusikkuna')
-    page.evaluate("App.map.closePopup(); App.map.setView([61.691, 23.791], 15)"); page.wait_for_timeout(1500)
-    lock = page.evaluate("!!document.querySelector('.st-lock')")
-    check(lock, 'sulku piirtyy')
+    page.evaluate("App.map.closePopup(); App.map.setView([61.691, 23.791], 14)"); page.wait_for_timeout(1500)
+    check(page.evaluate("!!document.querySelector('.st-lock')"), 'sulku piirtyy kanavan merkillä')
     page.evaluate("document.querySelector('.st-lock .st-sym').click()"); page.wait_for_timeout(300)
     pop = page.inner_text('.leaflet-popup-content')
     print('   sulku:', pop.replace('\n', ' | '))
     check('Testisulku' in pop and 'Suurin alus' in pop and 'syväys 2,4 m' in pop, 'sulun ponnahdusikkuna: suurin alus')
     check('Testisulku' in page.inner_text('#map'), 'sulun nimi kartalla')
+    page.evaluate("App.map.closePopup(); App.map.setView([61.691, 23.791], 15)"); page.wait_for_timeout(1500)
+    check(not page.evaluate("!!document.querySelector('.st-lock')") and 'Testisulku (sulku)' in page.inner_text('#map'),
+          'tasolla 15 sulkukammion ääriviiva ja nimi, ei pistemerkkiä')
     shot(page, 'st2-sulku')
     page.evaluate("App.map.closePopup(); App.map.setView([61.761, 23.651], 14)"); page.wait_for_timeout(1500)
-    check(page.evaluate("!!document.querySelector('.st-open')"), 'avattava silta omalla merkillään')
+    nb = page.evaluate("[...document.querySelectorAll('.st-ico')].map(e => e.classList.contains('st-open'))")
+    labs = page.evaluate("[...document.querySelectorAll('.st-lab')].map(e => e.textContent)")
+    print('   avattava:', nb, labs)
+    check(nb == [True], 'avattava silta kerran omalla merkillään (rekisterin kääntösilta yhdistetty)')
+    check('↕ 1 m · avattava' in labs, 'suljetun sillan alikulkukorkeus rekisteristä')
+    page.evaluate("document.querySelector('.st-open .st-sym').click()"); page.wait_for_timeout(300)
+    pop = page.inner_text('.leaflet-popup-content')
+    check('Alikulkukorkeus suljettuna' in pop and 'Testisillan kääntösilta' in pop and 'Suurin aluksen korkeus sillan ollessa avattuna' in pop,
+          'avattavan sillan ponnahdusikkunassa molempien aineistojen tiedot')
+    page.evaluate("App.map.closePopup()")
+    # merkintöjen törmäystarkistus: merkinnät eivät mene toistensa päälle
+    page.evaluate("App.map.setView([61.70, 23.79], 12)"); page.wait_for_timeout(800)
+    rects = page.evaluate("[...document.querySelectorAll('.st-lab')].map(e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; })")
+    ov = sum(1 for i in range(len(rects)) for j in range(i + 1, len(rects)) if rects[i][0] < rects[j][2] - 1 and rects[j][0] < rects[i][2] - 1 and rects[i][1] < rects[j][3] - 1 and rects[j][1] < rects[i][3] - 1)
+    check(ov == 0, 'rakenteiden merkinnät eivät mene päällekkäin (%d merkintää)' % len(rects))
 
     # --- ECDIS-värit ---
     # testiaineiston viitat ovat 23,735–23,787° välillä: kapealla näytöllä taso 13, jotta kaikki ovat näkyvissä
