@@ -11,7 +11,7 @@
   var map, App;
 
   var TOL = 2.5;            // solmujen yhdistämistoleranssi (m)
-  var SIMPLIFY = 5;         // reittipisteiden harvennus: suurin poikkeama linjasta (m)
+  var SIMPLIFY = 10;        // reittipisteiden harvennus: suurin poikkeama linjasta (m); kaarien alle 50 m:n pätkät yhdistyvät
   var MAX_ATTACH = 20000;   // lähtö- tai määräpaikka saa olla enintään näin kaukana kelvollisesta väylästä (m)
 
   // ---------- kulkusyvyys ----------

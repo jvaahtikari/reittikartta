@@ -119,7 +119,7 @@ Reitti kulkee aina virallista väylää pitkin. Sovellus hakee Väyläviraston n
 
 Lähtöpiste ja saapumispiste ovat lähimmät kelvolliset väyläpisteet annettujen paikkojen lähellä. Reitti alkaa ja päättyy siis väylällä, ja esimerkiksi laiturilta väylälle johtava osuus lisätään käsin. Yhteenveto kertoo, kuinka kaukana nämä pisteet ovat annetuista paikoista.
 
-Laskettu reitti avautuu muokkaustilaan, ja sitä säädetään kuten muitakin reittejä. Reittipisteet ovat väyläaineiston pisteitä, ja ne näkyvät kiinnitettyinä. Suorat jatkokohdat ja kaarien välipisteet on harvennettu niin, että reittiviiva poikkeaa navigointilinjasta enintään viisi metriä. Yhteenveto näyttää reitin pienimmän kulkusyvyyden, käytetyt väylät kulkusyvyyksineen ja osuuksineen sekä muistutuksen, että reitti tarkistetaan ennen käyttöä. Samat tiedot kirjataan reitin huomioihin. Oletuksena pienin kulkusyvyys on aluksen turvasyvyys.
+Laskettu reitti avautuu muokkaustilaan, ja sitä säädetään kuten muitakin reittejä. Reittipisteet ovat väyläaineiston pisteitä, ja ne näkyvät kiinnitettyinä. Suorat jatkokohdat ja kaarien välipisteet on harvennettu niin, että reittiviiva poikkeaa navigointilinjasta enintään kymmenen metriä, mikä pysyy väyläalueen sisällä. Pistokokeessa Helsingistä Porkkalaan (25 mpk) reitti laskettiin alle sekunnissa, ja Helsingin saariston mutkikkaalla väylällä reittiin jäi noin 50 legiä. Yhteenveto näyttää reitin pienimmän kulkusyvyyden, käytetyt väylät kulkusyvyyksineen ja osuuksineen sekä muistutuksen, että reitti tarkistetaan ennen käyttöä. Samat tiedot kirjataan reitin huomioihin. Oletuksena pienin kulkusyvyys on aluksen turvasyvyys.
 
 ## Väyläkiinnitys ja sijaintitarkkuus
 
