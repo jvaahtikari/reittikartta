@@ -307,8 +307,8 @@
           var cur = st.show.speed === true || (st.show.speed == null && st.base === 'vector'); st.show.speed = !cur; chart.refresh(); S.save(); } },
         { label: 'Laiturit ja aallonmurtajat (OpenStreetMap, vektoripohja)', checked: st.show.piers !== false, keepOpen: true, action: function () {
           st.show.piers = st.show.piers === false; chart.refresh(); S.save(); } },
-        { label: 'Kivet, karikot ja nimistö (MML, vektoripohja)', checked: st.show.mml !== false && !!st.mmlKey, keepOpen: true, action: function () {
-          if (!st.mmlKey) { UI.closeMenu(); settings(); return; }
+        { label: 'Kivet, karikot ja nimistö (MML, vektoripohja)', checked: st.show.mml !== false && chart.mmlInfo.available, keepOpen: true, action: function () {
+          if (!chart.mmlInfo.available) { UI.closeMenu(); settings(); return; }
           st.show.mml = st.show.mml === false; chart.refresh(); S.save(); } },
         { head: 'Reitit' },
         item('Reittinuotit', toggleShow('notes', function (on) { if (!on) st.show.passes = false; })),
@@ -567,7 +567,7 @@
       '<label for="sTurn">Käännösetäisyys (mpk)</label><input id="sTurn" type="number" min="0.1" max="10" step="0.1" value="' + st.turnWarnNM + '">' +
       '<div class="hint">Tätä pidempi käännösetäisyys näytetään punaisena.</div>' +
       '<label for="sMml">MML API-avain</label><input id="sMml" type="text" autocomplete="off" spellcheck="false" value="' + UI.esc(st.mmlKey || '') + '">' +
-      '<div class="hint">Maanmittauslaitoksen avoimen rajapinnan maksuton avain (kivet, karikot, matalikot ja nimistö vektoripohjalle). Avaimen saa Maanmittauslaitoksen verkkosivuilta.</div>' +
+      '<div class="hint">Maanmittauslaitoksen avoimen rajapinnan maksuton avain (kivet, karikot, matalikot ja nimistö vektoripohjalle). Avaimen saa Maanmittauslaitoksen verkkosivuilta.' + (/^https?:$/.test(location.protocol) ? ' Verkkoversiossa avain on valmiiksi palvelimella, joten kenttä voi jäädä tyhjäksi.' : '') + '</div>' +
       '</div>';
     UI.modal({
       title: 'Asetukset', body: body,

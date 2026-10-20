@@ -864,12 +864,24 @@
   var MML_NAMES = 'https://avoin-paikkatieto.maanmittauslaitos.fi/geographic-names/features/v1';
   var mmlKey = '', mmlCols = null, mmlColsErr = '', mmlStore = { rock: {}, rocks: {}, shoal: {}, name: {} }, mmlLoaded = {}, mmlLayer = null;
   var MML_CELL = { w: 0.05, h: 0.025 };
-  function mmlUrl(base, path, extra) { return base + path + (path.indexOf('?') < 0 ? '?' : '&') + 'f=json&api-key=' + encodeURIComponent(mmlKey) + (extra || ''); }
+  // Verkkoversiossa (https) kutsut kulkevat sovelluksen oman välityspalvelun kautta (/api/mml), joka lisää
+  // palvelimelle tallennetun API-avaimen; käyttäjän ei tarvitse hankkia omaa avainta. Käyttäjän oma avain
+  // ja tiedostona avattu sovellus kutsuvat Maanmittauslaitosta suoraan.
+  var MML_HOST = 'https://avoin-paikkatieto.maanmittauslaitos.fi';
+  var mmlProxy = /^https?:$/.test(global.location.protocol), mmlProxyOk = null;
+  function mmlAvailable() { return !!mmlKey || (mmlProxy && mmlProxyOk !== false); }
+  function mmlUrl(base, path, extra) {
+    if (!mmlKey && mmlProxy) return '/api/mml?p=' + encodeURIComponent(base.replace(MML_HOST, '') + path) + '&f=json' + (extra || '');
+    return base + path + (path.indexOf('?') < 0 ? '?' : '&') + 'f=json&api-key=' + encodeURIComponent(mmlKey) + (extra || '');
+  }
   function mmlStatus(t) { if (statusEl && t) { statusEl.textContent = t; statusEl.className = 'net err'; setTimeout(setStatus, 8000); } }
   function mmlDiscover() {
-    if (mmlCols || !mmlKey) return Promise.resolve(mmlCols);
+    if (mmlCols || !mmlAvailable()) return Promise.resolve(mmlCols);
+    var viaProxy = !mmlKey;
     return fetch(mmlUrl(MML_TOPO, '/collections')).then(function (r) {
+      if (viaProxy && (r.status === 503 || r.status === 404 || r.status === 405)) { mmlProxyOk = false; throw new Error('palvelin'); }
       if (r.status === 401 || r.status === 403) throw new Error('avain');
+      if (viaProxy) mmlProxyOk = true;
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (j) {
@@ -878,13 +890,14 @@
       mmlCols = { rock: find(/^vesikivi$/i) || find(/vesikivi(?!kko)/i), rocks: find(/vesikivikko/i), shoal: find(/matalikko/i) };
       return mmlCols;
     }).catch(function (e) {
-      mmlColsErr = e.message === 'avain' ? 'Maanmittauslaitoksen API-avain ei kelpaa' : 'Maanmittauslaitoksen rajapintaan ei saada yhteyttä';
-      mmlStatus(mmlColsErr);
+      mmlColsErr = e.message === 'avain' ? (viaProxy ? 'Palvelimen Maanmittauslaitoksen API-avain ei kelpaa' : 'Maanmittauslaitoksen API-avain ei kelpaa')
+        : e.message === 'palvelin' ? '' : 'Maanmittauslaitoksen rajapintaan ei saada yhteyttä';
+      if (mmlColsErr) mmlStatus(mmlColsErr);
       mmlCols = null;
       throw e;
     });
   }
-  function mmlWanted() { return !!mmlKey && vecOn() && map.getZoom() >= 13 && show.mml !== false; }
+  function mmlWanted() { return mmlAvailable() && vecOn() && map.getZoom() >= 13 && show.mml !== false; }
   function loadMml() {
     if (!mmlWanted()) return;
     var bb = map.getBounds().pad(0.1);
@@ -992,7 +1005,7 @@
     return { id: f.id, name: String(nm), info: [type, muni].filter(Boolean).join(', ') || 'paikannimi', lat: c[1], lng: c[0], kind: 'name' };
   }
   function searchNames(q, center) {
-    if (!mmlKey) return Promise.resolve([]);
+    if (!mmlAvailable()) return Promise.resolve([]);
     var word = q.trim().replace(/[*?,]/g, ' ').replace(/\s+/g, ' ').trim();
     if (!word) return Promise.resolve([]);
     var path = '/collections/placenames_simple/items';
@@ -1468,7 +1481,7 @@
       setUnderlay: function (on) { if (!vecOn()) setUnderlayLayer(!!on, 0.55); },
       setMmlKey: setMmlKey,
       searchNames: searchNames,
-      get mmlInfo() { return { key: !!mmlKey, cols: mmlCols, err: mmlColsErr, n: Object.keys(mmlStore.rock).length }; },
+      get mmlInfo() { return { key: !!mmlKey, proxy: !mmlKey && mmlProxy && mmlProxyOk !== false, available: mmlAvailable(), cols: mmlCols, err: mmlColsErr, n: Object.keys(mmlStore.rock).length }; },
       get landKind() { return landKind; },
       setSafety: setSafety,
       get safetyDepth() { return safetyDepth; },

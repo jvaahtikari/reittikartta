@@ -119,7 +119,7 @@
     var remote = q.length >= 3 && !p;
     render(groups, remote);
     if (!remote) return;
-    var hasKey = !!S.state.settings.mmlKey && global.ChartAPI && global.ChartAPI.searchNames;
+    var hasKey = !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available);
     Promise.all([
       aids(q),
       hasKey ? global.ChartAPI.searchNames(q, ref).catch(function () { return []; }) : Promise.resolve([])
