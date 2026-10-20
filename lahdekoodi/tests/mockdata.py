@@ -127,6 +127,13 @@ def vaylat():
     ])
 
 
+def taulu():
+    # linjataulujen linja: takataulusta etutaulun kautta väylän linjaosuuden päähän (sama linja kahdesti kuten aineistossa)
+    line = [[23.690, 61.545], [23.700, 61.560], [23.760, 61.640]]
+    return fc([{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': [line, line]},
+                'properties': {'taululinjaid': 77, 'jnro': '9215', 'suunta': '23.5', 'tyyppi': '2', 'etutlid': '500', 'takatlid': '501'}}])
+
+
 def canals():
     return fc([
         {'type': 'Feature', 'geometry': {'type': 'Polygon', 'coordinates': [[[23.790, 61.690], [23.792, 61.690], [23.792, 61.692], [23.790, 61.692], [23.790, 61.690]]]},

@@ -975,6 +975,7 @@ body.panel-closed #panel { display: none; }
 }
 .fw-b { background: rgba(255,255,255,.78); padding: 1px 3px; border-radius: 2px; }
 .fw-b.off { color: #000; }
+.fw-b.ll { font-weight: 500; font-size: 11px; background: rgba(255,255,255,.7); }
 .fw-d { border: 1px solid #222; background: #fff; padding: 1px 3px; text-shadow: none; font-weight: 700; }
 body.night .fw-lab { color: #e9eef2; text-shadow: 0 0 2px #000, 0 0 3px #000, 0 0 4px #000; }
 body.night .fw-b { background: rgba(10,14,18,.6); }
@@ -2965,7 +2966,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 
   // ---------------- Väyläviraston aineisto ----------------
   var CELL_W = 0.25, CELL_H = 0.125;
-  var store = { navlines: {}, vaylat: {}, aids: {}, signs: {}, lights: {}, sectors: {}, speed: {} };
+  var store = { navlines: {}, vaylat: {}, aids: {}, signs: {}, lights: {}, sectors: {}, speed: {}, taulu: {} };
   var loaded = {};      // "tyyppi:cx:cy" → true / 'pending'
   var LAYERS = {
     navlines: { type: 'vesivaylatiedot:navigointilinjat_uusi', id: 'navigointilinjaid', minZoom: 11 },
@@ -2977,7 +2978,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     aids2: { type: 'vesivaylatiedot:turvalaitteet_muut_vaylanpitajat', id: 'id', minZoom: 12, into: 'aids', prefix: 'm' },
     lights: { type: 'vesivaylatiedot:loistot_uusi', id: 'id', minZoom: 11 },
     sectors: { type: 'vesivaylatiedot:valosektorit_uusi', id: 'id', minZoom: 11 },
-    speed: { type: 'vesivaylatiedot:vesivaylien_nopeusrajoitusalueet', id: 'id', minZoom: 11 }
+    speed: { type: 'vesivaylatiedot:vesivaylien_nopeusrajoitusalueet', id: 'id', minZoom: 11 },
+    // linjataulujen linjat: taululinja kulkee takataulusta etutaulun kautta väylän linjaosuuden päähän
+    taulu: { type: 'vesivaylatiedot:taululinjat_uusi', id: 'taululinjaid', minZoom: 11 }
   };
   var onDataCbs = [];
   var statusEl = null;
@@ -2999,6 +3002,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     var z = map.getZoom();
     var w = [];
     if (z >= LAYERS.navlines.minZoom && (show.bearings || show.depths || show.lines || vecOn() || show.snap !== false)) { w.push('navlines'); w.push('navlines2'); w.push('vaylat'); }
+    if (z >= LAYERS.taulu.minZoom && (show.lines || vecOn())) w.push('taulu');
     if (z >= LAYERS.aids.minZoom && (show.aids || vecOn() || show.snap !== false)) { w.push('aids'); w.push('aids2'); }
     if (z >= LAYERS.lights.minZoom && lightsOn()) { w.push('lights'); w.push('sectors'); }
     if (z >= LAYERS.speed.minZoom && speedOn()) w.push('speed');
@@ -3261,12 +3265,44 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 
   function angDiff(a, b) { var d = Math.abs(G.norm360(a) - G.norm360(b)); return d > 180 ? 360 - d : d; }
 
+  // Linjataulujen linjat kuten ENC:ssä (S-52 NAVLNE): ohut katkoviiva, joka jatkuu väylän linjaosuuden
+  // päästä taulujen kautta, ja linjan tosisuunta merkittynä linjan ulommaiseen päähän ("055,5°").
+  // Navigointilinja piirretään yhtenäisenä sen päälle, joten väylällä näkyy yhtenäinen viiva ja
+  // väylän ulkopuolella katkoviiva.
+  function renderLeadingLines(view, z) {
+    if (!(show.lines || vecOn()) || z < LAYERS.taulu.minZoom) return;
+    Object.keys(store.taulu).forEach(function (id) {
+      var f = store.taulu[id], p = f.properties || {};
+      var parts = lineCoords(f);
+      if (!parts.length) return;
+      // MultiLineString sisältää saman linjan kahdesti: piirretään vain ensimmäinen osa
+      var coords = parts[0];
+      var ll = coords.map(function (c) { return L.latLng(c[1], c[0]); });
+      if (ll.length < 2 || !view.intersects(L.latLngBounds(ll))) return;
+      L.polyline(ll, { color: '#1b1b1b', weight: 1.1, opacity: 0.9, dashArray: '7 5', interactive: false }).addTo(lineLayer);
+      var brg = parseFloat(String(p.suunta == null ? '' : p.suunta).replace(',', '.'));
+      if (!isFinite(brg) || z < 12) return;
+      // merkintä linjan ulommaiseen päähän (taulut ovat linjan alkupäässä), 25 % matkaa päästä sisäänpäin
+      var A = map.latLngToLayerPoint(ll[ll.length - 2]), B = map.latLngToLayerPoint(ll[ll.length - 1]);
+      var len = A.distanceTo(B);
+      if (len < 40) return;
+      var t = Math.max(0.5, 1 - 60 / len);
+      var mid = L.latLng(ll[ll.length - 2].lat + (ll[ll.length - 1].lat - ll[ll.length - 2].lat) * t, ll[ll.length - 2].lng + (ll[ll.length - 1].lng - ll[ll.length - 2].lng) * t);
+      if (!view.contains(mid)) return;
+      var theta = Math.atan2(B.y - A.y, B.x - A.x) * 180 / Math.PI;
+      if (theta > 90 || theta < -90) theta += 180;
+      var html = '<div class="fw-lab" style="transform:translate(-50%,-50%) rotate(' + theta.toFixed(1) + 'deg) translateY(-9px)"><span class="fw-b ll">' + G.fmtBrg(brg, 1) + '</span></div>';
+      L.marker(mid, { icon: L.divIcon({ className: 'fw-anchor', html: html, iconSize: [0, 0] }), interactive: false, keyboard: false, pane: 'labelPane' }).addTo(labelLayer);
+    });
+  }
+
   function renderFairways() {
     labelLayer.clearLayers();
     lineLayer.clearLayers();
     var z = map.getZoom();
     if (z < LAYERS.navlines.minZoom) return;
     var view = map.getBounds().pad(0.05);
+    renderLeadingLines(view, z);
     var minPx = z >= 14 ? 120 : z >= 13 ? 140 : 170;
     // Merkintä siirretään väylälinjan viereen kohtisuoraan linjaa vastaan (ei linjan päälle).
     // Rasterin viiva paksunee suurennettaessa, joten etäisyys kasvaa tasoilla 16–17.
@@ -3373,7 +3409,10 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     var z = map.getZoom();
     if (!lightsOn() || z < LAYERS.lights.minZoom) return;
     var CS = global.ChartSymbols, view = map.getBounds().pad(0.2);
-    var R = z >= 15 ? 54 : z >= 13 ? 44 : 34;
+    // Sektorikaaret ja sektorirajat kuten ENC:ssä (S-52 LIGHTS05): kaari 20 mm ja rajaviivat 25 mm
+    // näytöllä zoomaustasosta riippumatta. Kauempaa (tasot 11–12) ja kapealla näytöllä hieman pienempinä.
+    var MM = 96 / 25.4, scale = (z >= 13 ? 1 : 0.65) * (map.getSize().x < 700 ? 0.8 : 1);
+    var R = Math.round(20 * MM * scale), RLEG = Math.round(25 * MM * scale);
     var aidsDrawn = (show.aids || vecOn()) && z >= LAYERS.aids.minZoom;
     function px(ll, brg, r) {
       var P = map.latLngToContainerPoint(ll), a = brg * Math.PI / 180;
@@ -3388,7 +3427,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       secs.forEach(function (sc) {
         if (((sc.a1 - sc.a0) % 360 + 360) % 360 === 0) {
           // ympäri näkyvä valo: valon värinen kehä (sädekehä) loiston ympärille, pienempi kuin sektorikaaret
-          var rr = Math.round(R * 0.55), ring = [];
+          var rr = Math.round(R * 0.3), ring = [];
           for (var q = 0; q <= 360; q += 6) ring.push(px(ll, q, rr));
           L.polyline(ring, { color: '#3a3a3a', weight: 6, opacity: 0.5, interactive: false, pane: 'flarePane' }).addTo(lightLayer);
           L.polyline(ring, { color: CS.lightColour(sc.c), weight: 4, opacity: 1, interactive: false, pane: 'flarePane', className: 'light-ring' }).addTo(lightLayer);
@@ -3402,7 +3441,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         L.polyline(pts, { color: '#3a3a3a', weight: 7, opacity: 0.5, interactive: false, lineCap: 'butt', pane: 'flarePane' }).addTo(lightLayer);
         L.polyline(pts, { color: CS.lightColour(sc.c), weight: 5, opacity: 1, interactive: false, lineCap: 'butt', pane: 'flarePane' }).addTo(lightLayer);
         [s0, s1].forEach(function (bb) {
-          L.polyline([ll, px(ll, bb, R * 1.45)], { color: '#333', weight: 1, dashArray: '2 3', opacity: 0.85, interactive: false, pane: 'flarePane' }).addTo(lightLayer);
+          L.polyline([ll, px(ll, bb, RLEG)], { color: '#333', weight: 1, dashArray: '3 3', opacity: 0.85, interactive: false, pane: 'flarePane' }).addTo(lightLayer);
         });
       });
       // valon pisara jokaisella valolla (myös ympäri näkyvät loistot ja apuloistot), yksi kutakin väriä
@@ -4119,7 +4158,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         if (k.signs) renderSigns();
         if (k.lights || k.sectors) renderLights();
         if (k.speed) renderSpeed();
-        if (k.navlines || k.vaylat) { vcache = null; renderFairways(); renderSnapMarkers(); }
+        if (k.navlines || k.vaylat || k.taulu) { vcache = null; renderFairways(); renderSnapMarkers(); }
       }, 60);
     });
     loadVisible(); renderAll(); setTimeout(drawBorder, 0);
@@ -7857,7 +7896,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '<h3>Syvä vesi</h3><p>Työkalurivin aaltopainike tai <b>Näytä → Syvä vesi</b> värittää vesialueet aluksen turvasyvyyden mukaan: turvasyvyyttä syvempi vesi vaaleana, varottava vesi sinisenä ja niiden raja tummana viivana. Turvasyvyys asetetaan aluskohtaisesti (<b>Näytä → Aseta turvasyvyys</b>). Kartan oikeassa yläkulmassa näkyy, mikä syvyyskäyrä toimii rajana tässä näkymässä. Aineiston syvyysvälit ovat paikoin karkeita.</p>' +
         '<h3>Reitin suunnat ja käännösmerkit</h3><p>Jokaiselle kuvassa näkyvälle legille piirretään automaattisesti suuntanuotti: kulkusuunta isolla, nuoli kulkusuuntaan sekä vastasuunta ja legin pituus. Nuotti siirtyy legin näkyvälle osalle, kun karttaa liikutetaan, ja pitkällä legillä nuotteja on useampia. Jokaisen käännöksen eteen piirretään seuran käytännön mukaiset merkit 2 ja 1 kaapelia ennen käännöspistettä. Molemmat voi kytkeä pois valikosta Näytä.</p>' +
         '<h3>Karttamerkit</h3><p>Kivet, turvalaitteet ja valot piirretään Suomen merikarttojen merkeillä Traficomin virallisen merkkienselityksen mukaan, samoin kuin rasterikartassa.</p>' + legend() +
-        '<h3>Loistot, sektorit ja muut väylätiedot</h3><p>Jokaisella loistolla, apuloistolla ja valaistulla viitalla on valon värinen pisara (valkoinen valo keltaisena, kuten merikartassa). Sektoriloistoilla näytetään lisäksi valosektorit värikaarina ja sektorirajat pisteviivoina sekä loistorekisterin valotunnus (esim. VQ (3) 5 s). Ympäri näkyvä valo piirretään valon värisenä renkaana. Valotiedot tulevat Väyläviraston turvalaite- ja loistorekistereistä, myös muiden väylänpitäjien laitteista. Lisäksi näytetään nopeusrajoitusalueet ja muiden väylänpitäjien (esim. kaupunkien) väylät ja turvalaitteet. Vektoripohjalla ne ovat oletuksena näkyvissä, muilla pohjilla ne saa päälle valikosta Näytä.</p>' +
+        '<h3>Loistot, sektorit ja muut väylätiedot</h3><p>Jokaisella loistolla, apuloistolla ja valaistulla viitalla on valon värinen pisara (valkoinen valo keltaisena, kuten merikartassa). Sektoriloistoilla näytetään lisäksi valosektorit värikaarina ja sektorirajat pisteviivoina sekä loistorekisterin valotunnus (esim. VQ (3) 5 s). Kaaret ja sektorirajat ovat ENC-kartan (S-52) mitoissa: kaari 20 mm ja rajat 25 mm näytöllä. Linjataulujen linjat piirretään ENC:n tapaan katkoviivana väylän jatkeeksi, ja linjan tosisuunta on merkitty linjan päähän. Ympäri näkyvä valo piirretään valon värisenä renkaana. Valotiedot tulevat Väyläviraston turvalaite- ja loistorekistereistä, myös muiden väylänpitäjien laitteista. Lisäksi näytetään nopeusrajoitusalueet ja muiden väylänpitäjien (esim. kaupunkien) väylät ja turvalaitteet. Vektoripohjalla ne ovat oletuksena näkyvissä, muilla pohjilla ne saa päälle valikosta Näytä.</p>' +
         '<h3>Laiturit ja aallonmurtajat</h3><p>Vektorikartalla laiturit ja aallonmurtajat haetaan Maanmittauslaitoksen maastotietokannasta ja OpenStreetMapista ja piirretään veden päälle, koska maapohjan laiturit jäisivät vesialueen alle. Maanmittauslaitoksen laituriviivat tulevat aina, OpenStreetMapista lisätään alueina kartoitetut laiturit, aallonmurtajat ja pengerrykset, kun OpenStreetMapin Overpass-palvelu vastaa. Ensimmäinen haku uudelle alueelle voi kestää OSM:n palvelimen kuormasta riippuen puolikin minuuttia. Haetut alueet tallennetaan selaimeen 30 päiväksi, joten seuraavalla kerralla ne näkyvät heti. OpenStreetMap on vapaaehtoisten kartoittama, joten laiturit ovat yleensä oikeissa paikoissa, mutta niitä ei ole tarkastettu merenkulun tarpeisiin, ja kelluvat laiturit voivat olla kausittaisia.</p>' +
         '<h3>Maanmittauslaitoksen kivet, karikot ja nimistö</h3><p>Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta vedenalaiset (⊤), vedenpinnassa olevat (+) ja vedenpäälliset (⊥) kivet sekä vesikivikot ja matalikot, jotka rajataan mustalla pisteviivalla (vaarakäyrä). Vektorikartan maapohja on oletuksena OpenStreetMap, ja sen päällä näytetään myös nimistörekisterin paikannimet. Maanmittauslaitoksen taustakartan voi valita Näytä-valikosta. Verkkoversiossa Maanmittauslaitoksen aineisto toimii ilman omaa avainta. Tiedostona avattu versio tarvitsee maksuttoman API-avaimen, joka syötetään kohtaan <b>Tiedosto → Asetukset</b>. Maastotietokannan kivet on kartoitettu maastokartoituksessa, eivät merenmittauksessa.</p>' +
         '<h3>Vektorikartta</h3><p>Karttapohjaksi voi valita myös vektorikartan. Siinä syvyysalueet, syvyyskäyrät, syvyysluvut ja rantaviiva piirretään Traficomin merikarttatietokannasta ja väylät ja turvalaitteet Väyläviraston aineistosta, joten kartta on terävä kaikilla tasoilla ja kattaa myös Näsijärven. Maalla näkyy oletuksena OpenStreetMap ja sen päällä Maanmittauslaitoksen paikannimet. Paperikartan nimistö ja erikoismerkinnät puuttuvat.</p>' +

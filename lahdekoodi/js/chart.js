@@ -436,7 +436,7 @@
 
   // ---------------- Väyläviraston aineisto ----------------
   var CELL_W = 0.25, CELL_H = 0.125;
-  var store = { navlines: {}, vaylat: {}, aids: {}, signs: {}, lights: {}, sectors: {}, speed: {} };
+  var store = { navlines: {}, vaylat: {}, aids: {}, signs: {}, lights: {}, sectors: {}, speed: {}, taulu: {} };
   var loaded = {};      // "tyyppi:cx:cy" → true / 'pending'
   var LAYERS = {
     navlines: { type: 'vesivaylatiedot:navigointilinjat_uusi', id: 'navigointilinjaid', minZoom: 11 },
@@ -448,7 +448,9 @@
     aids2: { type: 'vesivaylatiedot:turvalaitteet_muut_vaylanpitajat', id: 'id', minZoom: 12, into: 'aids', prefix: 'm' },
     lights: { type: 'vesivaylatiedot:loistot_uusi', id: 'id', minZoom: 11 },
     sectors: { type: 'vesivaylatiedot:valosektorit_uusi', id: 'id', minZoom: 11 },
-    speed: { type: 'vesivaylatiedot:vesivaylien_nopeusrajoitusalueet', id: 'id', minZoom: 11 }
+    speed: { type: 'vesivaylatiedot:vesivaylien_nopeusrajoitusalueet', id: 'id', minZoom: 11 },
+    // linjataulujen linjat: taululinja kulkee takataulusta etutaulun kautta väylän linjaosuuden päähän
+    taulu: { type: 'vesivaylatiedot:taululinjat_uusi', id: 'taululinjaid', minZoom: 11 }
   };
   var onDataCbs = [];
   var statusEl = null;
@@ -470,6 +472,7 @@
     var z = map.getZoom();
     var w = [];
     if (z >= LAYERS.navlines.minZoom && (show.bearings || show.depths || show.lines || vecOn() || show.snap !== false)) { w.push('navlines'); w.push('navlines2'); w.push('vaylat'); }
+    if (z >= LAYERS.taulu.minZoom && (show.lines || vecOn())) w.push('taulu');
     if (z >= LAYERS.aids.minZoom && (show.aids || vecOn() || show.snap !== false)) { w.push('aids'); w.push('aids2'); }
     if (z >= LAYERS.lights.minZoom && lightsOn()) { w.push('lights'); w.push('sectors'); }
     if (z >= LAYERS.speed.minZoom && speedOn()) w.push('speed');
@@ -732,12 +735,44 @@
 
   function angDiff(a, b) { var d = Math.abs(G.norm360(a) - G.norm360(b)); return d > 180 ? 360 - d : d; }
 
+  // Linjataulujen linjat kuten ENC:ssä (S-52 NAVLNE): ohut katkoviiva, joka jatkuu väylän linjaosuuden
+  // päästä taulujen kautta, ja linjan tosisuunta merkittynä linjan ulommaiseen päähän ("055,5°").
+  // Navigointilinja piirretään yhtenäisenä sen päälle, joten väylällä näkyy yhtenäinen viiva ja
+  // väylän ulkopuolella katkoviiva.
+  function renderLeadingLines(view, z) {
+    if (!(show.lines || vecOn()) || z < LAYERS.taulu.minZoom) return;
+    Object.keys(store.taulu).forEach(function (id) {
+      var f = store.taulu[id], p = f.properties || {};
+      var parts = lineCoords(f);
+      if (!parts.length) return;
+      // MultiLineString sisältää saman linjan kahdesti: piirretään vain ensimmäinen osa
+      var coords = parts[0];
+      var ll = coords.map(function (c) { return L.latLng(c[1], c[0]); });
+      if (ll.length < 2 || !view.intersects(L.latLngBounds(ll))) return;
+      L.polyline(ll, { color: '#1b1b1b', weight: 1.1, opacity: 0.9, dashArray: '7 5', interactive: false }).addTo(lineLayer);
+      var brg = parseFloat(String(p.suunta == null ? '' : p.suunta).replace(',', '.'));
+      if (!isFinite(brg) || z < 12) return;
+      // merkintä linjan ulommaiseen päähän (taulut ovat linjan alkupäässä), 25 % matkaa päästä sisäänpäin
+      var A = map.latLngToLayerPoint(ll[ll.length - 2]), B = map.latLngToLayerPoint(ll[ll.length - 1]);
+      var len = A.distanceTo(B);
+      if (len < 40) return;
+      var t = Math.max(0.5, 1 - 60 / len);
+      var mid = L.latLng(ll[ll.length - 2].lat + (ll[ll.length - 1].lat - ll[ll.length - 2].lat) * t, ll[ll.length - 2].lng + (ll[ll.length - 1].lng - ll[ll.length - 2].lng) * t);
+      if (!view.contains(mid)) return;
+      var theta = Math.atan2(B.y - A.y, B.x - A.x) * 180 / Math.PI;
+      if (theta > 90 || theta < -90) theta += 180;
+      var html = '<div class="fw-lab" style="transform:translate(-50%,-50%) rotate(' + theta.toFixed(1) + 'deg) translateY(-9px)"><span class="fw-b ll">' + G.fmtBrg(brg, 1) + '</span></div>';
+      L.marker(mid, { icon: L.divIcon({ className: 'fw-anchor', html: html, iconSize: [0, 0] }), interactive: false, keyboard: false, pane: 'labelPane' }).addTo(labelLayer);
+    });
+  }
+
   function renderFairways() {
     labelLayer.clearLayers();
     lineLayer.clearLayers();
     var z = map.getZoom();
     if (z < LAYERS.navlines.minZoom) return;
     var view = map.getBounds().pad(0.05);
+    renderLeadingLines(view, z);
     var minPx = z >= 14 ? 120 : z >= 13 ? 140 : 170;
     // Merkintä siirretään väylälinjan viereen kohtisuoraan linjaa vastaan (ei linjan päälle).
     // Rasterin viiva paksunee suurennettaessa, joten etäisyys kasvaa tasoilla 16–17.
@@ -844,7 +879,10 @@
     var z = map.getZoom();
     if (!lightsOn() || z < LAYERS.lights.minZoom) return;
     var CS = global.ChartSymbols, view = map.getBounds().pad(0.2);
-    var R = z >= 15 ? 54 : z >= 13 ? 44 : 34;
+    // Sektorikaaret ja sektorirajat kuten ENC:ssä (S-52 LIGHTS05): kaari 20 mm ja rajaviivat 25 mm
+    // näytöllä zoomaustasosta riippumatta. Kauempaa (tasot 11–12) ja kapealla näytöllä hieman pienempinä.
+    var MM = 96 / 25.4, scale = (z >= 13 ? 1 : 0.65) * (map.getSize().x < 700 ? 0.8 : 1);
+    var R = Math.round(20 * MM * scale), RLEG = Math.round(25 * MM * scale);
     var aidsDrawn = (show.aids || vecOn()) && z >= LAYERS.aids.minZoom;
     function px(ll, brg, r) {
       var P = map.latLngToContainerPoint(ll), a = brg * Math.PI / 180;
@@ -859,7 +897,7 @@
       secs.forEach(function (sc) {
         if (((sc.a1 - sc.a0) % 360 + 360) % 360 === 0) {
           // ympäri näkyvä valo: valon värinen kehä (sädekehä) loiston ympärille, pienempi kuin sektorikaaret
-          var rr = Math.round(R * 0.55), ring = [];
+          var rr = Math.round(R * 0.3), ring = [];
           for (var q = 0; q <= 360; q += 6) ring.push(px(ll, q, rr));
           L.polyline(ring, { color: '#3a3a3a', weight: 6, opacity: 0.5, interactive: false, pane: 'flarePane' }).addTo(lightLayer);
           L.polyline(ring, { color: CS.lightColour(sc.c), weight: 4, opacity: 1, interactive: false, pane: 'flarePane', className: 'light-ring' }).addTo(lightLayer);
@@ -873,7 +911,7 @@
         L.polyline(pts, { color: '#3a3a3a', weight: 7, opacity: 0.5, interactive: false, lineCap: 'butt', pane: 'flarePane' }).addTo(lightLayer);
         L.polyline(pts, { color: CS.lightColour(sc.c), weight: 5, opacity: 1, interactive: false, lineCap: 'butt', pane: 'flarePane' }).addTo(lightLayer);
         [s0, s1].forEach(function (bb) {
-          L.polyline([ll, px(ll, bb, R * 1.45)], { color: '#333', weight: 1, dashArray: '2 3', opacity: 0.85, interactive: false, pane: 'flarePane' }).addTo(lightLayer);
+          L.polyline([ll, px(ll, bb, RLEG)], { color: '#333', weight: 1, dashArray: '3 3', opacity: 0.85, interactive: false, pane: 'flarePane' }).addTo(lightLayer);
         });
       });
       // valon pisara jokaisella valolla (myös ympäri näkyvät loistot ja apuloistot), yksi kutakin väriä
@@ -1590,7 +1628,7 @@
         if (k.signs) renderSigns();
         if (k.lights || k.sectors) renderLights();
         if (k.speed) renderSpeed();
-        if (k.navlines || k.vaylat) { vcache = null; renderFairways(); renderSnapMarkers(); }
+        if (k.navlines || k.vaylat || k.taulu) { vcache = null; renderFairways(); renderSnapMarkers(); }
       }, 60);
     });
     loadVisible(); renderAll(); setTimeout(drawBorder, 0);

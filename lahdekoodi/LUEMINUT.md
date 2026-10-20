@@ -90,10 +90,11 @@ Jokaisella loistolla, apuloistolla ja valaistulla viitalla on valon värinen pis
 
 Väyläviraston avoimesta rajapinnasta näytetään lisäksi seuraavat tiedot:
 - väylien suunnat molempiin suuntiin ja kulkusyvyydet
+- linjataulujen linjat tosisuuntineen
 - vesiliikennemerkit ja nopeusrajoitusalueet
 - muiden väylänpitäjien, kuten kaupunkien, väylät ja turvalaitteet
 
-Väylän suunta on navigointilinjan virallinen tosisuunta, kun se on saatavilla, ja muuten se lasketaan linjan geometriasta. Vektoripohjalla valosektorit ja nopeusrajoitukset ovat oletuksena näkyvissä, ja muilla pohjilla ne saa päälle valikosta Näytä.
+Linjataulujen linjat piirretään vektorikartalle (ja väylälinjojen kanssa muillekin pohjille) ENC:n tapaan: ohut katkoviiva jatkuu väylän linjaosuuden päästä taulujen kautta, ja linjan tosisuunta, esimerkiksi 055,5°, on merkitty linjan ulommaiseen päähän. Aineisto on Väyläviraston taululinjat. Valosektorit piirretään ENC-kartan (S-52) mitoilla: sektorikaaren säde on näytöllä 20 mm ja sektorirajat ulottuvat 25 mm:iin zoomaustasosta riippumatta, kauempaa ja kapealla näytöllä hieman pienempinä. Väylän suunta on navigointilinjan virallinen tosisuunta, kun se on saatavilla, ja muuten se lasketaan linjan geometriasta. Vektoripohjalla valosektorit ja nopeusrajoitukset ovat oletuksena näkyvissä, ja muilla pohjilla ne saa päälle valikosta Näytä.
 
 Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta kivet, vesikivikot ja matalikot (Näytä → Kivet, karikot ja nimistö). Maastotietokannan kivet on kartoitettu maastokartoituksessa eikä merenmittauksessa, joten ne eivät ole navigointitarkkoja.
 

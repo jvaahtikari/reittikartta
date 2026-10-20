@@ -290,6 +290,7 @@ body.panel-closed #panel { display: none; }
 }
 .fw-b { background: rgba(255,255,255,.78); padding: 1px 3px; border-radius: 2px; }
 .fw-b.off { color: #000; }
+.fw-b.ll { font-weight: 500; font-size: 11px; background: rgba(255,255,255,.7); }
 .fw-d { border: 1px solid #222; background: #fff; padding: 1px 3px; text-shadow: none; font-weight: 700; }
 body.night .fw-lab { color: #e9eef2; text-shadow: 0 0 2px #000, 0 0 3px #000, 0 0 4px #000; }
 body.night .fw-b { background: rgba(10,14,18,.6); }

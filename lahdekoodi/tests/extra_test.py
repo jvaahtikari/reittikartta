@@ -28,6 +28,16 @@ with sync_playwright() as pw:
 
     cols = page.evaluate("""(() => { const c = new Set(); App.map.eachLayer(l => { if (l instanceof L.Polyline && l.options.weight === 5) c.add(l.options.color); }); return [...c]; })()""")
     check('#13a04a' in cols and '#e2211c' in cols and '#f2c311' in cols, 'valosektorit piirtyvät väreittäin (valkoinen keltaisena): %s' % cols)
+    # sektorikaaret ja sektorirajat ENC:n kokoisina (S-52 LIGHTS05): kaari 20 mm ≈ 76 px, rajaviiva 25 mm ≈ 94 px
+    sect = page.evaluate("""(() => { const P = App.map.latLngToContainerPoint([61.630, 23.770]); let arc = 0, leg = 0;
+      App.map.eachLayer(l => { if (!(l instanceof L.Polyline)) return; const ll = l.getLatLngs(); if (!ll.length || Array.isArray(ll[0])) return;
+        const rs = ll.map(q => App.map.latLngToContainerPoint(q).distanceTo(P));
+        if (l.options.weight === 5 && Math.max(...rs) < 200) arc = Math.max(arc, ...rs);
+        if (l.options.dashArray === '3 3' && Math.min(...rs) < 2) leg = Math.max(leg, ...rs); });
+      return { arc: Math.round(arc), leg: Math.round(leg) }; })()""")
+    print('sektorin mitat', sect)
+    check(abs(sect['arc'] - 76) <= 3, 'sektorikaari 20 mm:n säteellä (%d px)' % sect['arc'])
+    check(abs(sect['leg'] - 94) <= 3, 'sektorirajat ulottuvat 25 mm:iin (%d px)' % sect['leg'])
     # valon pisara jokaisella valolla: loisto (3 väriä), valaistu itäviitta (valkoinen), apuloisto (punainen) ja sektoriapuloisto (vihreä)
     fl = page.evaluate("[...document.querySelectorAll('.flare-ico path')].map(p => p.getAttribute('fill'))")
     print('pisarat', fl)

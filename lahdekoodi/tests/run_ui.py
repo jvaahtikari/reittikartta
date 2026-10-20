@@ -162,7 +162,7 @@ def handle(route, request):
             else:
                 data['features'] = [f for f in data['features'] if term in (f['properties'].get(field) or '').lower()]
             return route.fulfill(status=200, headers=cors, content_type='application/json', body=json.dumps(data))
-        extra = {'loistot_uusi': mockdata.lights, 'valosektorit_uusi': mockdata.sectors, 'nopeusrajoitusalueet': mockdata.speed}
+        extra = {'loistot_uusi': mockdata.lights, 'valosektorit_uusi': mockdata.sectors, 'nopeusrajoitusalueet': mockdata.speed, 'taululinjat': mockdata.taulu}
         for k, fn in extra.items():
             if k in t:
                 return route.fulfill(status=200, headers=cors, content_type='application/json', body=fn())
