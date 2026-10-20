@@ -57,6 +57,8 @@
     return items.sort(function (a, b) { return a.km - b.km; });
   }
   function hasNames() { return !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available); }
+  // syy, miksi paikannimiä ei tullut (avain puuttuu, palvelin ei vastaa), tai tyhjä
+  function namesNote() { return global.ChartAPI && global.ChartAPI.namesNote ? global.ChartAPI.namesNote() : ''; }
   // turvalaitteet ja paikannimet, etäisyysjärjestyksessä pisteestä at
   function remote(q, at) {
     return Promise.all([
@@ -147,7 +149,6 @@
     var more = q.length >= 3 && !p;
     render(groups, more);
     if (!more) return;
-    var hasKey = hasNames();
     remote(q, ref).then(function (all) {
       if (my !== seq) return;
       var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
@@ -155,7 +156,8 @@
       groups.push({ title: 'Alle 27 mpk (50 km)', items: near });
       groups.push({ title: 'Kauempana', items: far });
       render(groups, false);
-      if (!hasKey) box.insertAdjacentHTML('beforeend', '<div class="sn">Paikannimet haetaan Maanmittauslaitoksen nimistöstä, kun API-avain on asetettu (Tiedosto → Asetukset).</div>');
+      var note = namesNote();
+      if (note) box.insertAdjacentHTML('beforeend', '<div class="sn">' + UI.esc(note) + '</div>');
       // jos lähialueen tuloksia ei näy kartalla, siirretään kartta niihin kerran tätä hakua kohden
       var vis = global.App.visibleBounds(), nearPts = near.filter(function (it) { return vis.contains([it.lat, it.lng]); });
       if (near.length && !nearPts.length && fittedFor !== q) { fittedFor = q; fitResults(); }
@@ -236,5 +238,5 @@
     input.addEventListener('focus', function () { if (box.innerHTML && input.value.trim().length >= 2) box.hidden = false; });
   }
 
-  global.Search = { init: init, run: run, find: find, NEAR_KM: NEAR_KM, get hasNames() { return hasNames(); }, get results() { return results; } };
+  global.Search = { init: init, run: run, find: find, NEAR_KM: NEAR_KM, namesNote: namesNote, get hasNames() { return hasNames(); }, get results() { return results; } };
 })(window);

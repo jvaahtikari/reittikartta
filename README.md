@@ -57,7 +57,7 @@ Kun sivu avataan uudelleen samalla laitteella ja samalla selaimella, kaikki on t
 - **Yksityinen selaus:** yksityisessä ikkunassa tiedot katoavat, kun ikkuna suljetaan.
 - **Varmuuskopio:** reitit siirretään laitteelta toiselle ja varmistetaan varmuuskopiolla. Varmuuskopio tehdään valikosta Tiedosto → Tee varmuuskopio, ja sen voi palauttaa samasta valikosta myös toiselle laitteelle.
 
-Oma sijainti näytetään vain käyttäjän omalla näytöllä, eikä sitä tallenneta eikä lähetetä minnekään. Karttatiilet ja aineistot haetaan suoraan palveluista, jotka ovat Traficom, Väylävirasto, Maanmittauslaitos ja OpenStreetMap. Ne näkevät tavanomaisesti, miltä alueelta karttaa pyydetään.
+Oma sijainti näytetään vain käyttäjän omalla näytöllä, eikä sitä tallenneta eikä lähetetä minnekään. Karttatiilet ja aineistot haetaan suoraan palveluista, jotka ovat Traficom, Väylävirasto, Maanmittauslaitos ja OpenStreetMap. Ne näkevät tavanomaisesti, miltä alueelta karttaa pyydetään. Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla, joka ei käytä evästeitä eikä yksilöi käyttäjiä. Tiedostona avatussa sovelluksessa laskuria ei ladata.
 
 ## Karttapohjat
 
@@ -113,7 +113,9 @@ Alus valitaan yläpalkista tai puhelimessa valikosta. Kirjasto näyttää valinn
 
 ## Reititys väylää pitkin
 
-Reitin voi myös laskea automaattisesti. Työkalupalkin reitityspainike, valikko Työkalut → Reititä väylää pitkin tai Ctrl+Shift+R avaa dialogin, jossa annetaan lähtöpiste, määränpää ja pienin kulkusyvyys. Lähtöpisteeksi voi valita oman sijainnin tai aseman, hakea paikan nimellä, poimia sen kartalta tai kirjoittaa koordinaatit. Määränpää annetaan samoilla tavoilla. Kartan oikea painike tarjoaa kohdan Reititä tähän väylää pitkin, ja tehtäväpaikan valikosta reitin voi laskea asemalta tehtävään.
+Reitin voi myös laskea automaattisesti. Työkalupalkin reitityspainike, valikko Työkalut → Reititä väylää pitkin tai Ctrl+Shift+R avaa dialogin, jossa annetaan lähtöpiste, määränpää ja pienin kulkusyvyys. Lähtöpisteeksi voi valita oman sijainnin tai aseman, hakea paikan nimellä, poimia sen kartalta tai kirjoittaa koordinaatit. Määränpää annetaan samoilla tavoilla. Kartan oikea painike tarjoaa kohdan Reititä tähän väylää pitkin.
+
+Tehtävälle on oma toiminto Reititä tehtävälle: työkalupalkin tehtäväreittipainike, valikko Tehtävät → Reititä tehtävälle, kirjaston Tehtävät-välilehden painike tai tehtäväpaikan valikko. Dialogissa valitaan tehtävä (aktiivinen tehtävä on valmiiksi valittuna) ja lähtöpiste, joka on oma sijainti, asema tai muu paikka. Jos oma sijainti ei ole vielä päällä, sovellus käynnistää sen ja odottaa ensimmäistä paikannusta enintään 25 sekuntia. Reitti päättyy tehtäväpaikkaa lähimpään kelvolliseen väyläpisteeseen, ja viimeinen osuus väylältä tehtäväpaikalle lisätään tarvittaessa käsin.
 
 Reitti kulkee aina virallista väylää pitkin. Sovellus hakee Väyläviraston navigointilinjat lähtöpisteen ja määränpään väliseltä alueelta, rakentaa niistä verkon ja hakee lyhimmän reitin. Verkkoon otetaan vain linjat, joiden kulkusyvyys on vähintään annettu pienin kulkusyvyys, joten vaatimusta ei voi rikkoa. Linjat, joilta kulkusyvyystieto puuttuu, jätetään pois, koska vaatimuksen täyttymistä ei voi silloin todentaa. Mukana ovat myös muiden väylänpitäjien, kuten kuntien, väylät, ja yhteenveto kertoo, jos reitti kulkee osin niillä. Jos reittiä ei löydy, hakualuetta laajennetaan kahdesti, koska väylä voi kiertää kauempaa kuin suora linja.
 
@@ -144,7 +146,7 @@ Syvyysalueet tulevat Traficomin merikarttatietokannasta. Aineiston syvyysvälit 
 
 ## Paikkahaku ja koordinaatit
 
-Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, oman merkin tai tehtävän nimen tai koordinaatin. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä ja turvalaitteet Väyläviraston aineistosta.
+Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, oman merkin tai tehtävän nimen tai koordinaatin. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä ja turvalaitteet Väyläviraston aineistosta. Jos paikannimiä ei tule, hakutulosten alla kerrotaan syy: tiedostoversiossa puuttuva API-avain tai verkkoversiossa julkaisu, jonka palvelimelle ei ole asetettu avainta (Vercelin ympäristömuuttuja `MML_API_KEY` pitää olla käytössä myös Preview-ympäristössä, jotta haaran esikatselujulkaisussa nimistöhaku toimii).
 
 Hakusanaksi riittää nimen alku: viitas löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten salmi löytää esimerkiksi lähellä olevan Viitasalmen.
 

@@ -51,12 +51,14 @@ def route_via_dialog(page, frm, to, depth, expect_ok=True):
 
 
 with sync_playwright() as pw:
+    # sijaintilupa annetaan alusta asti: WebKit ei hyväksy kesken istunnon annettua lupaa
+    GEO = {'permissions': ['geolocation'], 'geolocation': {'latitude': 61.57, 'longitude': 23.71, 'accuracy': 10}}
     if DEVICE:
         dev = pw.devices[DEVICE]
         bt = pw.webkit if dev.get('default_browser_type') == 'webkit' else pw.chromium
-        b = bt.launch(); ctx = b.new_context(**dev); page = ctx.new_page()
+        b = bt.launch(); ctx = b.new_context(**dev, **GEO); page = ctx.new_page()
     else:
-        b = pw.chromium.launch(); page = b.new_page(viewport={'width': 1400, 'height': 860})
+        b = pw.chromium.launch(); ctx = b.new_context(viewport={'width': 1400, 'height': 860}, **GEO); page = ctx.new_page()
     errs = []
     page.on('pageerror', lambda e: errs.append(str(e)))
     page.route('**/*', handle)
@@ -167,6 +169,45 @@ with sync_playwright() as pw:
     check(page.input_value('#rtTo') != '' and 'Testi 3' in page.inner_text('#rtToPrev'), 'haun osuma täyttää määränpään koordinaatit')
     shot(page, 'r7-dialogi')
     page.keyboard.press('Escape'); page.wait_for_timeout(200)
+
+    # 8) reititys tehtävälle: tehtävä C:n lähellä, lähtö muusta paikasta ja asemalta
+    page.evaluate("Store.state.tasks.push({ id: 'tk-test', name: 'Keikka 1', lat: 61.81, lng: 23.91, time: '2026-10-20T12:00', active: true }); Store.emit('tasks')")
+    n0 = page.evaluate('Store.state.routes.length')
+    page.click('#tbTaskRoute')
+    page.wait_for_selector('#rtTask'); page.wait_for_timeout(120)
+    check('Keikka 1' in page.inner_text('#rtTask option:checked'), 'aktiivinen tehtävä valmiiksi valittuna')
+    page.check('input[name=rtStart][value=other]')
+    check(not page.evaluate("document.getElementById('rtOther').hidden"), 'muu paikka avaa hakukentät')
+    page.fill('#rtFrom', '61 33.6N 23 42.0E'); page.fill('#rtDepth', '2.0')
+    shot(page, 'r8-tehtava-dialogi')
+    page.click('.modal .btn.primary')
+    page.wait_for_selector('.modal h2', timeout=15000)
+    check(page.inner_text('.modal h2') == 'Reitti laskettu', 'tehtäväreitti laskettu (%s)' % page.inner_text('.modal h2'))
+    page.click('.modal .btn.primary'); page.wait_for_timeout(200)
+    rt = page.evaluate('Store.state.routes[Store.state.routes.length-1]')
+    check(page.evaluate('Store.state.routes.length') == n0 + 1 and rt['to'] == 'Keikka 1' and abs(rt['points'][-1]['lat'] - 61.80) < 1e-3, 'reitti päättyy tehtävää lähimpään väyläpisteeseen C, Mihin = tehtävän nimi')
+    page.keyboard.press('Escape'); page.wait_for_timeout(200)
+    page.click('#tbTaskRoute'); page.wait_for_selector('#rtTask'); page.wait_for_timeout(120)
+    page.check('input[name=rtStart][value=station]'); page.fill('#rtDepth', '2.0'); page.click('.modal .btn.primary')
+    page.wait_for_selector('.modal h2', timeout=15000)
+    check(page.inner_text('.modal h2') == 'Reitti laskettu', 'tehtäväreitti asemalta laskettu')
+    page.click('.modal .btn.primary'); page.wait_for_timeout(200)
+    rt = page.evaluate('Store.state.routes[Store.state.routes.length-1]')
+    check(rt['from'] == 'Testiasema' and rt['to'] == 'Keikka 1', 'Mistä = asema, Mihin = tehtävä')
+    page.keyboard.press('Escape'); page.wait_for_timeout(200)
+    # oma sijainti: selaimen sijainti annetaan testissä; tietokoneella sijainti ei ole vielä päällä, joten se käynnistetään
+    if page.evaluate('window.isSecureContext'):
+        page.click('#tbTaskRoute'); page.wait_for_selector('#rtTask'); page.wait_for_timeout(120)
+        page.check('input[name=rtStart][value=gps]'); page.fill('#rtDepth', '2.0'); page.click('.modal .btn.primary')
+        page.wait_for_selector('.modal h2', timeout=30000)
+        check(page.inner_text('.modal h2') == 'Reitti laskettu', 'tehtäväreitti omasta sijainnista laskettu (sijainti käynnistettiin)')
+        page.click('.modal .btn.primary'); page.wait_for_timeout(200)
+        rt = page.evaluate('Store.state.routes[Store.state.routes.length-1]')
+        check(rt['from'] == 'Oma sijainti', 'Mistä = oma sijainti')
+        shot(page, 'r8-tehtavareitti')
+        page.keyboard.press('Escape'); page.wait_for_timeout(200)
+    else:
+        print('   (oma sijainti ohitettu: selain ei anna sijaintia file://-sivulle)')
 
     check(not errs, 'ei JavaScript-virheitä: %s' % errs)
     b.close()

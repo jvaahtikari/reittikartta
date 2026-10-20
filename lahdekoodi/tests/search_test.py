@@ -106,7 +106,7 @@ with sync_playwright() as pw:
     check("61°30,000'N 023°45,000'E" in page.inner_text('#tPrev'), 'desimaaliasteet')
     page.fill('#tPos', '61 35,1N 23 45,2E')
     check("61°35,100'N 023°45,200'E" in page.inner_text('#tPrev'), 'asteet ja minuutit välilyönnein')
-    page.locator('.modal button', has_text='Tallenna').click(); page.wait_for_timeout(400)
+    page.locator('.modal button', has_text='Luo tehtävä').click(); page.wait_for_timeout(400)
     t = page.evaluate("Store.state.tasks[Store.state.tasks.length-1]")
     check(abs(t['lat'] - 61.585) < 1e-9 and abs(t['lng'] - 23.7533333) < 1e-6, 'tehtävä tallentui oikeaan paikkaan')
     shot(page, 'h1-haku')

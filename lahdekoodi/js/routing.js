@@ -500,7 +500,7 @@
     if (d != null && isFinite(d)) return Number(d);
     return st.routeDepth != null && isFinite(st.routeDepth) ? Number(st.routeDepth) : '';
   }
-  function placeField(md, ctx, key, label) {
+  function placeField(md, ctx, key, label, beforePick, reopen) {
     var q = md.querySelector('#rt' + key + 'Q'), box = md.querySelector('#rt' + key + 'Res'), pos = md.querySelector('#rt' + key),
       prev = md.querySelector('#rt' + key + 'Prev'), timer = null, seq = 0, results = [];
     function preview() {
@@ -526,6 +526,8 @@
           '<div class="sr-t"><b>' + UI.esc(it.name) + '</b><span>' + UI.esc(it.info || '') + '</span></div>' +
           '<em>' + G.fmtNM(it.km * 1000) + ' · ' + G.fmtBrg(it.brg, 0) + '</em></div>';
       });
+      var note = !pending && q.value.trim().length >= 3 ? global.Search.namesNote() : '';
+      if (note) h += '<div class="sn">' + UI.esc(note) + '</div>';
       box.innerHTML = h; box.hidden = false;
     }
     function find() {
@@ -554,11 +556,11 @@
     });
     box.addEventListener('click', function (e) { var el = e.target.closest('.sr'); if (el) choose(Number(el.dataset.i)); });
     md.querySelector('#rt' + key + 'Pick').addEventListener('click', function () {
-      keep(md, ctx);
+      if (beforePick) beforePick(md, ctx); else keep(md, ctx);
       UI.closeModal();
       global.Tools.pick(label + ' – ' + (UI.isTouch() ? 'napauta' : 'klikkaa') + ' paikka kartalta', function (ll) {
         ctx[key] = { lat: ll.lat, lng: ll.lng, label: '' };
-        dialog(ctx);
+        if (reopen) reopen(ctx); else dialog(ctx);
       });
     });
     var useGps = md.querySelector('#rt' + key + 'Gps'), useSt = md.querySelector('#rt' + key + 'St');
@@ -630,10 +632,114 @@
     });
   }
 
+  // ---------- reititys tehtävälle ----------
+  // Määränpää on tehtäväpaikka ja lähtöpiste oma sijainti, asema tai muu paikka.
+  // Jos oma sijainti ei ole vielä käytössä, se käynnistetään ja ensimmäistä paikannusta odotetaan.
+  function waitGps(maxMs) {
+    var p = App.gps && App.gps.position;
+    if (p) return Promise.resolve(p);
+    if (!App.gps || !App.gps.start) return Promise.resolve(null);
+    App.gps.start();
+    return new Promise(function (resolve) {
+      var t0 = Date.now();
+      UI.banner({ kind: 'adding', text: 'Haetaan omaa sijaintia reitin lähtöpisteeksi…', buttons: [{ label: 'Peruuta', action: function () { resolve(null); } }] });
+      (function tick() {
+        var q = App.gps.position;
+        if (q) { resolve(q); return; }
+        if (Date.now() - t0 > maxMs) { resolve(null); return; }
+        setTimeout(tick, 400);
+      })();
+    }).then(function (q) { UI.banner(null); if (global.Routes.editingId) global.Routes.updateBanner(); return q; });
+  }
+  function taskDialog(taskId, ctx) {
+    var st = S.state.settings;
+    var tasks = S.state.tasks.slice().sort(function (a, b) { return (b.active ? 1 : 0) - (a.active ? 1 : 0) || String(b.time).localeCompare(String(a.time)); });
+    if (!tasks.length) {
+      UI.modal({
+        title: 'Reititä tehtävälle',
+        body: '<div class="help"><p>Tehtäviä ei ole. Luo ensin tehtäväpaikka, niin reitti voidaan laskea sille.</p></div>',
+        buttons: [{ label: 'Peruuta' }, { label: 'Uusi tehtävä…', primary: true, action: function () { setTimeout(function () { global.Tools.editTask(null, null); }, 0); } }]
+      });
+      return;
+    }
+    var active = tasks.filter(function (t) { return t.active; })[0];
+    ctx = ctx || { task: taskId || (active ? active.id : tasks[0].id), start: (App.gps && App.gps.position) ? 'gps' : (st.station ? 'station' : (UI.isTouch() ? 'gps' : 'other')), From: null, depth: defaultDepth() };
+    if (taskId) ctx.task = taskId;
+    var opts = tasks.map(function (t) {
+      return '<option value="' + UI.esc(t.id) + '"' + (t.id === ctx.task ? ' selected' : '') + '>' + UI.esc(t.name || 'Tehtävä') + (t.active ? ' (aktiivinen)' : '') + ' – ' + UI.esc(G.fmtPos(t)) + '</option>';
+    }).join('');
+    function radio(v, label, dis) {
+      return '<label><input type="radio" name="rtStart" value="' + v + '"' + (ctx.start === v ? ' checked' : '') + (dis ? ' disabled' : '') + '> ' + label + '</label>';
+    }
+    var body = '<div class="form">' +
+      '<label for="rtTask">Tehtävä</label><select id="rtTask">' + opts + '</select>' +
+      '<label>Lähtöpiste</label><div class="checks rt-start">' +
+      radio('gps', 'Oma sijainti' + (App.gps && App.gps.position ? '' : ' (käynnistetään)')) +
+      radio('station', st.station ? UI.esc(st.station.name || 'Asema') : 'Asema (ei asetettu)', !st.station) +
+      radio('other', 'Muu paikka') + '</div>' +
+      '<div id="rtOther" class="full"' + (ctx.start === 'other' ? '' : ' hidden') + '><div class="form rt-sub">' +
+      '<label for="rtFromQ">Hae paikka</label><div class="tfind"><input id="rtFromQ" type="search" autocomplete="off" value="' + UI.esc(ctx.From && ctx.From.label ? ctx.From.label : '') + '" placeholder="hae paikka, turvalaite tai kirjoita koordinaatit alle">' +
+      '<div class="tsr" id="rtFromRes" hidden></div></div>' +
+      '<label for="rtFrom">Koordinaatit</label><div class="rt-row"><input id="rtFrom" value="' + (ctx.From ? UI.esc(G.fmtPos(ctx.From)) : '') + '" placeholder="61°31,234\'N 023°45,678\'E">' +
+      '<button type="button" class="btn small" id="rtFromPick">Poimi kartalta</button></div>' +
+      '<div class="hint" id="rtFromPrev"></div></div></div>' +
+      '<label for="rtDepth">Pienin kulkusyvyys (m)</label><input id="rtDepth" type="number" min="0.1" max="30" step="0.1" value="' + (ctx.depth === '' ? '' : ctx.depth) + '">' +
+      '<div class="hint">Reitti kulkee vain navigointilinjoilla, joiden kulkusyvyys on vähintään tämä. Oletus on aluksen turvasyvyys' + (st.currentVessel ? ' (' + UI.esc(st.currentVessel) + ')' : '') + '.</div>' +
+      '<div class="hint full">Reitti lasketaan virallista väylää pitkin lähtöpisteestä tehtäväpaikkaa lähimpään kelvolliseen väyläpisteeseen ja avataan muokkaustilaan tarkistettavaksi.</div>' +
+      '<div class="err" id="rtErr" hidden></div></div>';
+    function readStart(md) { var el = md.querySelector('input[name=rtStart]:checked'); return el ? el.value : 'other'; }
+    UI.modal({
+      title: 'Reititä tehtävälle', body: body, enterButton: null,
+      buttons: [{ label: 'Peruuta' }, {
+        label: 'Reititä', primary: true, action: function (md) {
+          var er = md.querySelector('#rtErr');
+          function fail(msg) { er.textContent = msg; er.hidden = false; return false; }
+          ctx.task = md.querySelector('#rtTask').value; ctx.start = readStart(md);
+          var t = S.taskById(ctx.task);
+          if (!t || t.lat == null) return fail('Valitse tehtävä, jolla on paikka.');
+          var d = parseFloat(String(md.querySelector('#rtDepth').value).replace(',', '.'));
+          if (!isFinite(d) || d < 0.1 || d > 30) return fail('Anna pienin kulkusyvyys väliltä 0,1–30 m.');
+          d = Math.round(d * 10) / 10;
+          var to = { lat: t.lat, lng: t.lng, label: t.name || 'Tehtävä' };
+          if (ctx.start === 'station') {
+            if (!st.station) return fail('Asemaa ei ole asetettu.');
+            setTimeout(function () { run({ lat: st.station.lat, lng: st.station.lng, label: st.station.name || 'Asema' }, to, d); }, 0);
+            return;
+          }
+          if (ctx.start === 'gps') {
+            setTimeout(function () {
+              waitGps(25000).then(function (p) {
+                if (!p) { UI.toast('Omaa sijaintia ei saatu. Salli sijainti tai valitse lähtöpisteeksi asema tai muu paikka.', true); taskDialog(null, ctx); return; }
+                run({ lat: p.lat, lng: p.lng, label: 'Oma sijainti' }, to, d);
+              });
+            }, 0);
+            return;
+          }
+          var p0 = G.parsePos(md.querySelector('#rtFrom').value);
+          if (!p0) return fail('Anna lähtöpaikka: hae nimellä, poimi kartalta tai kirjoita koordinaatit.');
+          var from = ctx.From && Math.abs(ctx.From.lat - p0.lat) < 5e-5 && Math.abs(ctx.From.lng - p0.lng) < 5e-5 ? ctx.From : { lat: p0.lat, lng: p0.lng, label: '' };
+          if (G.distance(from, to) < 20) return fail('Lähtöpaikka ja tehtävä ovat sama paikka.');
+          setTimeout(function () { run(from, to, d); }, 0);
+        }
+      }],
+      onOpen: function (md) {
+        var other = md.querySelector('#rtOther');
+        md.querySelectorAll('input[name=rtStart]').forEach(function (rb) {
+          rb.addEventListener('change', function () { ctx.start = readStart(md); other.hidden = ctx.start !== 'other'; if (!other.hidden) setTimeout(function () { md.querySelector('#rtFromQ').focus(); }, 30); });
+        });
+        md.querySelector('#rtTask').addEventListener('change', function () { ctx.task = this.value; });
+        md.querySelector('#rtDepth').addEventListener('input', function () { var v = parseFloat(String(this.value).replace(',', '.')); ctx.depth = isFinite(v) ? v : ''; });
+        // "Muu paikka" käyttää samaa hakukenttää kuin reititysdialogi; kartalta poiminta palaa tähän dialogiin
+        placeField(md, ctx, 'From', 'Lähtöpiste', function () { ctx.task = md.querySelector('#rtTask').value; ctx.start = 'other'; var v = parseFloat(String(md.querySelector('#rtDepth').value).replace(',', '.')); ctx.depth = isFinite(v) ? v : ''; }, function () { taskDialog(null, ctx); });
+        md.querySelector('#rtDepth').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); md.querySelector('.btn.primary').click(); } });
+      }
+    });
+  }
+
   function init(m, app) { map = m; App = app; }
 
   global.Routing = {
-    init: init, dialog: dialog, run: run, plan: plan, changeDepth: changeDepth, reroute: reroute,
+    init: init, dialog: dialog, taskDialog: taskDialog, run: run, plan: plan, changeDepth: changeDepth, reroute: reroute,
     // reitin muokkausilmoituksen lisäpainike, kun reitti on laskettu automaattisesti
     bannerButton: function (r) {
       return r && r.auto ? { label: 'Kulkusyvyys ' + fmtD(r.auto.depth) + ' m', action: function () { changeDepth(r.id); } } : null;

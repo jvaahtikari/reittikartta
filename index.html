@@ -1270,6 +1270,11 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 .help table th { text-align: left; font-weight: 600; padding: 2px 10px 2px 0; }
 .help table td { padding: 2px 10px 2px 0; }
 
+/* reititys tehtävälle */
+.rt-start { grid-column: 2; }
+.rt-sub { margin: 2px 0 4px; }
+@media (max-width: 700px) { .rt-start { grid-column: 1; } }
+
 </style>
 </head>
 <body>
@@ -1340,6 +1345,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       </button>
       <button class="tb" id="tbTask" title="Uusi tehtäväpaikka">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+      <button class="tb" id="tbTaskRoute" title="Reititä tehtävälle – reitti väylää pitkin omasta sijainnista, asemalta tai muusta paikasta tehtäväpaikalle">
+        <svg viewBox="0 0 24 24"><circle cx="17" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="7" r="1.6" fill="currentColor"/><path d="M4 20l3-5 4 2 3-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="4" cy="20" r="2" fill="currentColor"/></svg>
       </button>
     </div>
 
@@ -3449,8 +3457,15 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   // palvelimelle tallennetun API-avaimen; käyttäjän ei tarvitse hankkia omaa avainta. Käyttäjän oma avain
   // ja tiedostona avattu sovellus kutsuvat Maanmittauslaitosta suoraan.
   var MML_HOST = 'https://avoin-paikkatieto.maanmittauslaitos.fi';
-  var mmlProxy = /^https?:$/.test(global.location.protocol), mmlProxyOk = null;
+  var mmlProxy = /^https?:$/.test(global.location.protocol), mmlProxyOk = null, mmlNameErr = '';
   function mmlAvailable() { return !!mmlKey || (mmlProxy && mmlProxyOk !== false); }
+  // Sanallinen syy, miksi paikannimihaku ei toimi (näytetään hakutulosten alla), tai tyhjä.
+  function namesNote() {
+    if (mmlKey) return mmlNameErr;
+    if (!mmlProxy) return 'Paikannimet haetaan Maanmittauslaitoksen nimistöstä, kun API-avain on asetettu (Tiedosto → Asetukset).';
+    if (mmlProxyOk === false) return 'Paikannimihaku ei ole käytettävissä: palvelimella ei ole Maanmittauslaitoksen avainta (Vercelin ympäristömuuttuja MML_API_KEY puuttuu tästä julkaisusta). Oman avaimen voi antaa kohdassa Tiedosto → Asetukset.';
+    return mmlNameErr;
+  }
   function mmlUrl(base, path, extra) {
     if (!mmlKey && mmlProxy) return '/api/mml?p=' + encodeURIComponent(base.replace(MML_HOST, '') + path) + '&f=json' + (extra || '');
     return base + path + (path.indexOf('?') < 0 ? '?' : '&') + 'f=json&api-key=' + encodeURIComponent(mmlKey) + (extra || '');
@@ -3605,7 +3620,17 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       if (word.length >= 3) urls.push(mmlUrl(MML_NAMES, path, '&limit=40&bbox=' + bb + inner));
     }
     urls.push(mmlUrl(MML_NAMES, path, '&limit=40' + like));
-    function get(u) { return fetch(u).then(function (r) { return r.ok ? r.json() : { features: [] }; }).then(function (j) { return j.features || []; }, function () { return []; }); }
+    var viaProxy = !mmlKey;
+    mmlNameErr = '';
+    function get(u) {
+      return fetch(u).then(function (r) {
+        if (viaProxy && (r.status === 503 || r.status === 404 || r.status === 405)) { mmlProxyOk = false; return { features: [] }; }
+        if (r.status === 401 || r.status === 403) { mmlNameErr = 'Paikannimihaku ei onnistu: Maanmittauslaitoksen API-avainta ei hyväksytty (HTTP ' + r.status + ').'; return { features: [] }; }
+        if (viaProxy) mmlProxyOk = true;
+        if (!r.ok) { mmlNameErr = 'Paikannimihaku ei onnistu: Maanmittauslaitoksen palvelu vastasi HTTP ' + r.status + '.'; return { features: [] }; }
+        return r.json();
+      }).then(function (j) { return j.features || []; }, function () { mmlNameErr = mmlNameErr || 'Paikannimihaku ei onnistu: Maanmittauslaitoksen palveluun ei saatu yhteyttä.'; return []; });
+    }
     return Promise.all(urls.map(get)).then(function (lists) {
       var seen = {}, out = [];
       lists.forEach(function (fs) { fs.forEach(function (f) {
@@ -4117,6 +4142,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       setUnderlay: function (on) { if (!vecOn()) setUnderlayLayer(!!on, 0.55); },
       setMmlKey: setMmlKey,
       searchNames: searchNames,
+      namesNote: namesNote,
       get mmlInfo() { return { key: !!mmlKey, proxy: !mmlKey && mmlProxy && mmlProxyOk !== false, available: mmlAvailable(), cols: mmlCols, err: mmlColsErr, n: Object.keys(mmlStore.rock).length }; },
       get landKind() { return landKind; },
       setSafety: setSafety,
@@ -5641,7 +5667,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     if (d != null && isFinite(d)) return Number(d);
     return st.routeDepth != null && isFinite(st.routeDepth) ? Number(st.routeDepth) : '';
   }
-  function placeField(md, ctx, key, label) {
+  function placeField(md, ctx, key, label, beforePick, reopen) {
     var q = md.querySelector('#rt' + key + 'Q'), box = md.querySelector('#rt' + key + 'Res'), pos = md.querySelector('#rt' + key),
       prev = md.querySelector('#rt' + key + 'Prev'), timer = null, seq = 0, results = [];
     function preview() {
@@ -5667,6 +5693,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
           '<div class="sr-t"><b>' + UI.esc(it.name) + '</b><span>' + UI.esc(it.info || '') + '</span></div>' +
           '<em>' + G.fmtNM(it.km * 1000) + ' · ' + G.fmtBrg(it.brg, 0) + '</em></div>';
       });
+      var note = !pending && q.value.trim().length >= 3 ? global.Search.namesNote() : '';
+      if (note) h += '<div class="sn">' + UI.esc(note) + '</div>';
       box.innerHTML = h; box.hidden = false;
     }
     function find() {
@@ -5695,11 +5723,11 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     });
     box.addEventListener('click', function (e) { var el = e.target.closest('.sr'); if (el) choose(Number(el.dataset.i)); });
     md.querySelector('#rt' + key + 'Pick').addEventListener('click', function () {
-      keep(md, ctx);
+      if (beforePick) beforePick(md, ctx); else keep(md, ctx);
       UI.closeModal();
       global.Tools.pick(label + ' – ' + (UI.isTouch() ? 'napauta' : 'klikkaa') + ' paikka kartalta', function (ll) {
         ctx[key] = { lat: ll.lat, lng: ll.lng, label: '' };
-        dialog(ctx);
+        if (reopen) reopen(ctx); else dialog(ctx);
       });
     });
     var useGps = md.querySelector('#rt' + key + 'Gps'), useSt = md.querySelector('#rt' + key + 'St');
@@ -5771,10 +5799,114 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     });
   }
 
+  // ---------- reititys tehtävälle ----------
+  // Määränpää on tehtäväpaikka ja lähtöpiste oma sijainti, asema tai muu paikka.
+  // Jos oma sijainti ei ole vielä käytössä, se käynnistetään ja ensimmäistä paikannusta odotetaan.
+  function waitGps(maxMs) {
+    var p = App.gps && App.gps.position;
+    if (p) return Promise.resolve(p);
+    if (!App.gps || !App.gps.start) return Promise.resolve(null);
+    App.gps.start();
+    return new Promise(function (resolve) {
+      var t0 = Date.now();
+      UI.banner({ kind: 'adding', text: 'Haetaan omaa sijaintia reitin lähtöpisteeksi…', buttons: [{ label: 'Peruuta', action: function () { resolve(null); } }] });
+      (function tick() {
+        var q = App.gps.position;
+        if (q) { resolve(q); return; }
+        if (Date.now() - t0 > maxMs) { resolve(null); return; }
+        setTimeout(tick, 400);
+      })();
+    }).then(function (q) { UI.banner(null); if (global.Routes.editingId) global.Routes.updateBanner(); return q; });
+  }
+  function taskDialog(taskId, ctx) {
+    var st = S.state.settings;
+    var tasks = S.state.tasks.slice().sort(function (a, b) { return (b.active ? 1 : 0) - (a.active ? 1 : 0) || String(b.time).localeCompare(String(a.time)); });
+    if (!tasks.length) {
+      UI.modal({
+        title: 'Reititä tehtävälle',
+        body: '<div class="help"><p>Tehtäviä ei ole. Luo ensin tehtäväpaikka, niin reitti voidaan laskea sille.</p></div>',
+        buttons: [{ label: 'Peruuta' }, { label: 'Uusi tehtävä…', primary: true, action: function () { setTimeout(function () { global.Tools.editTask(null, null); }, 0); } }]
+      });
+      return;
+    }
+    var active = tasks.filter(function (t) { return t.active; })[0];
+    ctx = ctx || { task: taskId || (active ? active.id : tasks[0].id), start: (App.gps && App.gps.position) ? 'gps' : (st.station ? 'station' : (UI.isTouch() ? 'gps' : 'other')), From: null, depth: defaultDepth() };
+    if (taskId) ctx.task = taskId;
+    var opts = tasks.map(function (t) {
+      return '<option value="' + UI.esc(t.id) + '"' + (t.id === ctx.task ? ' selected' : '') + '>' + UI.esc(t.name || 'Tehtävä') + (t.active ? ' (aktiivinen)' : '') + ' – ' + UI.esc(G.fmtPos(t)) + '</option>';
+    }).join('');
+    function radio(v, label, dis) {
+      return '<label><input type="radio" name="rtStart" value="' + v + '"' + (ctx.start === v ? ' checked' : '') + (dis ? ' disabled' : '') + '> ' + label + '</label>';
+    }
+    var body = '<div class="form">' +
+      '<label for="rtTask">Tehtävä</label><select id="rtTask">' + opts + '</select>' +
+      '<label>Lähtöpiste</label><div class="checks rt-start">' +
+      radio('gps', 'Oma sijainti' + (App.gps && App.gps.position ? '' : ' (käynnistetään)')) +
+      radio('station', st.station ? UI.esc(st.station.name || 'Asema') : 'Asema (ei asetettu)', !st.station) +
+      radio('other', 'Muu paikka') + '</div>' +
+      '<div id="rtOther" class="full"' + (ctx.start === 'other' ? '' : ' hidden') + '><div class="form rt-sub">' +
+      '<label for="rtFromQ">Hae paikka</label><div class="tfind"><input id="rtFromQ" type="search" autocomplete="off" value="' + UI.esc(ctx.From && ctx.From.label ? ctx.From.label : '') + '" placeholder="hae paikka, turvalaite tai kirjoita koordinaatit alle">' +
+      '<div class="tsr" id="rtFromRes" hidden></div></div>' +
+      '<label for="rtFrom">Koordinaatit</label><div class="rt-row"><input id="rtFrom" value="' + (ctx.From ? UI.esc(G.fmtPos(ctx.From)) : '') + '" placeholder="61°31,234\'N 023°45,678\'E">' +
+      '<button type="button" class="btn small" id="rtFromPick">Poimi kartalta</button></div>' +
+      '<div class="hint" id="rtFromPrev"></div></div></div>' +
+      '<label for="rtDepth">Pienin kulkusyvyys (m)</label><input id="rtDepth" type="number" min="0.1" max="30" step="0.1" value="' + (ctx.depth === '' ? '' : ctx.depth) + '">' +
+      '<div class="hint">Reitti kulkee vain navigointilinjoilla, joiden kulkusyvyys on vähintään tämä. Oletus on aluksen turvasyvyys' + (st.currentVessel ? ' (' + UI.esc(st.currentVessel) + ')' : '') + '.</div>' +
+      '<div class="hint full">Reitti lasketaan virallista väylää pitkin lähtöpisteestä tehtäväpaikkaa lähimpään kelvolliseen väyläpisteeseen ja avataan muokkaustilaan tarkistettavaksi.</div>' +
+      '<div class="err" id="rtErr" hidden></div></div>';
+    function readStart(md) { var el = md.querySelector('input[name=rtStart]:checked'); return el ? el.value : 'other'; }
+    UI.modal({
+      title: 'Reititä tehtävälle', body: body, enterButton: null,
+      buttons: [{ label: 'Peruuta' }, {
+        label: 'Reititä', primary: true, action: function (md) {
+          var er = md.querySelector('#rtErr');
+          function fail(msg) { er.textContent = msg; er.hidden = false; return false; }
+          ctx.task = md.querySelector('#rtTask').value; ctx.start = readStart(md);
+          var t = S.taskById(ctx.task);
+          if (!t || t.lat == null) return fail('Valitse tehtävä, jolla on paikka.');
+          var d = parseFloat(String(md.querySelector('#rtDepth').value).replace(',', '.'));
+          if (!isFinite(d) || d < 0.1 || d > 30) return fail('Anna pienin kulkusyvyys väliltä 0,1–30 m.');
+          d = Math.round(d * 10) / 10;
+          var to = { lat: t.lat, lng: t.lng, label: t.name || 'Tehtävä' };
+          if (ctx.start === 'station') {
+            if (!st.station) return fail('Asemaa ei ole asetettu.');
+            setTimeout(function () { run({ lat: st.station.lat, lng: st.station.lng, label: st.station.name || 'Asema' }, to, d); }, 0);
+            return;
+          }
+          if (ctx.start === 'gps') {
+            setTimeout(function () {
+              waitGps(25000).then(function (p) {
+                if (!p) { UI.toast('Omaa sijaintia ei saatu. Salli sijainti tai valitse lähtöpisteeksi asema tai muu paikka.', true); taskDialog(null, ctx); return; }
+                run({ lat: p.lat, lng: p.lng, label: 'Oma sijainti' }, to, d);
+              });
+            }, 0);
+            return;
+          }
+          var p0 = G.parsePos(md.querySelector('#rtFrom').value);
+          if (!p0) return fail('Anna lähtöpaikka: hae nimellä, poimi kartalta tai kirjoita koordinaatit.');
+          var from = ctx.From && Math.abs(ctx.From.lat - p0.lat) < 5e-5 && Math.abs(ctx.From.lng - p0.lng) < 5e-5 ? ctx.From : { lat: p0.lat, lng: p0.lng, label: '' };
+          if (G.distance(from, to) < 20) return fail('Lähtöpaikka ja tehtävä ovat sama paikka.');
+          setTimeout(function () { run(from, to, d); }, 0);
+        }
+      }],
+      onOpen: function (md) {
+        var other = md.querySelector('#rtOther');
+        md.querySelectorAll('input[name=rtStart]').forEach(function (rb) {
+          rb.addEventListener('change', function () { ctx.start = readStart(md); other.hidden = ctx.start !== 'other'; if (!other.hidden) setTimeout(function () { md.querySelector('#rtFromQ').focus(); }, 30); });
+        });
+        md.querySelector('#rtTask').addEventListener('change', function () { ctx.task = this.value; });
+        md.querySelector('#rtDepth').addEventListener('input', function () { var v = parseFloat(String(this.value).replace(',', '.')); ctx.depth = isFinite(v) ? v : ''; });
+        // "Muu paikka" käyttää samaa hakukenttää kuin reititysdialogi; kartalta poiminta palaa tähän dialogiin
+        placeField(md, ctx, 'From', 'Lähtöpiste', function () { ctx.task = md.querySelector('#rtTask').value; ctx.start = 'other'; var v = parseFloat(String(md.querySelector('#rtDepth').value).replace(',', '.')); ctx.depth = isFinite(v) ? v : ''; }, function () { taskDialog(null, ctx); });
+        md.querySelector('#rtDepth').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); md.querySelector('.btn.primary').click(); } });
+      }
+    });
+  }
+
   function init(m, app) { map = m; App = app; }
 
   global.Routing = {
-    init: init, dialog: dialog, run: run, plan: plan, changeDepth: changeDepth, reroute: reroute,
+    init: init, dialog: dialog, taskDialog: taskDialog, run: run, plan: plan, changeDepth: changeDepth, reroute: reroute,
     // reitin muokkausilmoituksen lisäpainike, kun reitti on laskettu automaattisesti
     bannerButton: function (r) {
       return r && r.auto ? { label: 'Kulkusyvyys ' + fmtD(r.auto.depth) + ' m', action: function () { changeDepth(r.id); } } : null;
@@ -6066,10 +6198,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         S.emit('routes'); global.Routes.enterEdit(r.id);
         UI.toast('Suora reittiluonnos luotu. Lisää reittipisteitä oikealla napilla reittiviivasta.');
       } },
-      { label: 'Reititä asemalta tehtävään väylää pitkin…', action: function () {
-        var st = S.state.settings.station;
-        global.Routing.dialog({ from: st ? { lat: st.lat, lng: st.lng, label: st.name || 'Asema' } : null, to: { lat: t.lat, lng: t.lng, label: t.name || 'Tehtävä' } });
-      } },
+      { label: 'Reititä tehtävälle väylää pitkin…', action: function () { global.Routing.taskDialog(t.id); } },
       { sep: true },
       { label: 'Poista tehtävä…', action: function () {
         UI.confirm('Poistetaanko tehtävä "' + (t.name || 'Tehtävä') + '"?', 'Poista', function () {
@@ -6179,7 +6308,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
             });
             if (pending) h += '<div class="sn">Haetaan lisää…</div>';
           }
-          if (!global.Search.hasNames && fin.value.trim().length >= 3) h += '<div class="sn">Paikannimet tarvitsevat Maanmittauslaitoksen avaimen (Tiedosto → Asetukset).</div>';
+          var note = !pending && fin.value.trim().length >= 3 ? global.Search.namesNote() : '';
+          if (note) h += '<div class="sn">' + UI.esc(note) + '</div>';
           box.innerHTML = h; box.hidden = false;
         }
         function runFind() {
@@ -6524,6 +6654,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       case 'del': R.deleteRoute(id); break;
       case 'newMark': Tools().pick('Uusi merkki – klikkaa paikka kartalta', function (ll) { Tools().editMark(null, ll); }); break;
       case 'newTask': Tools().editTask(null, null); break;
+      case 'routeTask': global.Routing.taskDialog(); break;
     }
   }
   function Tools() { return global.Tools; }
@@ -6578,7 +6709,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   function renderTasks() {
     var el = UI.$('tab-tasks');
     var st = S.state.settings.station;
-    var h = '<div class="p-actions"><button class="btn primary" data-act="newTask">Uusi tehtävä</button></div>';
+    var h = '<div class="p-actions"><button class="btn primary" data-act="newTask">Uusi tehtävä</button>' +
+      (S.state.tasks.length ? '<button class="btn" data-act="routeTask">Reititä tehtävälle</button>' : '') + '</div>';
     if (!st) h += '<div class="meta" style="margin-bottom:8px">Aseta asema kartalta (' + (UI.isTouch() ? 'pitkä painallus' : 'oikea painike') + ' → <b>Aseta asema tähän</b>), niin tehtävän suuntima ja etäisyys asemalta näkyvät.</div>';
     if (!S.state.tasks.length) h += '<div class="empty">Ei tehtäviä. Kun saat tehtävän koordinaatit, valitse <b>Uusi tehtävä</b> ja kirjoita koordinaatit hälytysviestistä. Tehtäväpaikka näkyy kartalla kaksoisympyränä.</div>';
     else {
@@ -6600,6 +6732,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         UI.menu(e.clientX, e.clientY, [
           { label: 'Ominaisuudet…', action: function () { Tools().editTask(t.id); } },
           { label: t.active ? 'Poista aktiivisuus' : 'Aseta aktiiviseksi', action: function () { Tools().setActiveTask(t.active ? null : t.id); } },
+          { label: 'Reititä tehtävälle väylää pitkin…', action: function () { global.Routing.taskDialog(t.id); } },
           { label: 'Kopioi koordinaatit', action: function () { Tools().copyText(G.fmtPos(t)); } },
           { label: 'Poista tehtävä…', action: function () {
             UI.confirm('Poistetaanko tehtävä "' + (t.name || 'Tehtävä') + '"?', 'Poista', function () {
@@ -6700,6 +6833,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     return items.sort(function (a, b) { return a.km - b.km; });
   }
   function hasNames() { return !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available); }
+  // syy, miksi paikannimiä ei tullut (avain puuttuu, palvelin ei vastaa), tai tyhjä
+  function namesNote() { return global.ChartAPI && global.ChartAPI.namesNote ? global.ChartAPI.namesNote() : ''; }
   // turvalaitteet ja paikannimet, etäisyysjärjestyksessä pisteestä at
   function remote(q, at) {
     return Promise.all([
@@ -6790,7 +6925,6 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     var more = q.length >= 3 && !p;
     render(groups, more);
     if (!more) return;
-    var hasKey = hasNames();
     remote(q, ref).then(function (all) {
       if (my !== seq) return;
       var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
@@ -6798,7 +6932,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       groups.push({ title: 'Alle 27 mpk (50 km)', items: near });
       groups.push({ title: 'Kauempana', items: far });
       render(groups, false);
-      if (!hasKey) box.insertAdjacentHTML('beforeend', '<div class="sn">Paikannimet haetaan Maanmittauslaitoksen nimistöstä, kun API-avain on asetettu (Tiedosto → Asetukset).</div>');
+      var note = namesNote();
+      if (note) box.insertAdjacentHTML('beforeend', '<div class="sn">' + UI.esc(note) + '</div>');
       // jos lähialueen tuloksia ei näy kartalla, siirretään kartta niihin kerran tätä hakua kohden
       var vis = global.App.visibleBounds(), nearPts = near.filter(function (it) { return vis.contains([it.lat, it.lng]); });
       if (near.length && !nearPts.length && fittedFor !== q) { fittedFor = q; fitResults(); }
@@ -6879,7 +7014,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     input.addEventListener('focus', function () { if (box.innerHTML && input.value.trim().length >= 2) box.hidden = false; });
   }
 
-  global.Search = { init: init, run: run, find: find, NEAR_KM: NEAR_KM, get hasNames() { return hasNames(); }, get results() { return results; } };
+  global.Search = { init: init, run: run, find: find, NEAR_KM: NEAR_KM, namesNote: namesNote, get hasNames() { return hasNames(); }, get results() { return results; } };
 })(window);
 
 </script>
@@ -7107,6 +7242,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     global.Tools.pick('Uusi merkki – klikkaa paikka kartalta', function (ll) { global.Tools.editMark(null, ll); });
   });
   UI.$('tbTask').addEventListener('click', function () { global.Tools.editTask(null, null); });
+  UI.$('tbTaskRoute').addEventListener('click', function () { global.Routing.taskDialog(); });
 
   // ---------- oma sijainti ----------
   // Selaimen sijainti (GPS puhelimessa) vain käyttäjän pyynnöstä: selain kysyy luvan ensimmäisellä kerralla.
@@ -7163,7 +7299,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     gpsStop(true);
   });
   function gpsAuto() { return st.gps === true || (st.gps == null && UI.isTouch()); }
-  App.gps = { get position() { return gps.last; }, stop: gpsStop };
+  App.gps = { get position() { return gps.last; }, stop: gpsStop, start: function () { if (gps.watch == null) gpsStart(); } };
   UI.$('tbDeep').addEventListener('click', function () {
     st.show.safety = !st.show.safety; S.emit('settings');
     if (st.show.safety) UI.toast('Syvä vesi: turvasyvyys ' + fmtDepth(safetyFor()) + ' m' + (st.currentVessel ? ' (' + st.currentVessel + ')' : '') + '. Muuta arvoa valikosta Näytä → Aseta turvasyvyys.');
@@ -7215,6 +7351,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     tasks: function () {
       return [
         { label: 'Uusi tehtävä…', action: function () { global.Tools.editTask(null, null); } },
+        { label: 'Reititä tehtävälle…', action: function () { global.Routing.taskDialog(); } },
         { label: 'Poimi tehtäväpaikka kartalta', action: function () {
           global.Tools.pick('Tehtäväpaikka – klikkaa paikka kartalta', function (ll) { global.Tools.editTask(null, ll); });
         } },
@@ -7557,7 +7694,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '<li><b>Suuntanuotit</b> ilmestyvät punaisina legien keskelle. Siirrä nuotti reittiviivan viereen, jolloin se vahvistuu vihreäksi.</li>' +
         '<li><b>Ominaisuudet</b>: Mistä – Kautta – Mihin muodostavat nimen. <b>Hyväksy omaan kirjastoon</b> kirjaa hyväksyjän ja alukset; reitti muuttuu pinkiksi.</li>' +
         '<li>Hyväksytyn reitin muokkaus aloitetaan erikseen kirjastosta, ja muutokset hyväksytään uudelleen.</li></ol>' +
-        '<h3>Reititys väylää pitkin</h3><p>Työkalupalkin reitityspainike, <b>Työkalut → Reititä väylää pitkin</b> tai <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> laskee reitin automaattisesti. Anna lähtöpaikka (oma sijainti, asema, haku tai poiminta kartalta), määränpää ja pienin kulkusyvyys. Reitti kulkee Väyläviraston navigointilinjoja pitkin ja käyttää vain linjoja, joiden kulkusyvyys on vähintään annettu; linjat, joilta kulkusyvyystieto puuttuu, jätetään pois. Lähtö- ja saapumispiste ovat lähimmät kelvolliset väyläpisteet annettujen paikkojen lähellä, joten väylän ulkopuoliset osuudet lisätään käsin. Laskettu reitti avautuu muokkaustilaan tarkistettavaksi ja säädettäväksi, ja yhteenveto kertoo reitin pienimmän kulkusyvyyden ja käytetyt väylät. Kartan oikea painike tarjoaa myös <b>Reititä tähän väylää pitkin</b>, ja tehtäväpaikan valikko reitin asemalta tehtävään.</p>' +
+        '<h3>Reititys väylää pitkin</h3><p>Työkalupalkin reitityspainike, <b>Työkalut → Reititä väylää pitkin</b> tai <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> laskee reitin automaattisesti. Anna lähtöpaikka (oma sijainti, asema, haku tai poiminta kartalta), määränpää ja pienin kulkusyvyys. Reitti kulkee Väyläviraston navigointilinjoja pitkin ja käyttää vain linjoja, joiden kulkusyvyys on vähintään annettu; linjat, joilta kulkusyvyystieto puuttuu, jätetään pois. Lähtö- ja saapumispiste ovat lähimmät kelvolliset väyläpisteet annettujen paikkojen lähellä, joten väylän ulkopuoliset osuudet lisätään käsin. Laskettu reitti avautuu muokkaustilaan tarkistettavaksi ja säädettäväksi, ja yhteenveto kertoo reitin pienimmän kulkusyvyyden ja käytetyt väylät. Kartan oikea painike tarjoaa myös <b>Reititä tähän väylää pitkin</b>.</p>' +
+        '<p><b>Reititä tehtävälle</b> (työkalupalkin tehtäväreittipainike, <b>Tehtävät → Reititä tehtävälle</b> tai tehtäväpaikan valikko) laskee reitin tehtäväpaikalle. Lähtöpisteeksi valitaan oma sijainti, asema tai muu paikka. Jos oma sijainti ei ole vielä päällä, se käynnistetään ja ensimmäistä paikannusta odotetaan. Kulkusyvyyttä voi muuttaa reitin tarkastelun aikana muokkausilmoituksen painikkeesta <b>Kulkusyvyys</b>, jolloin reitti lasketaan uudelleen samalla lähtöpaikalla ja määränpäällä.</p>' +
         '<h3>Työkalut</h3><table>' +
         '<tr><td><kbd>M</kbd></td><td>Harppi – matka usean legin kautta (oikea painike: muuta reitiksi)</td></tr>' +
         '<tr><td><kbd>R</kbd></td><td>Karttapohjaksi rasterikartta</td></tr>' +
@@ -7598,6 +7736,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '<h3>Syvyysalueet (syvä vesi)</h3><p>Sisältää Liikenne- ja viestintäviraston merikarttatietokannasta saatua tietoa ' + G.pad(new Date().getMonth() + 1, 2) + '/' + new Date().getFullYear() + ' (INSPIRE-palvelu, syvyysalueet). Tiedot haetaan palvelusta käytön aikana. Lisenssi sallii käytön muuhun kuin navigointiin ja ei-kaupallisesti; Traficomin määritelmän mukaan reitin suunnittelu on navigointia. Lisenssiteksti alla.</p>' +
         '<details><summary>Traficomin hydrografisen aineiston lisenssi (englanniksi, palvelun kuvauksesta)</summary><p class="meta">The Finnish Transport and Communications Agency\'s hydrographic data license. 1. General information: The Finnish Transport and Communications Agency (hereinafter the Licensor) as the holder of the incorporeal rights, has granted a license to use a copy of the data or part of it (hereinafter data) on the terms and conditions mentioned below. A Licensee is a natural or legal person, who uses the data covered by the license. The Licensee accepts the terms and conditions of this licence by receiving the data covered by the licence. This license agreement does not create a cooperation or business relationship between the Licensee and Licensor. 2. Terms and conditions of the licence. 2.1. Right of use: This licence grants a worldwide and free of charge parallel right of use. According to the terms and conditions of the licence, data received by the Licensor can for other than navigational purposes freely be: copied, distributed and published, modified and utilised non-commercially, combined with other products and, used as part of an application or service. Navigational purposes refer to all maritime operations, such as route planning, positioning, determining the best direction and ensuring the vessel\'s safe passage. 2.2. Duties and responsibilities of the License: When distributing the data or an application including the data it, the Licensee should in a reasonable way, in the distribution media or application used, mention: the name of the Licensor, the data and the time of the data transfer (for example: contains information received from the Finnish Transport and Communications Agency\'s nautical chart data base 06/2020) present a copy of this licence or a link to it, and omit the name of the Licensor in connection with the product or service, on the request of the Licensor. The Licensee must not in connection with the data that is being used indicate that the Licensor supports or recommends the the data use in question. 2.3 Duties and responsibilities of the Licensor: The Licensor is responsible for ensuring that the Licensor has the right to transfer the rights to the data covered by this license. The data has been licensed "as is", and the Licensor shall not be held responsible for any errors or omissions in the data, or any inconsistencies or discontinuities between the vertical coordinate reference systems used therein, disclaims any warranty for the validity or up-to-date status of the data and shall be free from liability for direct or consequential damages arising from the use of data provided by the Licensor, and is not obliged to ensure the continuous availability of the data, nor to announce in advance the interruption or cessation of availability, and the licensor shall be free from liability for direct or consequential damages arising from any such interruption or cessation. 3. Jurisdiction: Finnish law shall apply to this licence. 4. Amendments to this licence: The Licensor may at any time change the terms and conditions of the license or apply a different license to the material. The terms and conditions in this license shall, however, still apply to such data that has been transferred prior to the amendments to the terms and conditions or the change of the license.</p></details>' +
         '<h3>Maapohja</h3><p>Maanmittauslaitoksen taustakartta kartat.kapsi.fi-palvelun kautta, CC BY 4.0. OpenStreetMap-maapohja: &copy; OpenStreetMap-tekijät, ODbL; tiilet OpenStreetMap Foundationin palvelimilta. Koska tiedostona avattu sivu ei lähetä selaimen Referer-tietoa, sovellus tunnistaa itsensä OSM:n palvelimille erillisellä otsakkeella. Jos OSM muuttaa käytäntöään ja tiilet estyvät, käytä Maanmittauslaitoksen maapohjaa.</p>' +
+        '<h3>Kävijälaskuri</h3><p>Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla. Se ei käytä evästeitä eikä yksilöi käyttäjiä, ja tiedostona avatussa sovelluksessa sitä ei ladata. Reittejä, merkkejä tai sijaintia ei lähetetä.</p>' +
         '<h3>Laiturit</h3><p>Laiturit, aallonmurtajat ja pengerrykset vektorikartalla: &copy; OpenStreetMap-tekijät, ODbL, haettu Overpass-rajapinnan kautta (overpass-api.de, varalla overpass.kumi.systems).</p>' +
         '<h3>Väylätiedot</h3><p>Navigointilinjat, väylät, turvalaitteet ja vesiliikennemerkit: Väylävirasto, avoin rajapinta, CC BY 4.0. Väylien suunnat ovat navigointilinjojen virallisia tosisuuntia, kun ne ovat saatavilla, muuten ne on laskettu linjan geometriasta (loksodromi).</p>' +
         '<h3>Sijaintitarkkuus</h3><p>Rasterimerikartta on skannattu paperikartta, ja sen piirros poikkeaa ENC-kartasta. Pistokokeissa väylälinjan sijainti rasterikartalla poikkesi ENC:stä tyypillisesti noin 5 metriä ja suurimmillaan noin 16 metriä (Savonlinna, Kyrönsalmi), ja Näsijärvellä koko piirros oli siirtynyt noin 5–6 metriä luoteeseen. Väyläviraston navigointilinjat poikkesivat ENC:stä noin 1–2 metriä. Siksi reittipisteet kiinnitetään väyläaineistoon ja sivuutus- ja käännösetäisyyksien kohteet Väyläviraston turvalaiterekisterin sijainteihin. Turvalaitteiden sijainteja ei ole mitattu erikseen ENC:tä vasten. Vapaa piste tai kohde perii rasterikartan virheen.</p>' +
@@ -7642,6 +7781,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   window.addEventListener('resize', function () { chart.drawBorder(); });
 })(window);
 
+</script>
+<script>
+// Vercel Web Analytics: anonyymi kävijälaskuri verkkoversiossa. Tiedostona avatussa sovelluksessa ei ladata mitään.
+if (/^https?:$/.test(location.protocol) && /\.vercel\.app$/.test(location.hostname)) {
+  var s = document.createElement('script'); s.defer = true; s.src = '/_vercel/insights/script.js'; document.body.appendChild(s);
+}
 </script>
 </body>
 </html>

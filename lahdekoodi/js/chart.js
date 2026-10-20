@@ -928,8 +928,15 @@
   // palvelimelle tallennetun API-avaimen; käyttäjän ei tarvitse hankkia omaa avainta. Käyttäjän oma avain
   // ja tiedostona avattu sovellus kutsuvat Maanmittauslaitosta suoraan.
   var MML_HOST = 'https://avoin-paikkatieto.maanmittauslaitos.fi';
-  var mmlProxy = /^https?:$/.test(global.location.protocol), mmlProxyOk = null;
+  var mmlProxy = /^https?:$/.test(global.location.protocol), mmlProxyOk = null, mmlNameErr = '';
   function mmlAvailable() { return !!mmlKey || (mmlProxy && mmlProxyOk !== false); }
+  // Sanallinen syy, miksi paikannimihaku ei toimi (näytetään hakutulosten alla), tai tyhjä.
+  function namesNote() {
+    if (mmlKey) return mmlNameErr;
+    if (!mmlProxy) return 'Paikannimet haetaan Maanmittauslaitoksen nimistöstä, kun API-avain on asetettu (Tiedosto → Asetukset).';
+    if (mmlProxyOk === false) return 'Paikannimihaku ei ole käytettävissä: palvelimella ei ole Maanmittauslaitoksen avainta (Vercelin ympäristömuuttuja MML_API_KEY puuttuu tästä julkaisusta). Oman avaimen voi antaa kohdassa Tiedosto → Asetukset.';
+    return mmlNameErr;
+  }
   function mmlUrl(base, path, extra) {
     if (!mmlKey && mmlProxy) return '/api/mml?p=' + encodeURIComponent(base.replace(MML_HOST, '') + path) + '&f=json' + (extra || '');
     return base + path + (path.indexOf('?') < 0 ? '?' : '&') + 'f=json&api-key=' + encodeURIComponent(mmlKey) + (extra || '');
@@ -1084,7 +1091,17 @@
       if (word.length >= 3) urls.push(mmlUrl(MML_NAMES, path, '&limit=40&bbox=' + bb + inner));
     }
     urls.push(mmlUrl(MML_NAMES, path, '&limit=40' + like));
-    function get(u) { return fetch(u).then(function (r) { return r.ok ? r.json() : { features: [] }; }).then(function (j) { return j.features || []; }, function () { return []; }); }
+    var viaProxy = !mmlKey;
+    mmlNameErr = '';
+    function get(u) {
+      return fetch(u).then(function (r) {
+        if (viaProxy && (r.status === 503 || r.status === 404 || r.status === 405)) { mmlProxyOk = false; return { features: [] }; }
+        if (r.status === 401 || r.status === 403) { mmlNameErr = 'Paikannimihaku ei onnistu: Maanmittauslaitoksen API-avainta ei hyväksytty (HTTP ' + r.status + ').'; return { features: [] }; }
+        if (viaProxy) mmlProxyOk = true;
+        if (!r.ok) { mmlNameErr = 'Paikannimihaku ei onnistu: Maanmittauslaitoksen palvelu vastasi HTTP ' + r.status + '.'; return { features: [] }; }
+        return r.json();
+      }).then(function (j) { return j.features || []; }, function () { mmlNameErr = mmlNameErr || 'Paikannimihaku ei onnistu: Maanmittauslaitoksen palveluun ei saatu yhteyttä.'; return []; });
+    }
     return Promise.all(urls.map(get)).then(function (lists) {
       var seen = {}, out = [];
       lists.forEach(function (fs) { fs.forEach(function (f) {
@@ -1596,6 +1613,7 @@
       setUnderlay: function (on) { if (!vecOn()) setUnderlayLayer(!!on, 0.55); },
       setMmlKey: setMmlKey,
       searchNames: searchNames,
+      namesNote: namesNote,
       get mmlInfo() { return { key: !!mmlKey, proxy: !mmlKey && mmlProxy && mmlProxyOk !== false, available: mmlAvailable(), cols: mmlCols, err: mmlColsErr, n: Object.keys(mmlStore.rock).length }; },
       get landKind() { return landKind; },
       setSafety: setSafety,

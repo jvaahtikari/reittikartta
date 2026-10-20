@@ -133,6 +133,7 @@
       case 'del': R.deleteRoute(id); break;
       case 'newMark': Tools().pick('Uusi merkki – klikkaa paikka kartalta', function (ll) { Tools().editMark(null, ll); }); break;
       case 'newTask': Tools().editTask(null, null); break;
+      case 'routeTask': global.Routing.taskDialog(); break;
     }
   }
   function Tools() { return global.Tools; }
@@ -187,7 +188,8 @@
   function renderTasks() {
     var el = UI.$('tab-tasks');
     var st = S.state.settings.station;
-    var h = '<div class="p-actions"><button class="btn primary" data-act="newTask">Uusi tehtävä</button></div>';
+    var h = '<div class="p-actions"><button class="btn primary" data-act="newTask">Uusi tehtävä</button>' +
+      (S.state.tasks.length ? '<button class="btn" data-act="routeTask">Reititä tehtävälle</button>' : '') + '</div>';
     if (!st) h += '<div class="meta" style="margin-bottom:8px">Aseta asema kartalta (' + (UI.isTouch() ? 'pitkä painallus' : 'oikea painike') + ' → <b>Aseta asema tähän</b>), niin tehtävän suuntima ja etäisyys asemalta näkyvät.</div>';
     if (!S.state.tasks.length) h += '<div class="empty">Ei tehtäviä. Kun saat tehtävän koordinaatit, valitse <b>Uusi tehtävä</b> ja kirjoita koordinaatit hälytysviestistä. Tehtäväpaikka näkyy kartalla kaksoisympyränä.</div>';
     else {
@@ -209,6 +211,7 @@
         UI.menu(e.clientX, e.clientY, [
           { label: 'Ominaisuudet…', action: function () { Tools().editTask(t.id); } },
           { label: t.active ? 'Poista aktiivisuus' : 'Aseta aktiiviseksi', action: function () { Tools().setActiveTask(t.active ? null : t.id); } },
+          { label: 'Reititä tehtävälle väylää pitkin…', action: function () { global.Routing.taskDialog(t.id); } },
           { label: 'Kopioi koordinaatit', action: function () { Tools().copyText(G.fmtPos(t)); } },
           { label: 'Poista tehtävä…', action: function () {
             UI.confirm('Poistetaanko tehtävä "' + (t.name || 'Tehtävä') + '"?', 'Poista', function () {

@@ -278,10 +278,7 @@
         S.emit('routes'); global.Routes.enterEdit(r.id);
         UI.toast('Suora reittiluonnos luotu. Lisää reittipisteitä oikealla napilla reittiviivasta.');
       } },
-      { label: 'Reititä asemalta tehtävään väylää pitkin…', action: function () {
-        var st = S.state.settings.station;
-        global.Routing.dialog({ from: st ? { lat: st.lat, lng: st.lng, label: st.name || 'Asema' } : null, to: { lat: t.lat, lng: t.lng, label: t.name || 'Tehtävä' } });
-      } },
+      { label: 'Reititä tehtävälle väylää pitkin…', action: function () { global.Routing.taskDialog(t.id); } },
       { sep: true },
       { label: 'Poista tehtävä…', action: function () {
         UI.confirm('Poistetaanko tehtävä "' + (t.name || 'Tehtävä') + '"?', 'Poista', function () {
@@ -391,7 +388,8 @@
             });
             if (pending) h += '<div class="sn">Haetaan lisää…</div>';
           }
-          if (!global.Search.hasNames && fin.value.trim().length >= 3) h += '<div class="sn">Paikannimet tarvitsevat Maanmittauslaitoksen avaimen (Tiedosto → Asetukset).</div>';
+          var note = !pending && fin.value.trim().length >= 3 ? global.Search.namesNote() : '';
+          if (note) h += '<div class="sn">' + UI.esc(note) + '</div>';
           box.innerHTML = h; box.hidden = false;
         }
         function runFind() {
