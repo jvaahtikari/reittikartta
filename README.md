@@ -1,6 +1,11 @@
 # Reittikartta
 
-Reittikartta on selainpohjainen reittisuunnittelun työkalu suomalaisella merikartalla. Sen toiminnot mukailevat Meripelastusseuran SARNav-karttaohjelmaa: reittiluonnos, suuntanuotit, sivuutus- ja käännösetäisyydet, hyväksyntä aluskohtaiseen reittikirjastoon, omat merkit ja tehtäväpaikat. Lisäksi sovellus osaa laskea reitin automaattisesti virallista väylää pitkin niin, että annettu kulkusyvyys täyttyy koko matkalla. Sovellus ei ole Meripelastusseuran virallinen ohjelma.
+Reittikartta on selainpohjainen reittisuunnittelun työkalu suomalaisella merikartalla. Sen tarkoitus on helpottaa paikkojen löytämistä kartalta ja reitin laatimista tehtävälle.
+
+- **Paikan löytäminen:** paikannimet, turvalaitteet, väylät, sulut ja sillat löytyvät nimellä, ja paikan voi antaa myös koordinaatteina. Samannimiset paikat näytetään kartalla numeroituina etäisyyksineen, jotta oikean paikan tunnistaa.
+- **Reitti tehtävälle:** Reititä tehtävälle laskee reitin virallista väylää pitkin omasta sijainnista, asemalta tai muusta paikasta tehtäväpaikalle niin, että aluksen kulkusyvyys täyttyy koko matkalla. Reitti avautuu tarkistettavaksi ja muokattavaksi.
+
+Muut toiminnot mukailevat Meripelastusseuran SARNav-karttaohjelmaa: reittiluonnos, suuntanuotit, sivuutus- ja käännösetäisyydet, hyväksyntä aluskohtaiseen reittikirjastoon, omat merkit ja tehtäväpaikat. Sovellus ei ole Meripelastusseuran virallinen ohjelma.
 
 **Verkkoversio:** https://reittikartta-6qn2.vercel.app
 
@@ -16,6 +21,9 @@ Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusse
 
 ## Ominaisuudet lyhyesti
 
+- **Paikkahaku:** paikannimet, turvalaitteet nimellä tai numerolla, väylät, sulut ja sillat, luotsipaikat, VTS-ilmoittautumispisteet, omat kohteet ja koordinaatit. Haku toimii samoin kaikilla karttapohjilla. Samannimiset paikat näytetään kartalla numeroituina, ja niille annetaan kunta sekä etäisyys meripeninkulmina ja suunta.
+- **Reititys väylää pitkin:** reitti lasketaan automaattisesti lähtöpisteestä määränpäähän Väyläviraston navigointilinjoja pitkin, ja vain annetun kulkusyvyyden täyttävät väylät kelpaavat. Tehtävälle on oma reititys omasta sijainnista, asemalta tai muusta paikasta. Reitti avautuu muokkaustilaan tarkistettavaksi, ja kulkusyvyyttä voi muuttaa tarkastelun aikana.
+- **Tehtäväpaikat ja asema:** tehtäväpaikka haetaan nimellä ja tarkistetaan kartalla ennen luomista. Aktiivisen tehtävän suuntima ja etäisyys näytetään asemalta.
 - **Kolme karttapohjaa:** Traficomin rasterimerikartta, ENC-kartta perinteisin tai ECDIS-symbolein sekä vektorikartta, joka on terävä tasolle 20 asti. Rasterista ja ENC:stä siirrytään vektorikarttaan itsestään, kun zoomataan tasoa 17 lähemmäs.
 - **Suomalaiset karttamerkit:** kivet, viitat, kummelit, linjamerkit ja loistot piirretään Traficomin merkkienselityksen mukaan. Valosektorit näkyvät värikaarina ENC-kartan mitoissa, ja ympäri näkyvät valot värirenkaana. Viitat voi värittää ECDISin tapaan.
 - **Vesiliikennemerkit, sillat ja sulut:** vesiliikennemerkit piirretään vesiliikennelain mukaisina kilpinä, sillat alikulkukorkeuksineen ja sulut suurimman sallitun aluksen mittoineen.
@@ -25,10 +33,7 @@ Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusse
   - sivuutus- ja käännösetäisyydet
   - reittipisteiden kiinnitys väylän pisteisiin
   - hyväksyntä aluskohtaiseen reittikirjastoon
-- **Reititys väylää pitkin:** reitti lasketaan automaattisesti lähtöpisteestä määränpäähän Väyläviraston navigointilinjoja pitkin, ja vain annetun kulkusyvyyden täyttävät väylät kelpaavat. Tehtävälle on oma reititys omasta sijainnista, asemalta tai muusta paikasta. Reitti avautuu muokkaustilaan tarkistettavaksi, ja kulkusyvyyttä voi muuttaa tarkastelun aikana.
 - **Syvä vesi:** vesialueet väritetään aluksen turvasyvyyden mukaan ECDISin turvakäyrän tapaan.
-- **Paikkahaku:** paikannimet, turvalaitteet nimellä tai numerolla, väylät, sulut ja sillat, luotsipaikat, VTS-ilmoittautumispisteet, omat kohteet ja koordinaatit. Haku toimii samoin kaikilla karttapohjilla. Samannimiset paikat näytetään kartalla numeroituina, ja niille annetaan kunta sekä etäisyys meripeninkulmina ja suunta.
-- **Tehtäväpaikat ja asema:** tehtäväpaikka haetaan nimellä ja tarkistetaan kartalla ennen luomista. Aktiivisen tehtävän suuntima ja etäisyys näytetään asemalta.
 - **Oma sijainti:** laitteen sijainti, nopeus ja kulku. Puhelimessa sijainti käynnistyy sovelluksen avautuessa, kun käyttäjä sallii sen.
 - **Työkalut:** harppi, suuntima, omat merkit, yönäyttö ja karttareunuksen minuuttiasteikko.
 - **Laiturit ja aallonmurtajat** näkyvät vektorikartalla Maanmittauslaitoksen ja OpenStreetMapin aineistosta.
@@ -67,15 +72,13 @@ Oma sijainti näytetään vain käyttäjän omalla näytöllä, eikä sitä tall
 
 Karttapohja vaihdetaan kartan yläreunan painikkeilla Rasteri, ENC, ECDIS ja Vektori. Samat valinnat ovat valikossa Näytä ja näppäimissä R, E, Shift+E ja V. Valittu pohja on korostettu.
 
-**Rasterikartta** on Traficomin skannattu paperimerikartta. Sen tarkin taso on 15, ja näytöllä yksi pikseli vastaa tasolla 15 noin 2,3:a metriä. Tasot 16–17 piirretään saman aineiston terävöitettynä suurennoksena. Sovellus tunnistaa kartan omat värit ja piirtää värirajat uudelleen terävinä, mutta tarkkuutta ei synny lisää. Tarkalla näytöllä kauempana kuva kootaan yhtä tasoa tarkemmista tiilistä ja pienennetään. Kartta on terävimmillään, kun selaimen oma zoomaus on 100 %. Rasterissa näkyy paikoin karttalehtien rajaviivoja, jotka ovat Traficomin aineistossa sellaisenaan.
+**Rasterikartta** on Traficomin skannattu paperimerikartta. Sen tarkin taso on 15, ja näytöllä yksi pikseli vastaa tasolla 15 noin 2,3:a metriä. Tasot 16–17 piirretään saman aineiston terävöitettynä suurennoksena, joten niissä ei ole lisää tarkkuutta. Kartta on terävimmillään, kun selaimen oma zoomaus on 100 %. Rasterissa näkyy paikoin karttalehtien rajaviivoja, jotka ovat Traficomin aineistossa sellaisenaan.
 
 **ENC-kartta** tulee Traficomin S-57 WMS -palvelusta, joka piirtää ENC-aineiston kuvaksi pyydetyssä mittakaavassa. Se on terävä kaikilla tasoilla, ja väylät, turvalaitteet ja rantaviiva ovat ENC:n mukaisissa paikoissa. ENC kattaa rannikon ja osan sisävesistä, esimerkiksi Saimaan alueen. Näsijärvellä ENC-aineistoa ei ole. Missä aineistoa ei ole, sovellus näyttää rasterikartan ja kertoo siitä kartan oikeassa yläkulmassa.
 
 **Vektorikartassa** vesialueet, syvyysvyöhykkeet, syvyyskäyrät, rantaviiva ja syvyysluvut piirretään Traficomin merikarttatietokannasta. Väylälinjat, väyläalueet ja turvalaitteet tulevat Väyläviraston aineistosta. Maapohjana on oletuksena OpenStreetMap, jonka päällä näytetään Maanmittauslaitoksen nimistörekisterin paikannimet. Maanmittauslaitoksen taustakartan voi valita tilalle valikosta Näytä. Vektorikartta kattaa myös Näsijärven, mutta siitä puuttuvat paperikartan nimistö ja erikoismerkinnät. Aineiston syvyysvälit ovat paikoin karkeita.
 
 Rasteri- ja ENC-pohjaa näytetään tasolle 17 asti. Kun zoomataan lähemmäs, kartta vaihtuu itsestään vektorikarttaan, jota voi suurentaa tasolle 20 asti, eli näytön leveydellä noin sataan metriin. Vektori-painike näkyy silloin katkoviivoitettuna, ja uloszoomatessa palataan valittuun pohjaan. Suurennus ei tee aineistosta tarkempaa kuin se on.
-
-Hiiren rulla zoomaa yhden tason naksausta kohti. Sovelluksella on oma rullakäsittely, joka kerää rullauksen liikkeen ja ottaa yhden askeleen naksauksen verran liikettä kohti. Näin myös tarkkuusrullat, kuten Logitechin MagSpeed-rulla pehmeällä vierityksellä, zoomaavat tasaisesti, vaikka ne pilkkovat yhden naksauksen kymmeniin pieniin tapahtumiin. Kosketuslevyn nipistys on rullaa herkempi.
 
 ## Karttamerkit, valot ja väylätiedot
 
@@ -100,7 +103,7 @@ Väyläviraston avoimesta rajapinnasta näytetään lisäksi seuraavat tiedot:
 
 **Linjataulujen linjat** piirretään vektorikartalle ENC:n tapaan, ja muille pohjille ne tulevat väylälinjojen mukana. Ohut katkoviiva jatkuu väylän linjaosuuden päästä taulujen kautta, ja linjan tosisuunta, esimerkiksi 055,5°, on merkitty linjan ulommaiseen päähän. Aineisto on Väyläviraston taululinjat. Väylän suunta on navigointilinjan virallinen tosisuunta, kun se on saatavilla, ja muuten se lasketaan linjan geometriasta.
 
-**Vesiliikennemerkit** piirretään vesiliikennelain (782/2019) 4 luvun mukaisina merkkikilpinä pienennettyinä. Kielto-, määräys-, rajoitus- ja varoitusmerkit ovat neliöitä, joissa on punaiset reunat ja valkoisella pohjalla musta kuvio, ja kieltomerkissä lisäksi punainen diagonaaliviiva. Tiedotusmerkit ovat sinisiä neliöitä, kaapeli- ja johtotaulut keltaisia suorakaiteita ja suuntamerkit punaisia ympyröitä. Rajoitusmerkeissä näkyy rajoituksen arvo, esimerkiksi nopeusrajoitus tai alikulkukorkeus. Samassa paikassa olevat merkit pinotaan tolpaksi lain järjestyksessä, jolloin esimerkiksi rajoitetun alikulkukorkeuden merkki on ilmajohtomerkin yläpuolella. Merkin napautus näyttää lajit, arvot ja lisäkilpien tekstit. Merkit näkyvät tasolta 13 ja kaapelitaulut tasolta 14. Väyläviraston rekisterissä merkin laji on vain numerokoodina, ja koodien merkitykset on päätelty rekisterin aineistosta: koodit noudattavat lain merkkien järjestystä, ja merkkien sijainnit ja lisäkilpien tekstit vahvistavat tulkinnan. Tuntematon laji näytetään yleisenä merkkinä.
+**Vesiliikennemerkit** piirretään vesiliikennelain (782/2019) 4 luvun mukaisina merkkikilpinä pienennettyinä. Kielto-, määräys-, rajoitus- ja varoitusmerkit ovat neliöitä, joissa on punaiset reunat ja valkoisella pohjalla musta kuvio, ja kieltomerkissä lisäksi punainen diagonaaliviiva. Tiedotusmerkit ovat sinisiä neliöitä, kaapeli- ja johtotaulut keltaisia suorakaiteita ja suuntamerkit punaisia ympyröitä. Rajoitusmerkeissä näkyy rajoituksen arvo, esimerkiksi nopeusrajoitus tai alikulkukorkeus. Samassa paikassa olevat merkit pinotaan tolpaksi lain järjestyksessä, jolloin esimerkiksi rajoitetun alikulkukorkeuden merkki on ilmajohtomerkin yläpuolella. Merkin napautus näyttää lajit, arvot ja lisäkilpien tekstit. Merkit näkyvät tasolta 13 ja kaapelitaulut tasolta 14. Tuntematon laji näytetään yleisenä merkkinä (ks. Tunnetut rajoitukset).
 
 **Sillat ja sulut.** Sillat, joille Väyläviraston taitorakennerekisterissä on alittavan vesiväylän alikulkukorkeus (noin 280 siltaa), piirretään INT 1:n tapaan kahtena kannen reunaviivana, joiden päät taittuvat ulospäin, ja alikulkukorkeus näkyy sillan vieressä. Rekisteri antaa vain sillan keskipisteen, joten kansi suunnataan poikki lähimmän navigointilinjan. Sulut ja avattavat sillat tulevat Väyläviraston sulkukanava-aineistosta. Avattavan sillan kannessa on aukko, ja sulun merkissä ovat kanavan seinämät ja portit. Napautus näyttää suurimman sallitun aluksen mitat, sulun mitat, putouskorkeuden ja käyttötavan. Avattavan sillan kohdalla aineiston korkeus on suurin sallittu aluksen korkeus sillan ollessa avattuna, ei suljetun sillan alikulkukorkeutta, joten sitä ei merkitä karttaan. Jos sama avattava silta on myös taitorakennerekisterissä (esimerkiksi Muroleen kanavan kääntösilta), aineistot yhdistetään: silta piirretään kerran, ja rekisterin alikulkukorkeus näkyy suljetun sillan alikulkukorkeutena, esimerkiksi ↕ 1 m · avattava. Sulku näkyy tasolta 15 kammion ääriviivana. Siltojen ja sulkujen merkinnät sijoitetaan niin, etteivät ne mene toistensa päälle, ja ahtaassa paikassa osa merkinnöistä tulee näkyviin vasta lähemmäs zoomattaessa.
 
@@ -122,7 +125,7 @@ Uusi reitti aloitetaan työkalupalkin reittipainikkeella, kirjaston painikkeella
 
 Reitti siirtyy muokkaustilaan, jonka tunnistaa ruskeasta ilmoituksesta. Muokkaustilassa reittipisteitä voi vetää. Reittiviivan valikosta (hiiren oikea painike tai pitkä painallus) lisätään reittipiste, suuntanuotti tai sivuutusetäisyys. Reittipisteen valikosta poistetaan piste, lisätään käännösetäisyys tai jatketaan reittiä.
 
-Jokaiselle näkyvälle legille piirretään automaattisesti SARNavin tapaan suuntanuotti: kulkusuunta isolla, nuoli kulkusuuntaan sekä vastasuunta ja legin pituus. Nuotti sijoittuu legin näkyvälle osalle, ja pitkällä legillä nuotteja on useampia. Mutkikkaalla väylällä nuotit sijoitetaan pisimmistä legeistä alkaen, eikä nuottia piirretä, jos legi on näkymässä alle 60 pikseliä tai laatikko osuisi toisen päälle. Lähemmäs zoomattaessa puuttuvat nuotit tulevat näkyviin. Jokaisen käännöksen eteen piirretään seuran käytännön mukaiset merkit 2 ja 1 kaapelia ennen käännöspistettä.
+Jokaiselle näkyvälle legille piirretään automaattisesti SARNavin tapaan suuntanuotti: kulkusuunta isolla, nuoli kulkusuuntaan sekä vastasuunta ja legin pituus. Nuotti sijoittuu legin näkyvälle osalle, ja pitkällä legillä nuotteja on useampia. Mutkikkaalla väylällä nuotit eivät mene toistensa päälle, vaan lyhyiden legien nuotit tulevat näkyviin lähemmäs zoomattaessa. Jokaisen käännöksen eteen piirretään seuran käytännön mukaiset merkit 2 ja 1 kaapelia ennen käännöspistettä.
 
 Reitin ominaisuuksissa nimi muodostuu kentistä Mistä, Kautta ja Mihin. Hyväksy omaan kirjastoon kirjaa hyväksyjän ja alukset, ja hyväksytty reitti näkyy pinkkinä. Hyväksytyn reitin muokkaus aloitetaan erikseen kirjastosta, ja muutokset hyväksytään uudelleen.
 
@@ -140,7 +143,7 @@ Lähtöpiste ja saapumispiste ovat lähimmät kelvolliset väyläpisteet annettu
 
 Laskettu reitti avautuu muokkaustilaan, ja sitä säädetään kuten muitakin reittejä. Yhteenveto näyttää reitin pienimmän kulkusyvyyden, käytetyt väylät kulkusyvyyksineen ja osuuksineen sekä muistutuksen, että reitti tarkistetaan ennen käyttöä. Samat tiedot kirjataan reitin huomioihin. Oletuksena pienin kulkusyvyys on aluksen turvasyvyys.
 
-Reittipisteet ovat väyläaineiston pisteitä, ja ne näkyvät kiinnitettyinä. Suorat jatkokohdat ja kaarien välipisteet on harvennettu niin, että reittiviiva poikkeaa navigointilinjasta enintään kymmenen metriä, mikä pysyy väyläalueen sisällä. Pistokokeessa Helsingistä Porkkalaan (25 mpk) reitti laskettiin alle sekunnissa, ja Helsingin saariston mutkikkaalla väylällä reittiin jäi noin 50 legiä.
+Reittipisteet ovat väyläaineiston pisteitä, ja ne näkyvät kiinnitettyinä. Suorat jatkokohdat ja kaarien välipisteet on harvennettu niin, että reittiviiva poikkeaa navigointilinjasta enintään kymmenen metriä, mikä pysyy väyläalueen sisällä.
 
 Kulkusyvyyttä voi muuttaa tarkastelun aikana muokkausilmoituksen painikkeesta Kulkusyvyys, yhteenvedon painikkeesta Muuta kulkusyvyyttä tai reittiviivan valikosta. Reitti lasketaan silloin uudelleen samalla lähtöpaikalla ja määränpäällä. Reittipisteet korvataan, ja vanhoihin legeihin viittaavat suuntanuotit sekä sivuutus- ja käännösetäisyydet poistetaan. Jos uutta reittiä ei löydy, nykyinen reitti säilyy. Reititysparametrit tallentuvat reitille, joten kulkusyvyyden voi vaihtaa myöhemminkin kirjastosta avattuun reittiin.
 
@@ -243,7 +246,7 @@ Kapeassa näytössä valikot ovat vasemman yläkulman valikkonapin takana, ja sa
 
 Kirjasto avautuu näytön alaosaan ja sulkeutuu itsestään, kun reitti tai muokkaus aloitetaan. Kun kirjasto on auki, kartta keskitetään sen yläpuolelle jäävään osaan, ja valitun reitin toimintopainikkeet ovat heti nimen alla.
 
-Karttaa zoomataan nipistämällä, ja pitkä painallus vastaa hiiren oikeaa painiketta. Reittipisteitä lisättäessä ja harpilla mitattaessa ylhäällä ovat painikkeet Poista viimeinen ja Valmis, ja lukemat näyttävät juuri lisätyn välin suunnan ja pituuden. Kosketuskohteet ovat vähintään 40 pikselin kokoisia.
+Karttaa zoomataan nipistämällä, ja pitkä painallus vastaa hiiren oikeaa painiketta. Reittipisteitä lisättäessä ja harpilla mitattaessa ylhäällä ovat painikkeet Poista viimeinen ja Valmis, ja lukemat näyttävät juuri lisätyn välin suunnan ja pituuden.
 
 ## SARNav ja GPX
 
@@ -278,8 +281,6 @@ Required Notice: Copyright 2026 Jussi Vaahtikari
 Ei-kaupallinen rajaus vastaa sovelluksen käyttämän aineiston ehtoja. Traficomin syvyysaineiston lisenssi sallii aineiston hyödyntämisen vain ei-kaupallisesti ja muuhun kuin navigointiin, joten vapaampi koodilisenssi antaisi luvan, jota sovellus ei aineistonsa puolesta voi käyttää. Lisenssi ei ole OSI:n määritelmän mukainen avoimen lähdekoodin lisenssi, vaikka lähdekoodi on julkinen.
 
 Lisenssi koskee vain sovelluksen omaa koodia. Kartta-aineistot ovat omien lisenssiensä alaisia (taulukko edellä), ja mukana tuleva Leaflet on BSD-2-lisensoitu; sen tekijänoikeusilmoitus säilyy kirjaston alussa. SARNav on Meripelastusseuran ohjelma, ja nimeä käytetään tässä vain kuvailevasti.
-
-OpenStreetMapin palvelimet estävät karttatiilet sivuilta, jotka eivät lähetä Referer-tietoa, eikä tiedostona avattu sivu lähetä sitä. Siksi sovellus hakee OSM-tiilet erikseen ja tunnistaa itsensä X-Requested-With-otsakkeella. Jos tiilet näkyvät joskus Access blocked -ruutuina, maapohjaksi voi valita Maanmittauslaitoksen taustakartan.
 
 ## Repon rakenne
 
@@ -355,5 +356,6 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 - **Reititys:** reitti alkaa ja päättyy väylällä, eikä se kulje väylän ulkopuolisilla vesialueilla. Kulkusyvyyden lisäksi muita rajoituksia ei huomioida, joten nopeusrajoitukset, siltojen alikulkukorkeudet ja sulkujen mitat tarkistetaan itse. Linjat ilman kulkusyvyystietoa eivät kelpaa. Hakualue on enintään noin 4° × 2,5°, joten hyvin pitkä matka jaetaan osiin.
 - **Vesiliikennemerkit:** merkin lajin merkitys on päätelty rekisterin numerokoodista. Epävarmimpia ovat väylän reunan merkki (koodi 19) ja lauttaväylän merkit, joissa vaijerilauttaa ei erotella vapaasti kulkevasta lautasta, ellei lisäkilpi mainitse vaijeria.
 - **Sillat:** alikulkukorkeus on taitorakennerekisterissä vain noin 280 sillalle. Muiden siltojen alikulkukorkeus näkyy vain vesiliikennemerkeissä ja karttapohjassa. Rekisterin korkeuden vertaustaso ei käy aineistosta ilmi.
+- **OpenStreetMapin maapohja:** jos OpenStreetMapin tiilet näkyvät Access blocked -ruutuina, maapohjaksi voi valita Maanmittauslaitoksen taustakartan valikosta Näytä.
 - **Overpass:** OpenStreetMapin Overpass-palvelu on usein ruuhkainen, jolloin OpenStreetMapin laiturialueet tulevat viiveellä tai jäävät tulematta. Maanmittauslaitoksen laituriviivat näkyvät silti.
 - **Paikannimihaku:** nimistörekisterin paikan lajia ei vielä näytetä tuloksissa sanallisesti, vaan rivillä on kunta. Väylät, sulut ja sillat haetaan vain Väyläviraston aineistosta ja luotsipaikat Traficomin aineistosta, joten muiden toimijoiden kohteet voivat puuttua.
