@@ -94,7 +94,7 @@ button { cursor: pointer; }
 #main { flex: 1; display: flex; min-height: 0; }
 #mapwrap { position: relative; flex: 1; min-width: 0; }
 #map { position: absolute; inset: 0; background: var(--map-bg); }
-body.night #map .leaflet-tile-pane, body.night #map .leaflet-chart-pane, body.night #map .leaflet-depth-pane { filter: invert(.92) hue-rotate(180deg) brightness(.72) contrast(1.05) saturate(.75); }
+body.night #map .leaflet-tile-pane, body.night #map .leaflet-chart-pane, body.night #map .leaflet-depth-pane, body.night #map .leaflet-terrainCover-pane, body.night #map .leaflet-terrainRelief-pane, body.night #map .leaflet-terrainVec-pane { filter: invert(.92) hue-rotate(180deg) brightness(.72) contrast(1.05) saturate(.75); }
 .leaflet-container { font-family: var(--font); }
 .chart-border { position: absolute; inset: 0; pointer-events: none; z-index: 640; }
 #map.mode-cross, #map.mode-cross .leaflet-interactive { cursor: crosshair !important; }
@@ -596,3 +596,6 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 .rt-start { grid-column: 2; }
 .rt-sub { margin: 2px 0 4px; }
 @media (max-width: 700px) { .rt-start { grid-column: 1; } }
+
+/* Maasto-tasot: napautusikkunan osiot */
+.pop + .pop { margin-top: 8px; padding-top: 5px; border-top: 1px solid #d5dbe0; }

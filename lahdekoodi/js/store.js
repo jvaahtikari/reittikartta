@@ -22,10 +22,13 @@
           notes: true, passes: true, bearings: true, depths: true, lines: false,
           aids: false, aidNames: false, signs: null, border: true, hint: false, snap: true, safety: false,
           legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true,
-          bridges: null, ecdisMarks: false
+          bridges: null, ecdisMarks: false,
+          terrainBuildings: false, terrainAddresses: false, terrainParcels: false,
+          terrainCover: false, terrainRelief: false, terrainRoads: false     // Maasto (Näsijärvi), ks. terrain.js
         },
         safetyDepths: {},
         land: 'osm',                // maapohja: 'osm' (oletus, näyttää maa-alueiden nimet) | 'mml'
+        terrainUrl: 'https://jvaahtikari.github.io/reittikartta-aineisto/',   // Maastoaineiston (Näsijärvi) paketti
         mmlKey: '',                 // Maanmittauslaitoksen avoimen rajapinnan API-avain           // turvasyvyys aluksittain (m)
         base: 'raster',             // karttapohja: 'raster' | 'vector' | 'enc' | 'enc-ecdis'
         night: false,

@@ -1,6 +1,7 @@
 /* Reittikartta – paikkahaku: koordinaatit, omat kohteet, Väyläviraston turvalaitteet nimellä ja
  * numerolla, väylät, sulut ja avattavat sillat, Traficomin luotsipaikat ja VTS-ilmoittautumispisteet
- * sekä (API-avaimella tai välityspalvelulla) Maanmittauslaitoksen nimistörekisteri.
+ * sekä (API-avaimella tai välityspalvelulla) Maanmittauslaitoksen nimistörekisteri. Lisäksi katuosoitteet
+ * ja kiinteistötunnukset Näsijärven aineistopaketin hakemistoista (terrain.js), myös kun Maasto-tasot ovat pois päältä.
  * Haku ei lue nimiä karttakuvasta, joten se toimii samoin kaikilla karttapohjilla.
  *
  * Suomessa on paljon samannimisiä paikkoja (esim. kymmeniä Viitasaaria), joten tulokset
@@ -135,13 +136,18 @@
   function hasNames() { return !!(global.ChartAPI && global.ChartAPI.searchNames && global.ChartAPI.mmlInfo.available); }
   // syy, miksi paikannimiä ei tullut (avain puuttuu, palvelin ei vastaa), tai tyhjä
   function namesNote() { return global.ChartAPI && global.ChartAPI.namesNote ? global.ChartAPI.namesNote() : ''; }
-  // turvalaitteet ja paikannimet, etäisyysjärjestyksessä pisteestä at
+  // osoitteet ja kiinteistötunnukset paketin hakemistoista (virhe tai puuttuva verkko: ei tuloksia)
+  function addresses(q) {
+    return global.Terrain ? global.Terrain.search(q).catch(function () { return []; }) : Promise.resolve([]);
+  }
+  // turvalaitteet, paikannimet, osoitteet ja kiinteistötunnukset, etäisyysjärjestyksessä pisteestä at
   function remote(q, at) {
     return Promise.all([
       aids(q), fairways(q), canals(q), traficom(q),
-      hasNames() ? global.ChartAPI.searchNames(q, at).catch(function () { return []; }) : Promise.resolve([])
+      hasNames() ? global.ChartAPI.searchNames(q, at).catch(function () { return []; }) : Promise.resolve([]),
+      addresses(q)
     ]).then(function (res) {
-      return place(res[4].concat(res[0], res[1], res[2], res[3]), at);
+      return place(res[5].concat(res[4], res[0], res[1], res[2], res[3]), at);
     });
   }
   // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, turvalaitteet ja paikannimet
@@ -247,7 +253,7 @@
     input.blur();
     clearMarkers();
     ref = null; fittedFor = null;
-    global.App.centerOn([it.lat, it.lng], Math.max(map.getZoom(), it.route ? 13 : 14));
+    global.App.centerOn([it.lat, it.lng], Math.max(map.getZoom(), it.zoom || (it.route ? 13 : 14)));
     if (it.route && global.Routes) global.Routes.setHighlight(it.route, true);
     if (hlLayer) map.removeLayer(hlLayer);
     hlLayer = L.layerGroup([
