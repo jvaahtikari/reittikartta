@@ -596,3 +596,39 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 .rt-start { grid-column: 2; }
 .rt-sub { margin: 2px 0 4px; }
 @media (max-width: 700px) { .rt-start { grid-column: 1; } }
+
+/* AIS-alukset (ais.js). Alukset ovat omassa panessaan (aisPane), jota yönäytön suodattimet eivät koske,
+   joten merkkien omat värit säilyvät. Vaalea hehku erottaa tumman reunaviivan tummalta yökartalta. */
+.ais-w { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ais-s { display: block; overflow: visible; filter: drop-shadow(0 0 1px rgba(255,255,255,.9)); }
+body.night .ais-s { filter: drop-shadow(0 0 1px rgba(255,255,255,.6)); }
+.ais-n { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
+  font: 600 11px/1 var(--font); color: #111; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; }
+.ais-n.t { transform: translate(-50%, -100%); }
+.ais-n.b { transform: translate(-50%, 0); }
+.ais-n.l { transform: translate(-100%, -50%); }
+.ais-n.sar { color: #b53f00; font-weight: 700; }
+body.night .ais-n { color: #eee; text-shadow: 0 0 2px #000, 0 0 3px #000; }
+body.night .ais-n.sar { color: #ff9a5c; }
+/* Rungon (ais-hull) napautuksen ottaa vastaan vain rungon oma muoto ja sen ympärillä oleva läpinäkyvä reunus (ais-hit).
+   Muuten pitkän tai vinon rungon laatikko peittäisi vierekkäiset alukset. */
+.ais-ico.ais-hullico { pointer-events: none !important; }
+.ais-hull-s { position: absolute; }
+.ais-hull-s .ais-hit { pointer-events: all; cursor: pointer; }
+/* reitin, mittauksen tai paikan poiminnan aikana napautus menee aluksen läpi kartalle */
+#map.mode-cross .ais-ico, #map.mode-cross .ais-ico * { pointer-events: none !important; }
+
+/* aluksen kortti */
+.ais-popup .leaflet-popup-content { margin: 10px 12px 12px; font: 13px/1.35 var(--font); }
+.ais-pop .ais-t { display: block; font-size: 14.5px; padding-right: 28px; word-break: break-word; }
+.ais-pop .ais-sub { color: #555; margin-bottom: 4px; }
+.ais-pop .ais-rows { min-height: 90px; max-height: calc(100vh - 330px); max-height: calc(100dvh - 330px); overflow-y: auto; }
+.ais-pop table { width: 100%; margin-top: 2px; }
+.ais-pop th { white-space: nowrap; }
+.ais-pop td { word-break: break-word; }
+.ais-task { display: block; width: 100%; min-height: 44px; margin-top: 8px; padding: 8px 10px; border: 1px solid #0b4f7a; border-radius: 6px;
+  background: #0f5e86; color: #fff; font: 600 13px var(--font); cursor: pointer; }
+.ais-task:hover { background: #0b4f7a; }
+@media (pointer: coarse) {
+  .leaflet-container .ais-popup a.leaflet-popup-close-button { width: 40px; height: 40px; padding: 0; font-size: 26px; line-height: 40px; text-align: center; }
+}

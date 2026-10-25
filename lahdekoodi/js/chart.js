@@ -816,7 +816,7 @@
           var theta = Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x) * 180 / Math.PI;
           var flipped = false;
           if (theta > 90 || theta < -90) { theta += 180; flipped = true; }
-          var fwd = G.fmtBrg(b0, 1), rev = G.fmtBrg(b0 + 180, 1);
+          var fwd = G.fmtBrg(b0, 0), rev = G.fmtBrg(b0 + 180, 0);   // kokonaisina asteina
           var left = flipped ? fwd : rev, right = flipped ? rev : fwd;
           var html = '<div class="fw-lab" style="transform:translate(-50%,-50%) rotate(' + theta.toFixed(1) + 'deg) translateY(-' + off + 'px)">';
           if (showB) html += '<span class="fw-b' + (official ? ' off' : '') + '">◂ ' + left + '</span>';

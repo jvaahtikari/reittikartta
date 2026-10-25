@@ -450,7 +450,7 @@
         if (on) return;          // valittu paikka näkyy tarkistusrenkaana
         var m = L.marker([it.lat, it.lng], {
           icon: L.divIcon({ className: 'sres-ico', html: '<span class="sres' + (on ? ' on' : '') + '">' + (i + 1) + '</span>', iconSize: [0, 0] }),
-          keyboard: false, zIndexOffset: on ? 1000 : 0, pane: 'aidPane', bubblingMouseEvents: false
+          keyboard: false, zIndexOffset: on ? 1000 : 0, pane: it.ais ? 'markerPane' : 'aidPane', bubblingMouseEvents: false
         });
         m.bindTooltip(UI.esc(it.name) + (it.info ? ' – ' + UI.esc(it.info) : ''), { direction: 'top', offset: [0, -12] });
         m.on('click', function (e) { L.DomEvent.stop(e); cur = it; label = it.name; moved = false; pos = L.latLng(it.lat, it.lng); draw(); App.centerOn(pos); banner(); });

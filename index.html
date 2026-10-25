@@ -1282,6 +1282,42 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 .rt-sub { margin: 2px 0 4px; }
 @media (max-width: 700px) { .rt-start { grid-column: 1; } }
 
+/* AIS-alukset (ais.js). Alukset ovat omassa panessaan (aisPane), jota yönäytön suodattimet eivät koske,
+   joten merkkien omat värit säilyvät. Vaalea hehku erottaa tumman reunaviivan tummalta yökartalta. */
+.ais-w { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ais-s { display: block; overflow: visible; filter: drop-shadow(0 0 1px rgba(255,255,255,.9)); }
+body.night .ais-s { filter: drop-shadow(0 0 1px rgba(255,255,255,.6)); }
+.ais-n { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
+  font: 600 11px/1 var(--font); color: #111; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; }
+.ais-n.t { transform: translate(-50%, -100%); }
+.ais-n.b { transform: translate(-50%, 0); }
+.ais-n.l { transform: translate(-100%, -50%); }
+.ais-n.sar { color: #b53f00; font-weight: 700; }
+body.night .ais-n { color: #eee; text-shadow: 0 0 2px #000, 0 0 3px #000; }
+body.night .ais-n.sar { color: #ff9a5c; }
+/* Rungon (ais-hull) napautuksen ottaa vastaan vain rungon oma muoto ja sen ympärillä oleva läpinäkyvä reunus (ais-hit).
+   Muuten pitkän tai vinon rungon laatikko peittäisi vierekkäiset alukset. */
+.ais-ico.ais-hullico { pointer-events: none !important; }
+.ais-hull-s { position: absolute; }
+.ais-hull-s .ais-hit { pointer-events: all; cursor: pointer; }
+/* reitin, mittauksen tai paikan poiminnan aikana napautus menee aluksen läpi kartalle */
+#map.mode-cross .ais-ico, #map.mode-cross .ais-ico * { pointer-events: none !important; }
+
+/* aluksen kortti */
+.ais-popup .leaflet-popup-content { margin: 10px 12px 12px; font: 13px/1.35 var(--font); }
+.ais-pop .ais-t { display: block; font-size: 14.5px; padding-right: 28px; word-break: break-word; }
+.ais-pop .ais-sub { color: #555; margin-bottom: 4px; }
+.ais-pop .ais-rows { min-height: 90px; max-height: calc(100vh - 330px); max-height: calc(100dvh - 330px); overflow-y: auto; }
+.ais-pop table { width: 100%; margin-top: 2px; }
+.ais-pop th { white-space: nowrap; }
+.ais-pop td { word-break: break-word; }
+.ais-task { display: block; width: 100%; min-height: 44px; margin-top: 8px; padding: 8px 10px; border: 1px solid #0b4f7a; border-radius: 6px;
+  background: #0f5e86; color: #fff; font: 600 13px var(--font); cursor: pointer; }
+.ais-task:hover { background: #0b4f7a; }
+@media (pointer: coarse) {
+  .leaflet-container .ais-popup a.leaflet-popup-close-button { width: 40px; height: 40px; padding: 0; font-size: 26px; line-height: 40px; text-align: center; }
+}
+
 </style>
 </head>
 <body>
@@ -1626,7 +1662,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
           notes: true, passes: true, bearings: true, depths: true, lines: false,
           aids: false, aidNames: false, signs: null, border: true, hint: false, snap: true, safety: false,
           legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true,
-          bridges: null, ecdisMarks: false
+          bridges: null, ecdisMarks: false,
+          ais: true                 // AIS-alukset (Digitraffic)
         },
         safetyDepths: {},
         land: 'osm',                // maapohja: 'osm' (oletus, näyttää maa-alueiden nimet) | 'mml'
@@ -3587,7 +3624,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
           var theta = Math.atan2(s.b.y - s.a.y, s.b.x - s.a.x) * 180 / Math.PI;
           var flipped = false;
           if (theta > 90 || theta < -90) { theta += 180; flipped = true; }
-          var fwd = G.fmtBrg(b0, 1), rev = G.fmtBrg(b0 + 180, 1);
+          var fwd = G.fmtBrg(b0, 0), rev = G.fmtBrg(b0 + 180, 0);   // kokonaisina asteina
           var left = flipped ? fwd : rev, right = flipped ? rev : fwd;
           var html = '<div class="fw-lab" style="transform:translate(-50%,-50%) rotate(' + theta.toFixed(1) + 'deg) translateY(-' + off + 'px)">';
           if (showB) html += '<span class="fw-b' + (official ? ' off' : '') + '">◂ ' + left + '</span>';
@@ -6897,7 +6934,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         if (on) return;          // valittu paikka näkyy tarkistusrenkaana
         var m = L.marker([it.lat, it.lng], {
           icon: L.divIcon({ className: 'sres-ico', html: '<span class="sres' + (on ? ' on' : '') + '">' + (i + 1) + '</span>', iconSize: [0, 0] }),
-          keyboard: false, zIndexOffset: on ? 1000 : 0, pane: 'aidPane', bubblingMouseEvents: false
+          keyboard: false, zIndexOffset: on ? 1000 : 0, pane: it.ais ? 'markerPane' : 'aidPane', bubblingMouseEvents: false
         });
         m.bindTooltip(UI.esc(it.name) + (it.info ? ' – ' + UI.esc(it.info) : ''), { direction: 'top', offset: [0, -12] });
         m.on('click', function (e) { L.DomEvent.stop(e); cur = it; label = it.name; moved = false; pos = L.latLng(it.lat, it.lng); draw(); App.centerOn(pos); banner(); });
@@ -7303,9 +7340,632 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 
 </script>
 <script>
+/* Reittikartta – AIS-alukset.
+ * Alusten sijainnit ja alustiedot haetaan Fintrafficin Digitraffic Marine -rajapinnasta
+ * (meri.digitraffic.fi, lisenssi CC BY 4.0) ja piirretään kartalle omaan paneeseensa.
+ * Moduuli huolehtii myös tiedon haun ajastuksesta, aluksen kortista sekä alusten hausta
+ * nimellä, kutsutunnuksella ja MMSI-numerolla. Haku on käynnissä vain silloin, kun kerros
+ * on päällä ja sivu näkyvissä. Tieto on viiveellistä, eikä se sovellu navigointiin tai
+ * törmäysten välttämiseen. */
+(function (global) {
+  'use strict';
+
+  var G = global.Geo, S = global.Store, UI = global.UI;
+
+  var API = 'https://meri.digitraffic.fi/api/ais/v1';
+  var USER = 'Reittikartta';                 // Fintraffic pyytää sovelluksia tunnistautumaan tällä otsakkeella
+  var ATTR = 'AIS: <a href="https://www.digitraffic.fi/meriliikenne/" target="_blank" rel="noopener">Fintraffic / Digitraffic</a>, CC BY 4.0';
+
+  // hakujen ajastus
+  var POS_MS = 30000;                        // sijaintien päivitys
+  var POS_FULL_MS = 600000;                  // koko aineisto haetaan uudelleen, jolloin vanhat poistuvat
+  var VES_MS = 900000;                       // alustietojen päivitys
+  var VES_WINDOW_MS = 7 * 86400000;          // ensimmäisellä haulla alustiedot seitsemän vuorokauden ajalta
+  var OVERLAP_MS = 60000;                    // päivityshaut alkavat minuutin ennen edellistä, ettei mitään jää väliin
+  var FRESH_MS = 120000;                     // haun ajaksi kerroksen ollessa pois päältä riittävän tuore aineisto
+
+  // piirto
+  var PANE_Z = 465;                          // chart.js: aidPane 460, flarePane 455, labelPane 450. Leafletin markerPane 600 jää tämän päälle
+  var MIN_Z = 8;                             // alukset näkyvät tästä zoomaustasosta alkaen
+  var LABEL_Z = 12;                          // nimet tästä tasosta alkaen
+  var LABEL_Z_SAR = 10;                      // pelastusalusten nimet jo tästä tasosta alkaen
+  var MAX_DRAWN = 400;
+  var MOVING_KN = 0.5;                       // tätä nopeammin kulkeva alus on liikkeessä
+  var DIM_MS = 600000;                       // yli 10 minuuttia vanha sijainti himmeänä
+  var DIM_OPACITY = 0.45;
+  var MAX_AGE_MS = 3600000;                  // yli tunnin vanhaa sijaintia ei piirretä eikä haeta
+  var VECTOR_MIN = 0.1;                      // nopeusvektori: 6 minuuttia eli 0,1 tuntia
+  var HULL_MIN_PX = 18;                      // runko piirretään todellisessa mittakaavassa, kun sen pituus näytöllä on vähintään tämä
+  var HULL_BOW = 0.18;                       // keula kapenee kärkeen noin 18 % rungon pituudesta
+  var CIRCLE_MAX = 40;                       // suunnattoman aluksen ympyrä kasvaa aluksen pituuden mukaan, enintään tähän kokoon
+  var GRAY = '#9aa3ab';
+  var SAR = '#ff6a13';
+  var EDGE = '#0d1b26';
+
+  var map, layer, noteEl = null, attrOn = false;
+  var pos = {};                              // MMSI -> { lat, lng, t, sog, cog, heading, navStat }
+  var ves = {};                              // MMSI -> alustiedot
+  var noVes = {};                            // MMSI, joille rajapinta vastasi 404, jottei samaa kysytä uudelleen
+  var drawn = {};                            // MMSI -> kartalla oleva merkki
+  var lastMax = 0, lastFullAt = 0, posOkAt = 0, vesAt = 0, vesLoaded = false;
+  var inflightPos = null, inflightVes = null, failStreak = 0;
+  var running = false, busy = false, timer = null, renderTimer = null;
+  var pinned = null, pendingOpen = null, openTimer = null, openMmsi = null;
+  var singleQ = [], singleBusy = 0, singleWait = {}, singleFail = {};
+
+  // ---------- apufunktiot ----------
+  function enabled() { var sh = S.state.settings.show; return !sh || sh.ais !== false; }
+  function visible() { return document.visibilityState !== 'hidden'; }
+  // AIS-nimissä on usein @-täytemerkkejä ja ylimääräisiä välilyöntejä
+  function clean(s) { return String(s == null ? '' : s).replace(/@+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  // vertailumuoto hakua varten: pienet kirjaimet ja ilman tarkkeita, jolloin ä ja ö löytävät A:n ja O:n
+  function fold(s) {
+    s = String(s == null ? '' : s).toLowerCase();
+    try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) { /* vanha selain */ }
+    return s;
+  }
+  function num(v) { var n = Number(v); return v != null && isFinite(n) ? n : null; }
+
+  // ---------- tyypit ja tilat suomeksi ----------
+  function typeColor(t) {
+    if (t == null) return GRAY;
+    if (t === 51) return SAR;
+    if (t >= 70 && t <= 79) return '#2e9e44';
+    if (t >= 80 && t <= 89) return '#d4282f';
+    if (t >= 60 && t <= 69) return '#1f6fe0';
+    if (t >= 40 && t <= 49) return '#e8c21a';
+    if (t === 30) return '#a0672b';
+    if (t === 36 || t === 37) return '#b05cd6';
+    if ((t >= 31 && t <= 34) || t === 50 || (t >= 52 && t <= 59)) return '#19a7c6';
+    if (t === 35) return '#6b7b8c';
+    return GRAY;
+  }
+  function typeName(t) {
+    if (t == null) return 'tuntematon';
+    if (t >= 20 && t <= 29) return 'siipialus';
+    if (t >= 40 && t <= 49) return 'pika-alus';
+    if (t >= 60 && t <= 69) return 'matkustaja-alus';
+    if (t >= 70 && t <= 79) return 'rahtialus';
+    if (t >= 80 && t <= 89) return 'säiliöalus';
+    if (t >= 90 && t <= 99) return 'muu alus';
+    switch (t) {
+      case 30: return 'kalastusalus';
+      case 31: case 32: case 52: return 'hinaaja';
+      case 33: return 'ruoppaaja';
+      case 34: return 'sukellustoiminta';
+      case 35: return 'sotilasalus';
+      case 36: return 'purjealus';
+      case 37: return 'huvialus';
+      case 50: return 'luotsialus';
+      case 51: return 'etsintä- ja pelastusalus';
+      case 53: return 'satama-alus';
+      case 54: return 'ympäristöntorjunta-alus';
+      case 55: return 'viranomaisalus';
+      case 58: return 'sairaankuljetus';
+      default: return 'tuntematon';
+    }
+  }
+  var NAV = {
+    0: 'kulussa konevoimalla', 1: 'ankkurissa', 2: 'ei komennossa', 3: 'rajoitettu ohjailukyky', 4: 'syväyksensä rajoittama',
+    5: 'kiinnitetty', 6: 'karilla', 7: 'kalastamassa', 8: 'purjehtimassa', 14: 'AIS-SART tai hätälähetin'
+  };
+  function navName(n) { return NAV[n] || 'ei määritelty'; }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // ETA on pakattu UTC-aika (kuukausi, päivä, tunti, minuutti). Puuttuvan arvon merkkinä ovat nolla kuukausi tai päivä, tunti 24 ja minuutti 60.
+  function fmtEta(eta) {
+    if (!eta || eta < 0) return '';
+    var mo = (eta >> 16) & 15, d = (eta >> 11) & 31, h = (eta >> 6) & 31, mi = eta & 63;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return '';
+    return G.pad(d, 2) + '.' + G.pad(mo, 2) + '. ' + G.pad(h, 2) + ':' + G.pad(mi, 2) + ' UTC';
+  }
+  function fmtAge(ms) {
+    var m = Math.floor(Math.max(0, ms) / 60000);
+    if (m < 1) return 'alle minuutti sitten';
+    if (m < 60) return m + ' min sitten';
+    return Math.floor(m / 60) + ' h ' + G.pad(m % 60, 2) + ' min sitten';
+  }
+
+  // ---------- rajapintakutsut ----------
+  // Ainoa oma otsake on Digitraffic-User. Aikakatkaisu estää jumiin jääneen haun tukkimasta ajastusta.
+  function getJson(path, ms) {
+    var ctl = global.AbortController ? new global.AbortController() : null;
+    var to = ctl ? setTimeout(function () { ctl.abort(); }, ms || 30000) : null;
+    var opts = { headers: { 'Digitraffic-User': USER } };
+    if (ctl) opts.signal = ctl.signal;
+    return fetch(API + path, opts).then(function (r) {
+      if (r.status === 404) { var e = new Error('ei löytynyt'); e.status = 404; throw e; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (j) { clearTimeout(to); return j; }, function (e) { clearTimeout(to); throw e; });
+  }
+
+  // Sijaintivastaus kootaan MMSI:n mukaan. Koko haku rakentaa aineiston alusta, päivityshaku yhdistyy aiempaan.
+  function parsePositions(j, base, baseMax) {
+    var fs = (j && j.features) || [], next = base, max = baseMax;
+    var stamp = j && j.dataUpdatedTime ? Date.parse(j.dataUpdatedTime) : NaN;
+    fs.forEach(function (f) {
+      var p = f.properties || {}, c = f.geometry && f.geometry.coordinates;
+      var mmsi = f.mmsi != null ? f.mmsi : p.mmsi;
+      if (mmsi == null || !c || c.length < 2) return;
+      var lng = Number(c[0]), lat = Number(c[1]);
+      if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;   // 91° ja 181° tarkoittavat, ettei sijaintia ole
+      var t = Number(p.timestampExternal);
+      if (!isFinite(t) || t <= 0) t = stamp;
+      if (!isFinite(t) || t <= 0) return;
+      var old = next[mmsi];
+      if (old && old.t >= t) return;
+      var sog = num(p.sog), cog = num(p.cog), hd = num(p.heading);
+      next[mmsi] = {
+        mmsi: String(mmsi), lat: lat, lng: lng, t: t,
+        sog: sog != null && sog >= 0 && sog < 102.3 ? sog : null,
+        cog: cog != null && cog >= 0 && cog < 360 ? cog : null,
+        heading: hd != null && hd >= 0 && hd < 360 ? hd : null,
+        navStat: num(p.navStat)
+      };
+      if (t > max) max = t;
+    });
+    return { pos: next, max: max, n: fs.length };
+  }
+
+  function normVessel(v) {
+    var n = function (x) { x = num(x); return x != null && x > 0 ? x : 0; };
+    var name = clean(v.name), call = clean(v.callSign);
+    return {
+      name: name, callSign: call, imo: n(v.imo), destination: clean(v.destination),
+      draught: n(v.draught), eta: n(v.eta), shipType: num(v.shipType),
+      a: n(v.referencePointA), b: n(v.referencePointB), c: n(v.referencePointC), d: n(v.referencePointD),
+      nameKey: fold(name), callKey: fold(call).replace(/\s+/g, '')       // hakua varten
+    };
+  }
+
+  function setNote() {
+    if (!noteEl) return;
+    var bad = enabled() && (failStreak >= 2 || (failStreak >= 1 && !posOkAt));
+    noteEl.hidden = !bad;
+  }
+
+  // Jos sama haku on jo kesken, palautetaan sen lupaus. Lupaus ei koskaan hylkäydy, vaan antaa arvon true tai false.
+  function loadPositions(full) {
+    if (inflightPos) return inflightPos;
+    var whole = !!full || !lastMax;
+    var url = '/locations' + (whole ? '' : '?from=' + (lastMax - OVERLAP_MS));
+    inflightPos = getJson(url).then(function (j) {
+      var res = parsePositions(j, whole ? {} : pos, whole ? 0 : lastMax);
+      // tyhjä vastaus koko haulle ei tyhjennä kartan aineistoa
+      if (whole && !res.n && Object.keys(pos).length) throw new Error('tyhjä vastaus');
+      pos = res.pos; lastMax = res.max;
+      posOkAt = Date.now();
+      if (whole) lastFullAt = posOkAt;
+      failStreak = 0;
+      return true;
+    }).then(null, function () { failStreak++; return false; }).then(function (ok) {
+      inflightPos = null; setNote();
+      return ok;
+    });
+    return inflightPos;
+  }
+
+  function loadVessels(initial) {
+    if (inflightVes) return inflightVes;
+    var started = Date.now();
+    var from = initial || !vesAt ? started - VES_WINDOW_MS : vesAt - OVERLAP_MS;
+    inflightVes = getJson('/vessels?from=' + Math.round(from), 60000).then(function (arr) {
+      if (!Array.isArray(arr)) throw new Error('virheellinen vastaus');
+      arr.forEach(function (v) {
+        if (!v || v.mmsi == null) return;
+        ves[v.mmsi] = normVessel(v);
+        delete noVes[v.mmsi];
+      });
+      vesAt = started; vesLoaded = true;
+      return true;
+    }).then(null, function () { return false; }).then(function (ok) { inflightVes = null; return ok; });
+    return inflightVes;
+  }
+
+  // Yksittäisen aluksen tiedot haetaan vasta, kun alus avataan tai sen nimeä tarvitaan. Samanaikaisia kutsuja on enintään kolme.
+  function needVessel(k) {
+    if (ves[k]) return Promise.resolve(ves[k]);
+    if (noVes[k]) return Promise.resolve(null);
+    if (singleFail[k] && Date.now() - singleFail[k] < 120000) return Promise.resolve(null);
+    if (singleWait[k]) return singleWait[k];
+    if (singleQ.length >= 40) return Promise.resolve(null);
+    singleWait[k] = new Promise(function (resolve) { singleQ.push({ k: k, resolve: resolve }); });
+    pumpSingles();
+    return singleWait[k];
+  }
+  function pumpSingles() {
+    while (singleBusy < 3 && singleQ.length) {
+      (function (job) {
+        singleBusy++;
+        getJson('/vessels/' + encodeURIComponent(job.k), 15000).then(function (v) {
+          if (Array.isArray(v)) v = v[0];
+          if (v && typeof v === 'object') { ves[job.k] = normVessel(v); job.resolve(ves[job.k]); }
+          else { singleFail[job.k] = Date.now(); job.resolve(null); }
+        }, function (e) {
+          if (e && e.status === 404) noVes[job.k] = true; else singleFail[job.k] = Date.now();
+          job.resolve(null);
+        }).then(function () { singleBusy--; delete singleWait[job.k]; pumpSingles(); });
+      })(singleQ.shift());
+    }
+  }
+
+  // ---------- ajastus ----------
+  function tick() {
+    if (!running || busy) return;
+    busy = true;
+    var full = !lastFullAt || Date.now() - lastFullAt >= POS_FULL_MS;
+    var jobs = [loadPositions(full)];
+    if (!vesLoaded || Date.now() - vesAt >= VES_MS) jobs.push(loadVessels(!vesLoaded));
+    Promise.all(jobs).then(function () { busy = false; render(); }, function () { busy = false; });
+  }
+  // Haku käy vain, kun kerros on päällä ja sivu näkyvissä. Sivun tullessa näkyviin haetaan heti.
+  function sync() {
+    if (!map) return;
+    var on = enabled(), want = on && visible();
+    if (want && !running) { running = true; tick(); timer = setInterval(tick, POS_MS); }
+    else if (!want && running) { running = false; clearInterval(timer); timer = null; }
+    if (on !== attrOn) {
+      attrOn = on;
+      if (on) map.attributionControl.addAttribution(ATTR); else map.attributionControl.removeAttribution(ATTR);
+    }
+    setNote();
+    if (on) render(); else clearAll();
+  }
+
+  // ---------- piirto ----------
+  function kindOf(p, v) {
+    var t = v ? v.shipType : null, sog = p.sog;
+    var moving = sog != null && sog >= MOVING_KN;
+    // laiturissa tai ankkurissa olevan aluksen GPS-kohina ei tee siitä liikkuvaa
+    if (moving && (p.navStat === 1 || p.navStat === 5) && sog < 2) moving = false;
+    var dir = p.heading != null ? p.heading : p.cog;
+    // rungon suunta: liikkuvalla keulasuunta tai sen puuttuessa kulku, paikallaan olevalla vain keulasuunta, koska levossa olevan aluksen kulku on kohinaa
+    var hdir = moving ? dir : p.heading;
+    return { rescue: t === 51, moving: moving, color: typeColor(t), dir: dir, hdir: hdir, arrow: moving && dir != null, vdir: p.cog != null ? p.cog : p.heading };
+  }
+
+  // Merkki: liikkuva alus on keulasuuntaan kierretty nuolenkärki, muut ympyrä. Pelastusalus on suurempi ja sen reuna paksumpi.
+  function arrowSvg(kind) {
+    var c = kind.color, w = kind.rescue ? 17 : 14, ht = kind.rescue ? 27 : 22, sw = kind.rescue ? 1.7 : 1;
+    return '<svg class="ais-s" width="' + w + '" height="' + ht + '" viewBox="0 0 14 22" style="transform:rotate(' + Math.round(kind.dir) + 'deg)" aria-hidden="true">' +
+      '<path d="M7 1.2L12.6 20.2L7 16.4L1.4 20.2Z" fill="' + c + '" stroke="' + EDGE + '" stroke-width="' + sw + '" stroke-linejoin="round"/></svg>';
+  }
+  function circleSvg(kind, d) {
+    var s2 = kind.rescue ? 2.2 : 1;
+    return '<svg class="ais-s" width="' + d + '" height="' + d + '" viewBox="0 0 ' + d + ' ' + d + '" aria-hidden="true">' +
+      '<circle cx="' + d / 2 + '" cy="' + d / 2 + '" r="' + (d / 2 - s2 / 2) + '" fill="' + kind.color + '" stroke="' + EDGE + '" stroke-width="' + s2 + '"/></svg>';
+  }
+
+  // Rungon ääriviiva todellisessa mittakaavassa. AIS-sijainti on antennin vertailupiste: A metriä keulaan, B perään,
+  // C paapuuriin (vasemmalle) ja D styyrpuuriin (oikealle). Runko on suora ja keula kapenee kärkeen, perä on suora.
+  // Aluksen omassa koordinaatistossa u osoittaa keulaan ja v styyrpuuriin, ja ne käännetään keulasuunnan mukaan kartan pikseleiksi.
+  function hullPoints(v, dir, mpp) {
+    var rad = dir * Math.PI / 180, fx = Math.sin(rad), fy = -Math.cos(rad), sx = Math.cos(rad), sy = Math.sin(rad);
+    var bow = (v.a + v.b) * HULL_BOW, tip = (v.d - v.c) / 2;
+    return [[-v.b, -v.c], [-v.b, v.d], [v.a - bow, v.d], [v.a, tip], [v.a - bow, -v.c]].map(function (q) {
+      return [(q[0] * fx + q[1] * sx) / mpp, (q[0] * fy + q[1] * sy) / mpp];
+    });
+  }
+  function r1(x) { return Math.round(x * 10) / 10; }
+
+  // Valitsee aluksen piirtotavan: runko, nuoli vai ympyrä. mpp on metrejä pikseliä kohden aluksen leveysasteella.
+  function shapeOf(c, mpp, hit) {
+    var k = c.kind, v = c.v, len = v ? v.a + v.b : 0, wid = v ? v.c + v.d : 0;
+    if (k.hdir != null && len > 0 && wid > 0 && len / mpp >= HULL_MIN_PX) {
+      var pts = hullPoints(v, k.hdir, mpp), x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      pts.forEach(function (q) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); });
+      var sw = k.rescue ? 2 : 1;
+      var hw = Math.max(6, hit - wid / mpp);        // läpinäkyvä napautusalue levittää kapean rungon sormelle sopivaksi
+      var pad = Math.ceil(hw / 2 + sw) + 1;
+      var str = pts.map(function (q) { return r1(q[0] - x0 + pad) + ',' + r1(q[1] - y0 + pad); }).join(' ');
+      var w = r1(x1 - x0 + 2 * pad), h = r1(y1 - y0 + 2 * pad);
+      return {
+        shape: 'runko', box: { x0: x0, y0: y0, x1: Math.max(x1, 3), y1: y1 }, popupY: Math.round(Math.min(y0, -hit / 2)) + 2, lenPx: len / mpp,
+        svg: '<svg class="ais-s ais-hull-s" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="left:' + r1(hit / 2 + x0 - pad) + 'px;top:' + r1(hit / 2 + y0 - pad) + 'px" aria-hidden="true">' +
+          '<polygon class="ais-hit" points="' + str + '" fill="none" stroke="transparent" stroke-width="' + r1(hw) + '" stroke-linejoin="round"/>' +
+          '<polygon class="ais-hull" points="' + str + '" fill="' + k.color + '" stroke="' + EDGE + '" stroke-width="' + sw + '" stroke-linejoin="round"/></svg>'
+      };
+    }
+    if (k.arrow) {
+      var ah = k.rescue ? 27 : 22;
+      var aw = k.rescue ? 17 : 14;
+      return { shape: 'nuoli', box: { x0: -aw / 2, y0: -ah / 2, x1: aw / 2, y1: ah / 2 }, popupY: -Math.round(hit / 2) + 2, svg: arrowSvg(k) };
+    }
+    // ilman suuntaa aluksen ympyrä kasvaa tarkemmilla tasoilla aluksen pituuden mukaiseksi, jotta laiturissa oleva alus erottuu
+    var d = k.rescue ? 15 : 10;
+    if (k.hdir == null && len > 0) d = Math.round(Math.min(CIRCLE_MAX, Math.max(d, len / mpp)));
+    return { shape: 'ympyra', box: { x0: -d / 2, y0: -d / 2, x1: d / 2, y1: d / 2 }, popupY: -Math.round(hit / 2) + 2, svg: circleSvg(k, d) };
+  }
+
+  // Merkin ympärillä on läpinäkyvä napautusalue, jotta pieni ympyrä on helppo osua myös sormella.
+  // Rungolla napautuksen ottaa vastaan vain rungon oma muoto ja sen ympärillä oleva läpinäkyvä reunus (ks. css), jottei vierekkäisten alusten napautusalueet peitä toisiaan.
+  function build(c, label, hit) {
+    var k = c.kind, s = c.shape, b = s.box, h2 = hit / 2, lab = '';
+    if (label) {
+      // nimi oikealla rungon vieressä, ja ahtaassa paikassa rungon ylä-, ala- tai vasemmalla puolella
+      var pos = label.pos, st = pos === 'r' ? 'left:' + Math.round(h2 + b.x1 + 3) + 'px'
+        : pos === 'l' ? 'left:' + Math.round(h2 + b.x0 - 3) + 'px'
+        : 'left:' + Math.round(h2 + (b.x0 + b.x1) / 2) + 'px;top:' + Math.round(h2 + (pos === 't' ? b.y0 - 2 : b.y1 + 2)) + 'px';
+      lab = '<span class="ais-n' + (pos === 'r' ? '' : ' ' + pos) + (k.rescue ? ' sar' : '') + '" style="' + st + '">' + UI.esc(label.name) + '</span>';
+    }
+    var html = '<div class="ais-w" data-mmsi="' + c.k + '" data-moving="' + (k.moving ? 1 : 0) + '" data-rescue="' + (k.rescue ? 1 : 0) +
+      '" data-shape="' + s.shape + '"' + (s.shape === 'runko' ? ' data-len="' + Math.round(s.lenPx) + '" data-dir="' + Math.round(k.hdir) + '"' : '') +
+      (c.dim ? ' style="opacity:' + DIM_OPACITY + '"' : '') + '>' + s.svg + lab + '</div>';
+    return { html: html, size: hit, popupY: s.popupY, cls: s.shape === 'runko' ? 'ais-ico ais-hullico' : 'ais-ico', zio: c.k === pinned ? 2000 : k.rescue ? 1000 : k.moving ? 300 : 0 };
+  }
+  function mkIcon(b) {
+    return L.divIcon({ className: b.cls, html: b.html, iconSize: [b.size, b.size], iconAnchor: [b.size / 2, b.size / 2], popupAnchor: [0, b.popupY] });
+  }
+
+  function clearAll() {
+    if (layer) layer.clearLayers();
+    drawn = {};
+  }
+  function removeShip(k) {
+    var d = drawn[k];
+    if (!d) return;
+    layer.removeLayer(d.m);
+    if (d.vec) layer.removeLayer(d.vec);
+    delete drawn[k];
+  }
+
+  function renderSoon() { clearTimeout(renderTimer); renderTimer = setTimeout(render, 40); }
+
+  function render() {
+    if (!map || !layer) return;
+    var z = map.getZoom();
+    if (!enabled() || z < MIN_Z) { clearAll(); return; }
+    var now = Date.now(), view = map.getBounds().pad(0.1), ctr = map.getCenter();
+    var cands = [];
+    Object.keys(pos).forEach(function (k) {
+      var p = pos[k], age = now - p.t;
+      if (age > MAX_AGE_MS) return;
+      if (k !== pinned && !view.contains([p.lat, p.lng])) return;
+      var v = ves[k], kind = kindOf(p, v);
+      var dl = p.lat - ctr.lat, dn = p.lng - ctr.lng;
+      cands.push({ k: k, p: p, v: v, kind: kind, dim: age > DIM_MS, rank: k === pinned ? -1 : kind.rescue ? 0 : kind.moving ? 1 : 2, d2: dl * dl + dn * dn });
+    });
+    // enintään 400 alusta: pelastusalukset ja liikkuvat alukset ovat etusijalla
+    cands.sort(function (a, b) { return a.rank - b.rank || a.d2 - b.d2; });
+    if (cands.length > MAX_DRAWN) cands.length = MAX_DRAWN;
+
+    var hit = UI.isTouch() ? 38 : 26;
+    // metrejä pikseliä kohden aluksen leveysasteella (Web Mercator venyttää, joten mittakaava riippuu leveysasteesta)
+    var mppAt = function (lat) { return 40075016.686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z + 8); };
+    cands.forEach(function (c) { c.shape = shapeOf(c, mppAt(c.p.lat), hit); });
+    // nimet: etusijajärjestyksessä. Nimi sijoitetaan aluksen oikealle puolelle, ja jos se osuisi jo sijoitetun nimen tai toisen aluksen rungon päälle,
+    // rungolle kokeillaan vielä ylä-, ala- ja vasenta puolta. Jos mikään paikka ei ole vapaa, nimi jätetään pois.
+    var placed = [], labels = {}, wanted = 0;
+    cands.forEach(function (c) {
+      c.pt = map.latLngToContainerPoint([c.p.lat, c.p.lng]);
+      var bx = c.shape.box;
+      c.rect = { x0: c.pt.x + bx.x0, x1: c.pt.x + bx.x1, y0: c.pt.y + bx.y0, y1: c.pt.y + bx.y1 };
+    });
+    var overlaps = function (r, o) { return r.x0 < o.x1 && r.x1 > o.x0 && r.y0 < o.y1 && r.y1 > o.y0; };
+    var sz = map.getSize();
+    var clash = function (r, self) {
+      var i;
+      // rungon nimi ei saa jäädä osittain näytön ulkopuolelle
+      if (self.shape.shape === 'runko' && (r.x0 < 0 || r.x1 > sz.x || r.y0 < 0 || r.y1 > sz.y)) return true;
+      for (i = 0; i < placed.length; i++) if (overlaps(r, placed[i])) return true;
+      for (i = 0; i < cands.length; i++) {
+        var o = cands[i];
+        // merkin nimi saa osua toiseen pieneen merkkiin, kuten ennenkin, mutta rungon nimi väistää kaikkia aluksia ja muut nimet runkoja ja suurennettuja ympyröitä
+        var obstacle = self.shape.shape === 'runko' || o.shape.shape === 'runko' || o.rect.x1 - o.rect.x0 >= 18;
+        if (o !== self && obstacle && overlaps(r, o.rect)) return true;
+      }
+      return false;
+    };
+    cands.forEach(function (c) {
+      if (!(z >= LABEL_Z || (c.kind.rescue && z >= LABEL_Z_SAR))) return;
+      if (!c.v || !c.v.name) {
+        if (wanted < 8 && !noVes[c.k]) { wanted++; needVessel(c.k).then(function (v) { if (v) renderSoon(); }); }
+        return;
+      }
+      var pt = c.pt, bx = c.shape.box, w = c.v.name.length * 7.2 + 4, cx = pt.x + (bx.x0 + bx.x1) / 2;
+      var opts = [{ pos: 'r', x0: pt.x + bx.x1 + 3, y0: pt.y - 8 }];
+      if (c.shape.shape === 'runko') {
+        opts.push({ pos: 't', x0: cx - w / 2, y0: pt.y + bx.y0 - 18 }, { pos: 'b', x0: cx - w / 2, y0: pt.y + bx.y1 + 2 }, { pos: 'l', x0: pt.x + bx.x0 - 3 - w, y0: pt.y - 8 });
+      }
+      for (var i = 0; i < opts.length; i++) {
+        var r = { x0: opts[i].x0, x1: opts[i].x0 + w, y0: opts[i].y0, y1: opts[i].y0 + 16 };
+        if (clash(r, c)) continue;
+        placed.push(r);
+        labels[c.k] = { name: c.v.name, pos: opts[i].pos };
+        return;
+      }
+    });
+
+    var mpp = mppAt(ctr.lat);
+    var seen = {};
+    cands.forEach(function (c) {
+      var k = c.k, b = build(c, labels[k], hit), d = drawn[k], ll = [c.p.lat, c.p.lng];
+      seen[k] = true;
+      if (!d) {
+        d = drawn[k] = { m: L.marker(ll, { icon: mkIcon(b), pane: 'aisPane', keyboard: false, zIndexOffset: b.zio }), html: b.html, size: b.size, zio: b.zio, lat: c.p.lat, lng: c.p.lng, vec: null, vk: '' };
+        bindCard(d.m, k);
+        d.m.addTo(layer);
+      } else {
+        if (d.html !== b.html || d.size !== b.size) { d.m.setIcon(mkIcon(b)); d.html = b.html; d.size = b.size; }
+        if (d.zio !== b.zio) { d.m.setZIndexOffset(b.zio); d.zio = b.zio; }
+        if (d.lat !== c.p.lat || d.lng !== c.p.lng) { d.m.setLatLng(ll); d.lat = c.p.lat; d.lng = c.p.lng; }
+      }
+      // ECDISin tapainen nopeusvektori: kuuden minuutin matka kulkusuuntaan, aluksen värillä
+      var dist = c.kind.moving && c.kind.vdir != null ? c.p.sog * VECTOR_MIN * G.NM : 0;
+      if (dist / mpp >= 4) {
+        var end = G.destination({ lat: c.p.lat, lng: c.p.lng }, c.kind.vdir, dist);
+        var vk = [c.p.lat, c.p.lng, end.lat.toFixed(6), end.lng.toFixed(6), c.kind.color, c.dim ? 1 : 0, c.kind.rescue ? 1 : 0].join(',');
+        if (!d.vec) {
+          d.vec = L.polyline([ll, [end.lat, end.lng]], { pane: 'aisPane', interactive: false, className: 'ais-vec', color: c.kind.color, weight: c.kind.rescue ? 2 : 1.5, opacity: c.dim ? DIM_OPACITY : 0.9, lineCap: 'butt' }).addTo(layer);
+          d.vk = vk;
+        } else if (d.vk !== vk) {
+          d.vec.setLatLngs([ll, [end.lat, end.lng]]);
+          d.vec.setStyle({ color: c.kind.color, weight: c.kind.rescue ? 2 : 1.5, opacity: c.dim ? DIM_OPACITY : 0.9 });
+          d.vk = vk;
+        }
+      } else if (d.vec) { layer.removeLayer(d.vec); d.vec = null; d.vk = ''; }
+    });
+    Object.keys(drawn).forEach(function (k) { if (!seen[k]) removeShip(k); });
+    refreshPopup();
+  }
+
+  // ---------- aluksen kortti ----------
+  function row(label, val) { return val == null || val === '' ? '' : '<tr><th>' + label + '</th><td>' + UI.esc(val) + '</td></tr>'; }
+  function card(k) {
+    var p = pos[k];
+    if (!p) return '<div class="pop ais-pop"><b>Alus</b><div class="muted">Aluksen sijaintia ei enää ole tiedossa.</div></div>';
+    var v = ves[k], len = v ? v.a + v.b : 0, wid = v ? v.c + v.d : 0;
+    var size = len && wid ? len + ' × ' + wid + ' m' : len ? len + ' m' : wid ? wid + ' m' : '';
+    var sizeLabel = len && wid ? 'Pituus × leveys' : len ? 'Pituus' : 'Leveys';
+    var sub = v ? cap(typeName(v.shipType)) : (noVes[k] || singleFail[k] ? 'Alustietoja ei ole saatavilla' : 'Alustietoja haetaan…');
+    var rows = row('MMSI', k) + (v ? row('IMO', v.imo || '') + row('Kutsutunnus', v.callSign) : '') +
+      row('Tila', p.navStat != null ? navName(p.navStat) : '') +
+      row('Nopeus', p.sog != null ? G.fmtNum(p.sog, 1) + ' kn' : '') +
+      row('Kulku', p.cog != null ? G.fmtBrg(p.cog, 0) : '') +
+      row('Keula', p.heading != null ? G.fmtBrg(p.heading, 0) : '') +
+      (v ? row('Määränpää', v.destination) + row('ETA', fmtEta(v.eta)) + row('Syväys', v.draught ? G.fmtNum(v.draught / 10, 1) + ' m' : '') + row(sizeLabel, size) : '') +
+      row('Sijainti', G.fmtPos(p)) + row('Sijainnin ikä', fmtAge(Date.now() - p.t));
+    return '<div class="pop ais-pop"><b class="ais-t">' + UI.esc(v && v.name ? v.name : 'Alus ' + k) + '</b><div class="ais-sub">' + UI.esc(sub) + '</div>' +
+      '<div class="ais-rows"><table>' + rows + '</table></div>' +
+      '<button type="button" class="ais-task" data-mmsi="' + UI.esc(k) + '">Uusi tehtävä aluksen kohdalle</button>' +
+      '<div class="pop-src">AIS: Fintraffic / Digitraffic, CC BY 4.0. Tieto on viiveellistä, eikä se sovellu navigointiin.</div></div>';
+  }
+  // Avoimen kortin sisältö päivitetään paikallaan, jottei painike vaihdu kesken napautuksen eikä kartta hypähdä.
+  function refreshPopup() {
+    var d = openMmsi && drawn[openMmsi];
+    if (!d || !d.m.isPopupOpen()) return;
+    var el = d.m.getPopup().getElement();
+    if (!el) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = card(openMmsi);
+    ['.ais-t', '.ais-sub', '.ais-rows'].forEach(function (sel) {
+      var a = el.querySelector(sel), b = tmp.querySelector(sel);
+      if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML;
+    });
+  }
+  function newTask(k) {
+    var p = pos[k];
+    if (!p) return;
+    map.closePopup();
+    global.Tools.editTask(null, { lat: p.lat, lng: p.lng });
+  }
+  function onCardClick(e) {
+    var b = e.target && e.target.closest ? e.target.closest('.ais-task') : null;
+    if (b) newTask(b.getAttribute('data-mmsi'));
+  }
+  function bindCard(m, k) {
+    m.bindPopup(function () { return card(k); }, {
+      className: 'ais-popup', minWidth: 230, maxWidth: 280, autoPanPaddingTopLeft: [72, 70], autoPanPaddingBottomRight: [16, 56]
+    });
+    m.on('popupopen', function (e) {
+      openMmsi = k; pinned = k;
+      var el = e.popup.getElement();
+      if (el && !el._aisBound) { el._aisBound = true; el.addEventListener('click', onCardClick); }
+      if (!ves[k] && !noVes[k]) needVessel(k).then(function () { if (openMmsi === k) { refreshPopup(); renderSoon(); } });
+    });
+    m.on('popupclose', function () { if (openMmsi === k) { openMmsi = null; pinned = null; } });
+  }
+
+  // Avaa aluksen kortin. Kerros kytketään tarvittaessa päälle. Kortti avataan hetken kuluttua, kun kartan siirtymä on päättynyt.
+  function open(mmsi) {
+    mmsi = String(mmsi);
+    var sh = S.state.settings.show;
+    if (sh.ais === false) { sh.ais = true; S.save(); }
+    pinned = mmsi; pendingOpen = mmsi;
+    sync();
+    clearTimeout(openTimer);
+    openTimer = setTimeout(function () {
+      var k = pendingOpen; pendingOpen = null;
+      if (!k) return;
+      render();
+      if (drawn[k]) drawn[k].m.openPopup(); else if (pinned === k) pinned = null;
+    }, 350);
+  }
+
+  // ---------- haku ----------
+  // Haku toimii myös silloin, kun kerros on pois päältä: tieto haetaan kerran ja jaetaan samanaikaisten hakujen kesken.
+  function ensureData() {
+    var jobs = [];
+    if (!posOkAt || Date.now() - posOkAt > FRESH_MS) jobs.push(loadPositions(true));
+    if (!vesLoaded) jobs.push(loadVessels(true));
+    return Promise.all(jobs);
+  }
+  function within(ms, promise, fallback) {
+    return new Promise(function (resolve) {
+      var done = false, to = setTimeout(function () { if (!done) { done = true; resolve(fallback); } }, ms);
+      var fin = function (v) { if (!done) { done = true; clearTimeout(to); resolve(v); } };
+      promise.then(fin, function () { fin(fallback); });
+    });
+  }
+  function shipInfo(p, v) {
+    var t = v ? v.shipType : null;
+    return 'AIS-alus' + (t != null && typeName(t) !== 'tuntematon' ? ', ' + typeName(t) : '') +
+      (p.sog != null ? (p.sog >= MOVING_KN ? ', ' + G.fmtNum(p.sog, 1) + ' kn' : ', paikallaan') : '');
+  }
+  // Palauttaa lupauksen lähimmistä (enintään 10) hakua vastaavista aluksista. Mukaan otetaan vain ajantasaisen sijainnin alukset.
+  function search(q, at) {
+    q = String(q || '').trim();
+    if (q.length < 2) return Promise.resolve([]);
+    var nq = fold(q), nsp = nq.replace(/\s+/g, ''), digits = /^\d{3,}$/.test(q) ? q : null;
+    var from = at || map.getCenter();
+    return within(8000, ensureData().then(function () {
+      var now = Date.now(), hits = [];
+      Object.keys(pos).forEach(function (k) {
+        var p = pos[k];
+        if (now - p.t > MAX_AGE_MS) return;
+        var v = ves[k];
+        var hit = (v && v.nameKey && v.nameKey.indexOf(nq) >= 0) ||
+          (v && v.callKey && v.callKey.indexOf(nsp) === 0) ||
+          (digits && k.indexOf(digits) === 0);
+        if (hit) hits.push({ k: k, d: G.distance(from, p) });
+      });
+      hits.sort(function (a, b) { return a.d - b.d; });
+      hits = hits.slice(0, 10);
+      // MMSI-numerolla löytyneen aluksen nimi haetaan erikseen, jos sitä ei ole bulkkiaineistossa
+      return Promise.all(hits.map(function (h) { return needVessel(h.k); })).then(function () {
+        return hits.map(function (h) {
+          var p = pos[h.k], v = ves[h.k];
+          return { name: v && v.name ? v.name : 'MMSI ' + h.k, info: shipInfo(p, v), lat: p.lat, lng: p.lng, ais: true, mmsi: h.k };
+        });
+      });
+    }), []);
+  }
+  // Selitys, jos haku ei saanut tietoa Digitrafficista
+  function searchNote() { return failStreak > 0 && (!posOkAt || Date.now() - posOkAt > FRESH_MS) ? 'AIS-tietoa ei saatu Digitrafficista, joten alukset eivät ole mukana hakutuloksissa.' : ''; }
+
+  // ---------- käynnistys ----------
+  function init(m) {
+    map = m;
+    map.createPane('aisPane');
+    map.getPane('aisPane').style.zIndex = PANE_Z;
+    layer = L.layerGroup().addTo(map);
+    var notes = map.getContainer().querySelector('.map-notes');
+    if (notes) {
+      noteEl = L.DomUtil.create('div', 'enc-note ais-note', notes);
+      noteEl.textContent = 'AIS-tietoa ei saatu. Kartan alukset voivat olla vanhentuneita.';
+      noteEl.hidden = true;
+    }
+    map.on('moveend zoomend', renderSoon);
+    document.addEventListener('visibilitychange', sync);
+    sync();
+  }
+
+  global.Ais = {
+    init: init, sync: sync, search: search, searchNote: searchNote, open: open,
+    typeName: typeName, MIN_ZOOM: MIN_Z,
+    get running() { return running; },
+    get count() { return Object.keys(pos).length; },
+    get drawnCount() { return Object.keys(drawn).length; }
+  };
+})(window);
+
+</script>
+<script>
 /* Reittikartta – paikkahaku: koordinaatit, omat kohteet, Väyläviraston turvalaitteet nimellä ja
  * numerolla, väylät, sulut ja avattavat sillat, Traficomin luotsipaikat ja VTS-ilmoittautumispisteet
- * sekä (API-avaimella tai välityspalvelulla) Maanmittauslaitoksen nimistörekisteri.
+ * sekä (API-avaimella tai välityspalvelulla) Maanmittauslaitoksen nimistörekisteri. Lisäksi haetaan
+ * AIS-alukset nimen osalla, kutsutunnuksella ja MMSI-numeron alulla (ais.js).
  * Haku ei lue nimiä karttakuvasta, joten se toimii samoin kaikilla karttapohjilla.
  *
  * Suomessa on paljon samannimisiä paikkoja (esim. kymmeniä Viitasaaria), joten tulokset
@@ -7449,7 +8109,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       return place(res[4].concat(res[0], res[1], res[2], res[3]), at);
     });
   }
-  // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, turvalaitteet ja paikannimet
+  // AIS-alukset nimen osalla, kutsutunnuksella tai MMSI-numerolla. Lupaus ei hylkäydy: virhe antaa tyhjän listan.
+  function ships(q, at) {
+    if (!global.Ais) return Promise.resolve([]);
+    return global.Ais.search(q, at || ref).then(function (list) { return list; }, function () { return []; });
+  }
+  // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, AIS-alukset, turvalaitteet ja paikannimet
   // yhtenä listana lähimmästä kauimpaan. Palauttaa lupauksen.
   function find(q, at) {
     q = String(q || '').trim();
@@ -7457,9 +8122,9 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     var p = G.parsePos(q);
     if (p) return Promise.resolve(place([{ name: G.fmtPos(p), info: 'koordinaatti', lat: p.lat, lng: p.lng, coord: true }], at));
     var mine = local(q);
-    if (q.length < 3) return Promise.resolve(place(mine, at));
-    return remote(q, at).then(function (rem) {
-      var all = place(mine.concat(rem), at);
+    if (q.length < 3) return ships(q, at).then(function (sh) { return place(mine.concat(sh), at); });
+    return Promise.all([remote(q, at), ships(q, at)]).then(function (res) {
+      var all = place(mine.concat(res[1], res[0]), at);
       var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
       var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
       return near.concat(far);
@@ -7475,7 +8140,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       if (it.coord) return;
       var m = L.marker([it.lat, it.lng], {
         icon: L.divIcon({ className: 'sres-ico', html: '<span class="sres' + (i === sel ? ' on' : '') + '">' + it.no + '</span>', iconSize: [0, 0] }),
-        keyboard: false, zIndexOffset: i === sel ? 1000 : 0, pane: 'aidPane'
+        keyboard: false, zIndexOffset: i === sel ? 1000 : 0, pane: it.ais ? 'markerPane' : 'aidPane'
       });
       m.on('click', function (e) { L.DomEvent.stop(e); pick(i); });
       m.bindTooltip(UI.esc(it.name) + (it.info ? ' – ' + UI.esc(it.info) : '') + '<br>' + fmtKm(it.km) + ' · ' + G.fmtBrg(it.brg, 0), { direction: 'top', offset: [0, -12] });
@@ -7491,7 +8156,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     global.App.fitTo(b.pad(0.25), { maxZoom: 13 });
   }
 
-  function render(groups, pending) {
+  function render(groups, pending, notes) {
     results = []; sel = -1;
     var h = '', no = 0;
     groups.forEach(function (gr) {
@@ -7512,6 +8177,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
       if (n > 1) h = '<div class="sr-top"><span>' + n + ' tulosta kartalla numeroituina, lähimmät ensin (etäisyys ja suunta kartan keskeltä)</span><button type="button" class="sr-fit">Näytä kartalla</button></div>' + h;
       if (pending) h += '<div class="sn">Haetaan lisää…</div>';
     }
+    (notes || []).forEach(function (t) { if (t) h += '<div class="sn">' + UI.esc(t) + '</div>'; });
     box.innerHTML = h;
     box.hidden = false;
     drawMarkers();
@@ -7522,27 +8188,48 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     var my = ++seq;
     if (q.length < 2) { box.hidden = true; clearMarkers(); return; }
     if (!ref) { var c = map.getCenter(); ref = { lat: c.lat, lng: c.lng }; }
-    var groups = [];
+    // Tulosryhmät kootaan sitä mukaa kuin tieto saapuu: omat kohteet heti, alukset ja muu aineisto kun haku valmistuu.
+    var cur = { coord: null, mine: [], ais: null, near: null, far: null, notes: [] };
     var p = G.parsePos(q);
-    if (p) groups.push({ title: 'Koordinaatti', items: [{ name: G.fmtPos(p), info: 'siirry', lat: p.lat, lng: p.lng, coord: true }] });
-    var mine = place(local(q)).slice(0, 8);
-    groups.push({ title: 'Omat kohteet', items: mine });
-    var more = q.length >= 3 && !p;
-    render(groups, more);
-    if (!more) return;
-    remote(q, ref).then(function (all) {
-      if (my !== seq) return;
-      var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
-      var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
-      groups.push({ title: 'Alle 27 mpk (50 km)', items: near });
-      groups.push({ title: 'Kauempana', items: far });
-      render(groups, false);
-      var note = namesNote();
-      if (note) box.insertAdjacentHTML('beforeend', '<div class="sn">' + UI.esc(note) + '</div>');
-      // jos lähialueen tuloksia ei näy kartalla, siirretään kartta niihin kerran tätä hakua kohden
-      var vis = global.App.visibleBounds(), nearPts = near.filter(function (it) { return vis.contains([it.lat, it.lng]); });
-      if (near.length && !nearPts.length && fittedFor !== q) { fittedFor = q; fitResults(); }
-    });
+    if (p) cur.coord = { name: G.fmtPos(p), info: 'siirry', lat: p.lat, lng: p.lng, coord: true };
+    cur.mine = place(local(q)).slice(0, 8);
+    var waiting = 0;
+    function groups() {
+      var g = [];
+      if (cur.coord) g.push({ title: 'Koordinaatti', items: [cur.coord] });
+      g.push({ title: 'Omat kohteet', items: cur.mine });
+      if (cur.ais) g.push({ title: 'AIS-alukset', items: cur.ais });
+      if (cur.near) { g.push({ title: 'Alle 27 mpk (50 km)', items: cur.near }); g.push({ title: 'Kauempana', items: cur.far }); }
+      return g;
+    }
+    function show() { render(groups(), waiting > 0, cur.notes); }
+    var wantRemote = q.length >= 3 && !p, wantShips = !p && !!global.Ais;
+    if (wantRemote) waiting++;
+    if (wantShips) waiting++;
+    show();
+    if (wantShips) {
+      ships(q, ref).then(function (list) {
+        if (my !== seq) return;
+        cur.ais = place(list).slice(0, 10);
+        var note = global.Ais.searchNote();
+        if (note && !list.length) cur.notes.push(note);
+        waiting--; show();
+      });
+    }
+    if (wantRemote) {
+      remote(q, ref).then(function (all) {
+        if (my !== seq) return;
+        var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
+        var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
+        cur.near = near; cur.far = far;
+        var note = namesNote();
+        if (note) cur.notes.unshift(note);
+        waiting--; show();
+        // jos lähialueen tuloksia ei näy kartalla, siirretään kartta niihin kerran tätä hakua kohden
+        var vis = global.App.visibleBounds(), nearPts = near.filter(function (it) { return vis.contains([it.lat, it.lng]); });
+        if (near.length && !nearPts.length && fittedFor !== q) { fittedFor = q; fitResults(); }
+      });
+    }
   }
 
   function pick(i) {
@@ -7552,6 +8239,12 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     input.blur();
     clearMarkers();
     ref = null; fittedFor = null;
+    if (it.ais && global.Ais) {
+      // alus keskitetään ja sen kortti avataan, jolloin AIS-kerros kytketään tarvittaessa päälle
+      global.App.centerOn([it.lat, it.lng], Math.max(map.getZoom(), 13));
+      global.Ais.open(it.mmsi);
+      return;
+    }
     global.App.centerOn([it.lat, it.lng], Math.max(map.getZoom(), it.route ? 13 : 14));
     if (it.route && global.Routes) global.Routes.setHighlight(it.route, true);
     if (hlLayer) map.removeLayer(hlLayer);
@@ -7799,6 +8492,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
   if (global.Routing) global.Routing.init(map, App);
   global.Tools.init(map, App);
   global.Library.init(map, App);
+  if (global.Ais) global.Ais.init(map, App);
   if (global.Search) global.Search.init(map);
   UI.startClock();
   // Selaimen zoomaus alle 100 %: karttakuvaa joudutaan pienentämään, jolloin se pehmenee.
@@ -7820,6 +8514,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
     if (what === 'settings' || what === 'all') {
       global.Tools.renderStation(); global.Tools.updateTaskReadout(); global.Routes.render();
       syncTop(); chart.refresh(); applySafety();
+      if (global.Ais) global.Ais.sync();
     }
     global.Library.render();
     syncToolbar();
@@ -8034,6 +8729,8 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         { label: 'Kivet, karikot ja nimistö (MML, vektoripohja)', checked: st.show.mml !== false && chart.mmlInfo.available, keepOpen: true, action: function () {
           if (!chart.mmlInfo.available) { UI.closeMenu(); settings(); return; }
           st.show.mml = st.show.mml === false; chart.refresh(); S.save(); } },
+        { label: 'AIS-alukset (Digitraffic)', checked: st.show.ais !== false, keepOpen: true, action: function () {
+          st.show.ais = st.show.ais === false; if (global.Ais) global.Ais.sync(); S.save(); } },
         { head: 'Reitit' },
         item('Reittinuotit', toggleShow('notes', function (on) { if (!on) st.show.passes = false; })),
         item('Sivuutus- ja käännösetäisyydet', toggleShow('passes', function (on) { if (on) st.show.notes = true; })),
@@ -8360,7 +9057,11 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '<h3>Laiturit ja aallonmurtajat</h3><p>Vektorikartalla laiturit ja aallonmurtajat haetaan Maanmittauslaitoksen maastotietokannasta ja OpenStreetMapista ja piirretään veden päälle, koska maapohjan laiturit jäisivät vesialueen alle. Maanmittauslaitoksen laituriviivat tulevat aina, OpenStreetMapista lisätään alueina kartoitetut laiturit, aallonmurtajat ja pengerrykset, kun OpenStreetMapin Overpass-palvelu vastaa. Ensimmäinen haku uudelle alueelle voi kestää OSM:n palvelimen kuormasta riippuen puolikin minuuttia. Haetut alueet tallennetaan selaimeen 30 päiväksi, joten seuraavalla kerralla ne näkyvät heti. OpenStreetMap on vapaaehtoisten kartoittama, joten laiturit ovat yleensä oikeissa paikoissa, mutta niitä ei ole tarkastettu merenkulun tarpeisiin, ja kelluvat laiturit voivat olla kausittaisia.</p>' +
         '<h3>Maanmittauslaitoksen kivet, karikot ja nimistö</h3><p>Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta vedenalaiset (⊤), vedenpinnassa olevat (+) ja vedenpäälliset (⊥) kivet sekä vesikivikot ja matalikot, jotka rajataan mustalla pisteviivalla (vaarakäyrä). Vektorikartan maapohja on oletuksena OpenStreetMap, ja sen päällä näytetään myös nimistörekisterin paikannimet. Maanmittauslaitoksen taustakartan voi valita Näytä-valikosta. Verkkoversiossa Maanmittauslaitoksen aineisto toimii ilman omaa avainta. Tiedostona avattu versio tarvitsee maksuttoman API-avaimen, joka syötetään kohtaan <b>Tiedosto → Asetukset</b>. Maastotietokannan kivet on kartoitettu maastokartoituksessa, eivät merenmittauksessa.</p>' +
         '<h3>Vektorikartta</h3><p>Karttapohjaksi voi valita myös vektorikartan. Siinä syvyysalueet, syvyyskäyrät, syvyysluvut ja rantaviiva piirretään Traficomin merikarttatietokannasta ja väylät ja turvalaitteet Väyläviraston aineistosta, joten kartta on terävä kaikilla tasoilla ja kattaa myös Näsijärven. Maalla näkyy oletuksena OpenStreetMap ja sen päällä Maanmittauslaitoksen paikannimet. Paperikartan nimistö ja erikoismerkinnät puuttuvat.</p>' +
-        '<h3>Paikkahaku ja koordinaatit</h3><p>Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, väylän, sulun tai avattavan sillan nimen, luotsipaikan tai VTS-ilmoittautumispisteen nimen, oman merkin tai tehtävän nimen tai koordinaatin. Turvalaitteet, väylät, sulut ja sillat haetaan Väyläviraston aineistosta ja luotsipaikat sekä VTS-pisteet Traficomin avoimesta aineistosta. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä. Haku toimii samoin kaikilla karttapohjilla, ja väylän valinta korostaa koko väylän. Verkkoversiossa nimistö toimii ilman omaa avainta, ja tiedostona avattu versio tarvitsee Maanmittauslaitoksen API-avaimen (Tiedosto → Asetukset).</p>' +
+        '<h3>AIS-alukset</h3><p>Kartalla näkyvät alukset, jotka lähettävät AIS-sijaintia. Tiedot haetaan Fintrafficin Digitraffic-rajapinnasta, ja alukset näkyvät tasolta 8 alkaen. Kerroksen saa pois päältä valikosta <b>Näytä → AIS-alukset (Digitraffic)</b>. Liikkuva alus piirretään nuolenkärkenä keulansa suuntaan, ja paikallaan oleva, ankkurissa oleva tai kiinnitetty alus ympyränä. Tarkemmilla tasoilla alukset piirretään AIS-ilmoituksen mittojen mukaisina runkoina todellisessa mittakaavassa, kun rungon pituus näytöllä on vähintään noin 18 pikseliä. Runko kääntyy aluksen keulasuuntaan, ja paikallaan olevalla aluksella käytetään vain keulasuuntaa, koska levossa olevan aluksen kulkusuunta on kohinaa. Jos aluksen mittoja tai keulasuuntaa ei ole, alus piirretään merkkinä, ja suunnattoman aluksen ympyrä kasvaa tarkemmilla tasoilla aluksen pituuden mukaiseksi. Väri kertoo aluksen tyypin. Rahtialukset ovat vihreitä, säiliöalukset punaisia, matkustaja-alukset sinisiä, pika-alukset keltaisia, kalastusalukset ruskeita, purje- ja huvialukset violetteja, hinaajat, luotsialukset ja viranomaisalukset turkooseja, sotilasalukset harmaita ja muut alukset vaaleanharmaita.</p>' +
+        '<p>Etsintä- ja pelastusalukset erottuvat kirkkaan oranssista väristä, paksummasta reunasta ja hieman suuremmasta merkistä, ja niiden nimi näkyy jo tasolta 10. Muiden alusten nimet näkyvät tasolta 12. Nimi on aluksen tai rungon vieressä, ja nimi jätetään pois, jos se menisi toisen nimen tai rungon päälle. Liikkuvalle alukselle piirretään ECDISin tapaan kuuden minuutin nopeusvektori. Se on ohut viiva kulkusuuntaan, ja sen pituus on matka, jonka alus kulkee kuudessa minuutissa nykyisellä nopeudellaan. Yli kymmenen minuuttia vanha sijainti piirretään himmeänä, eikä yli tunnin vanhaa sijaintia piirretä lainkaan. Kartalle piirtyy enintään 400 alusta kerrallaan, ja silloin pelastusalukset ja liikkuvat alukset ovat etusijalla.</p>' +
+        '<p>Aluksen tai rungon napautus tai klikkaus avaa kortin. Siinä ovat aluksen nimi ja tyyppi, MMSI-numero, IMO-numero, kutsutunnus, kulkutila, nopeus, kulku, keula, määränpää, arvioitu saapumisaika, syväys, mitat, sijainti ja sijainnin ikä. Tiedot, joita alus ei ole lähettänyt, jätetään pois. Kortin painike <b>Uusi tehtävä aluksen kohdalle</b> avaa tehtävälomakkeen aluksen sijainnilla. Alukset löytyvät myös hakukentästä nimen osalla, kutsutunnuksella tai MMSI-numeron alulla (vähintään kolme numeroa). Haku löytää ne silloinkin, kun AIS-kerros on pois päältä. Kun valitset hakutuloksen, kartta keskittyy alukseen ja sen kortti aukeaa. Myös tehtäväpaikan voi hakea aluksen nimellä.</p>' +
+        '<p>AIS-tieto on viiveellistä, ja aluksen sijainti voi olla minuutteja vanha. Kaikki alukset eivät lähetä AIS-sijaintia, joten esimerkiksi pienveneitä voi puuttua kartalta. Tietoa ei saa käyttää törmäysten välttämiseen eikä navigointiin.</p>' +
+        '<h3>Paikkahaku ja koordinaatit</h3><p>Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, väylän, sulun tai avattavan sillan nimen, luotsipaikan tai VTS-ilmoittautumispisteen nimen, oman merkin tai tehtävän nimen, AIS-aluksen nimen, kutsutunnuksen tai MMSI-numeron tai koordinaatin. Turvalaitteet, väylät, sulut ja sillat haetaan Väyläviraston aineistosta ja luotsipaikat sekä VTS-pisteet Traficomin avoimesta aineistosta. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä. Haku toimii samoin kaikilla karttapohjilla, ja väylän valinta korostaa koko väylän. Verkkoversiossa nimistö toimii ilman omaa avainta, ja tiedostona avattu versio tarvitsee Maanmittauslaitoksen API-avaimen (Tiedosto → Asetukset).</p>' +
         '<p>Hakusanaksi riittää nimen alku: <b>viitas</b> löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten <b>salmi</b> löytää esimerkiksi lähellä olevan Viitasalmen. Samannimisiä paikkoja on paljon, joten tulokset näytetään kartalla numeroituina ja listassa lähimmät ensin. Alle 27 meripeninkulman (50 km) päässä kartan keskeltä olevat ovat omana ryhmänään, ja jokaisella rivillä on etäisyys merimaileina ja suunta kartan keskeltä. Jos lähialueen tuloksia ei näy kartalla, kartta siirtyy niihin. <b>Näytä kartalla</b> (tai Enter) näyttää kaikki lähialueen tulokset. Nuolinäppäimet ja hiiren vienti listan riville korostavat tuloksen kartalla, ja tuloksen voi valita listasta tai klikkaamalla sen numeroa kartalla. Numerot jäävät kartalle vertailua varten, kunnes valitset paikan tai painat Esc.</p>' +
         '<p>Koordinaatissa asteen ja minuutin merkit voi korvata välilyönneillä. Heti perään kirjoitettu N tai E päättää luvun: <b>61 35,1N</b> = 61°35,1′N, <b>61 35 11N</b> = 61°35′11″N ja <b>61,5N</b> = 61°30′N. Leveys ja pituus erotetaan välilyönnillä tai pilkulla, esimerkiksi <b>61 35,1N 23 45,6E</b>. Tehtävän sijaintikentän alla näkyy heti, miten syöte tulkittiin.</p>' +
         '<h3>Tehtäväpaikan haku</h3><p>Uutta tehtävää luotaessa paikan voi hakea lomakkeen kentästä Hae paikka samalla tavalla kuin yläpalkista. Kun osuma valitaan, lomake väistyy ja paikka näytetään kartalla magentalla renkaalla. Muut osumat näkyvät numeroituina, ja numeron napautus vaihtaa paikan. Paikkaa voi tarkentaa vetämällä rengasta tai napauttamalla karttaa. Vahvista paikka palaa lomakkeelle uusi paikka valittuna, ja tehtävä luodaan vasta painikkeesta Luo tehtävä. Takaisin palaa lomakkeelle muuttamatta paikkaa.</p>' +
@@ -8385,6 +9086,7 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
         '<details><summary>Traficomin hydrografisen aineiston lisenssi (englanniksi, palvelun kuvauksesta)</summary><p class="meta">The Finnish Transport and Communications Agency\'s hydrographic data license. 1. General information: The Finnish Transport and Communications Agency (hereinafter the Licensor) as the holder of the incorporeal rights, has granted a license to use a copy of the data or part of it (hereinafter data) on the terms and conditions mentioned below. A Licensee is a natural or legal person, who uses the data covered by the license. The Licensee accepts the terms and conditions of this licence by receiving the data covered by the licence. This license agreement does not create a cooperation or business relationship between the Licensee and Licensor. 2. Terms and conditions of the licence. 2.1. Right of use: This licence grants a worldwide and free of charge parallel right of use. According to the terms and conditions of the licence, data received by the Licensor can for other than navigational purposes freely be: copied, distributed and published, modified and utilised non-commercially, combined with other products and, used as part of an application or service. Navigational purposes refer to all maritime operations, such as route planning, positioning, determining the best direction and ensuring the vessel\'s safe passage. 2.2. Duties and responsibilities of the License: When distributing the data or an application including the data it, the Licensee should in a reasonable way, in the distribution media or application used, mention: the name of the Licensor, the data and the time of the data transfer (for example: contains information received from the Finnish Transport and Communications Agency\'s nautical chart data base 06/2020) present a copy of this licence or a link to it, and omit the name of the Licensor in connection with the product or service, on the request of the Licensor. The Licensee must not in connection with the data that is being used indicate that the Licensor supports or recommends the the data use in question. 2.3 Duties and responsibilities of the Licensor: The Licensor is responsible for ensuring that the Licensor has the right to transfer the rights to the data covered by this license. The data has been licensed "as is", and the Licensor shall not be held responsible for any errors or omissions in the data, or any inconsistencies or discontinuities between the vertical coordinate reference systems used therein, disclaims any warranty for the validity or up-to-date status of the data and shall be free from liability for direct or consequential damages arising from the use of data provided by the Licensor, and is not obliged to ensure the continuous availability of the data, nor to announce in advance the interruption or cessation of availability, and the licensor shall be free from liability for direct or consequential damages arising from any such interruption or cessation. 3. Jurisdiction: Finnish law shall apply to this licence. 4. Amendments to this licence: The Licensor may at any time change the terms and conditions of the license or apply a different license to the material. The terms and conditions in this license shall, however, still apply to such data that has been transferred prior to the amendments to the terms and conditions or the change of the license.</p></details>' +
         '<h3>Maapohja</h3><p>Maanmittauslaitoksen taustakartta kartat.kapsi.fi-palvelun kautta, CC BY 4.0. OpenStreetMap-maapohja: &copy; OpenStreetMap-tekijät, ODbL; tiilet OpenStreetMap Foundationin palvelimilta. Koska tiedostona avattu sivu ei lähetä selaimen Referer-tietoa, sovellus tunnistaa itsensä OSM:n palvelimille erillisellä otsakkeella. Jos OSM muuttaa käytäntöään ja tiilet estyvät, käytä Maanmittauslaitoksen maapohjaa.</p>' +
         '<h3>Kävijälaskuri</h3><p>Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla. Se ei käytä evästeitä eikä yksilöi käyttäjiä, ja tiedostona avatussa sovelluksessa sitä ei ladata. Reittejä, merkkejä tai sijaintia ei lähetetä.</p>' +
+        '<h3>AIS-alukset</h3><p>Alusten AIS-sijainnit ja alustiedot tulevat Fintrafficin Digitraffic Marine -rajapinnasta (meri.digitraffic.fi). Aineiston lisenssi on CC BY 4.0, ja lähdemerkintä <b>AIS: Fintraffic / Digitraffic, CC BY 4.0</b> näkyy kartalla, kun kerros on päällä. Sovellus tunnistautuu Digitrafficille otsakkeella Digitraffic-User: Reittikartta. Tieto on viiveellistä, eikä se sovellu navigointiin tai törmäysten välttämiseen.</p>' +
         '<h3>Laiturit</h3><p>Laiturit, aallonmurtajat ja pengerrykset vektorikartalla: &copy; OpenStreetMap-tekijät, ODbL, haettu Overpass-rajapinnan kautta (overpass-api.de, varalla overpass.kumi.systems).</p>' +
         '<h3>Väylätiedot</h3><p>Navigointilinjat, väylät, turvalaitteet, vesiliikennemerkit, sulut ja avattavat sillat: Väylävirasto, avoin rajapinta, CC BY 4.0. Luotsipaikat ja VTS-ilmoittautumispisteet (paikkahaku): Traficom, avoin INSPIRE-palvelu, CC BY 4.0. Väylien suunnat ovat navigointilinjojen virallisia tosisuuntia, kun ne ovat saatavilla, muuten ne on laskettu linjan geometriasta (loksodromi).</p>' +
         '<h3>Sijaintitarkkuus</h3><p>Rasterimerikartta on skannattu paperikartta, ja sen piirros poikkeaa ENC-kartasta. Pistokokeissa väylälinjan sijainti rasterikartalla poikkesi ENC:stä tyypillisesti noin 5 metriä ja suurimmillaan noin 16 metriä (Savonlinna, Kyrönsalmi), ja Näsijärvellä koko piirros oli siirtynyt noin 5–6 metriä luoteeseen. Väyläviraston navigointilinjat poikkesivat ENC:stä noin 1–2 metriä. Siksi reittipisteet kiinnitetään väyläaineistoon ja sivuutus- ja käännösetäisyyksien kohteet Väyläviraston turvalaiterekisterin sijainteihin. Turvalaitteiden sijainteja ei ole mitattu erikseen ENC:tä vasten. Vapaa piste tai kohde perii rasterikartan virheen.</p>' +

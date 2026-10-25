@@ -22,7 +22,8 @@
           notes: true, passes: true, bearings: true, depths: true, lines: false,
           aids: false, aidNames: false, signs: null, border: true, hint: false, snap: true, safety: false,
           legBrg: true, turnTicks: true, lights: null, speed: null, mml: true, piers: true,
-          bridges: null, ecdisMarks: false
+          bridges: null, ecdisMarks: false,
+          ais: true                 // AIS-alukset (Digitraffic)
         },
         safetyDepths: {},
         land: 'osm',                // maapohja: 'osm' (oletus, näyttää maa-alueiden nimet) | 'mml'
