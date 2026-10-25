@@ -1,0 +1,30 @@
+{
+ "paikka": [
+  328045,
+  6824881
+ ],
+ "alue_mpk": 1.5,
+ "sateita": 360,
+ "osumia": 174,
+ "suurin_ero_m": 0,
+ "kolme_sädettä": [
+  {
+   "suunta_aste": 142.0,
+   "esikatselu_m": 705.78,
+   "simulaattori_m": 705.78,
+   "ero_m": 0.0
+  },
+  {
+   "suunta_aste": 192.0,
+   "esikatselu_m": 1250.77,
+   "simulaattori_m": 1250.77,
+   "ero_m": 0.0
+  },
+  {
+   "suunta_aste": 234.0,
+   "esikatselu_m": 2653.0,
+   "simulaattori_m": 2653.0,
+   "ero_m": 0.0
+  }
+ ]
+}

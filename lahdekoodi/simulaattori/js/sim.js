@@ -1,9 +1,11 @@
 /* Simulaattori – sovellus: aloitusnäyttö, näkymät, komennot, harjoitus ja purku.
  *
- * Yksi simulaation tila (Liike.create), kaksi näkymää (plotteri ja kuljettajan näkymä), joiden välillä vaihdetaan napilla.
+ * Yksi simulaation tila (Liike.create), kolme näkymää (plotteri, tutka ja kuljettajan näkymä). Puhelimessa yksi mittari (plotteri tai tutka)
+ * ja kuljettajan näkymä vaihtavat päänäkymää napilla, tutka ja plotteri vaihtuvat toisiinsa mittarin omalla napilla. Leveällä näytöllä (vähintään
+ * 1024 px) mittari ja 3D ovat rinnakkain, ja vähintään 1440 px leveällä näytöllä plotteri, 3D ja tutka ovat kolmena ruutuna.
  * Simulaatio etenee 0,1 s:n kiinteillä askelilla, joten tallenne ja automaattiohjaus ovat samat nopeutuksesta riippumatta.
  * URL-parametrit (kehitys ja testit): aineisto (paketin osoite), harjoitus (h1 tai free), auto (automaattiohjauksen tavoitenopeus kn),
- * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), alku=1 (ohita aloitusnäyttö). */
+ * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö). */
 (function (root) {
   'use strict';
   var P = root.Paikka, L = root.Liike, H = root.Harjoitus, KN = L.KN, RAD = Math.PI / 180;
@@ -18,7 +20,10 @@
     ex: 'h1', targetKn: 30, eye: 'nav', clockMode: 'real', clockStr: '12:00', running: false, frozen: false, acc: 0, lastT: 0,
     plotterOn: true, rangeNm: 1, lastPlotT: 0, lastTrailT: 0, trail: [], gazeKey: 0, lastMerkitLoad: { x: 1e9, y: 1e9 }, lastVis: -1e9,
     speedSteps: [1, 2, 5, 10], speedIdx: 0, seated: false, ground: null, lastConvT: -1e9, loadedLandmarks: false, ready: false,
-    layout: { land: false, wide: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, budgetSec: null, finishedAt: null
+    layout: { land: false, wide: false, tri: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, budgetSec: null, finishedAt: null,
+    // mittarit: disp = aloitusvalinta (plot, radar, both), instr = näytettävä mittari (plot, radar, both = kolme ruutua)
+    disp: 'plot', instr: 'plot', plotShown: true, radar: null, radarOpt: null, radarOn: true, radarShown: false, radarMain: false, radarReady: true,
+    lastRadarT: 0, radarSec: 0, radarMainSec: 0
   };
   root.__sim = G;
 
@@ -60,14 +65,25 @@
     var rt = H.buildRoute(H.EXERCISES.h1), sec = rt.total / (G.targetKn * KN);
     h.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).';
   }
+  function updateDispHint() {
+    var h = { plot: 'Plotteri ja kuljettajan näkymä.', radar: 'Tutka ja kuljettajan näkymä, ei plotteria.', both: 'Plotteri ja tutka. Puhelimessa mittari vaihtuu napilla, vähintään 1440 px leveällä näytöllä kaikki kolme ovat rinnakkain.' };
+    $('dispHint').textContent = h[G.disp] || '';
+  }
   function initStart() {
     segInit('segEx', function (v) { G.ex = v; updateBudgetHint(); });
     segInit('segSpeed', function (v) { G.targetKn = Number(v); updateBudgetHint(); });
     segInit('segEye', function (v) { G.eye = v; });
+    segInit('segDisp', function (v) { G.disp = v; updateDispHint(); });
     segInit('segClock', function (v) { G.clockMode = v; $('clockIn').hidden = v !== 'custom'; });
     $('clockIn').addEventListener('input', function () { G.clockStr = $('clockIn').value || '12:00'; });
     $('startBtn').addEventListener('click', startRun);
     updateBudgetHint();
+    var dq = qs.get('naytot');
+    if (dq === 'plot' || dq === 'radar' || dq === 'both') {
+      G.disp = dq;
+      Array.prototype.forEach.call($('segDisp').children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === dq); });
+    }
+    updateDispHint();
     root.Aineisto.meta().then(function (m) { if (m && m.lahdemerkinta_yhteensa) $('srcText').textContent = m.lahdemerkinta_yhteensa; }, function () {});
   }
 
@@ -86,37 +102,80 @@
     var land = vw > vh * 1.1 && vw >= 640;
     g.classList.toggle('land', land);
     var sw = st.clientWidth, sh = st.clientHeight;
-    var wide = land && sw >= 680 && sw > sh * 1.25;
+    // rinnakkain: vaaka-asento ja riittävän leveä ruutu. Vähintään 1024 px leveällä näytöllä (tabletti, tietokone) aina, muuten vain, jos ruutu on selvästi leveä.
+    var wide = land && sw >= 680 && (sw > sh * 1.25 || vw >= 1024);
     g.classList.toggle('wide', wide);
-    G.layout.land = land; G.layout.wide = wide;
+    G.layout.land = land; G.layout.wide = wide; G.layout.tri = wide && vw >= 1440;
     applyPanes();
     sizeViews();
   }
+  // Mittarin tila: aloitusvalinta rajaa vaihtoehdot. Kolme ruutua (both) kelpaa vain, kun leveys riittää.
+  function resolveInstr() {
+    if (G.disp === 'plot') G.instr = 'plot';
+    else if (G.disp === 'radar') G.instr = 'radar';
+    else if (G.instr === 'both' && !G.layout.tri) G.instr = 'plot';
+    return G.instr;
+  }
+  function nextInstr() {
+    if (G.disp !== 'both') return G.instr;
+    if (G.instr === 'plot') return 'radar';
+    if (G.instr === 'radar') return G.layout.tri ? 'both' : 'plot';
+    return 'plot';
+  }
+  function updateInstrButtons() {
+    var n = nextInstr(), label = n === 'radar' ? 'Tutka' : n === 'both' ? 'Molemmat' : 'Plotteri', show = G.disp === 'both';
+    ['pInstrBtn', 'rInstrBtn'].forEach(function (id) { var b = $(id); b.hidden = !show; if (b.textContent !== label) b.textContent = label; b.setAttribute('aria-label', 'Näytä ' + label.toLowerCase()); });
+  }
   function applyPanes() {
-    var pp = $('paneP'), p3 = $('pane3d'), sw = $('swapBtn'), wide = G.layout.wide;
-    var plotMain = G.main === 'plot';
-    pp.classList.toggle('main', wide || plotMain); pp.classList.toggle('small', !wide && !plotMain);
-    p3.classList.toggle('main', wide || !plotMain); p3.classList.toggle('small', !wide && plotMain);
-    pp.style.zIndex = wide || plotMain ? 1 : 30; p3.style.zIndex = wide || !plotMain ? 1 : 30;
+    var st = resolveInstr(), wide = G.layout.wide, tri = wide && st === 'both';
+    var pp = $('paneP'), pr = $('paneR'), p3 = $('pane3d'), sw = $('swapBtn');
+    var showP = st !== 'radar', showR = st !== 'plot';
+    $('game').classList.toggle('tri', tri);
+    pp.hidden = !showP; pr.hidden = !showR;
+    var ip = showR && !showP ? pr : pp;               // yhden mittarin tilassa mittarin ruutu
+    var instrMain = G.main === 'plot';                // mittari (plotteri tai tutka) päänäkymänä
+    [pp, pr].forEach(function (pane) {
+      var mine = wide || pane === ip;
+      pane.classList.toggle('main', wide || (mine && instrMain)); pane.classList.toggle('small', !wide && mine && !instrMain);
+      pane.style.zIndex = wide || (mine && instrMain) ? 1 : 30;
+    });
+    p3.classList.toggle('main', wide || !instrMain); p3.classList.toggle('small', !wide && instrMain);
+    p3.style.zIndex = wide || !instrMain ? 1 : 30;
+    // vaaka-asennon puhelimessa tutkan napit ovat oikeassa reunassa, joten pieni 3D-ikkuna siirretään vasempaan alakulmaan
+    p3.classList.toggle('bl', !wide && instrMain && ip === pr && G.layout.land);
     // vaihtopainike peittää pienen ikkunan
     sw.hidden = wide;
     if (!wide) {
-      var small = plotMain ? p3 : pp, r = small.getBoundingClientRect(), s = $('stage').getBoundingClientRect();
+      var small = instrMain ? p3 : ip, r = small.getBoundingClientRect(), s = $('stage').getBoundingClientRect();
       sw.style.left = (r.left - s.left) + 'px'; sw.style.top = (r.top - s.top) + 'px'; sw.style.width = r.width + 'px'; sw.style.height = r.height + 'px';
     }
+    // tutkan kuva alkaa pystyasennossa pienen 3D-ikkunan alapuolelta, muuten mittarin nappirivin alta
+    var rtop = 58;
+    if (!wide && instrMain && ip === pr && !G.layout.land) { var b3 = p3.getBoundingClientRect(), sb = $('stage').getBoundingClientRect(); rtop = Math.max(58, Math.round(b3.bottom - sb.top + 6)); }
+    pr.style.setProperty('--rtop', rtop + 'px');
+    var radarSmall = showR && !wide && !instrMain;
+    if (G.radarOpt) G.radarOpt.ui = !radarSmall;        // pienessä ikkunassa ei tutkan nappeja, jolloin kuva käyttää koko ikkunan
+    G.plotShown = showP; G.radarShown = showR; G.radarMain = showR && !radarSmall;
+    updateInstrButtons();
     $('turnBox').style.display = '';
-    $('gazeBtn').hidden = !(wide || !plotMain) || Math.abs(G.view ? G.view.getGaze() : 0) < 1;
+    $('gazeBtn').hidden = !(wide || !instrMain) || Math.abs(G.view ? G.view.getGaze() : 0) < 1;
   }
   function sizeViews() {
     if (!G.view) return;
     var p3 = $('pane3d'), r = p3.getBoundingClientRect();
     if (r.width > 4 && r.height > 4) G.view.setSize(Math.round(r.width), Math.round(r.height));
-    G.pl.resize();
+    if (G.plotShown) { G.pl.resize(); if (G.trail) G.pl.setTrail(G.trail); }
     G.lastPlotT = 0;
   }
   function swapViews() {
     if (G.layout.wide) return;
     G.main = G.main === 'plot' ? '3d' : 'plot';
+    applyPanes(); sizeViews();
+  }
+  // Mittarin vaihto: plotteri, tutka ja (leveällä näytöllä) molemmat
+  function cycleInstr() {
+    if (G.disp !== 'both') return;
+    G.instr = nextInstr();
     applyPanes(); sizeViews();
   }
 
@@ -170,7 +229,9 @@
     } else G.pl.setRoute([], []);
     G.pl.setTrail([]); G.pl.clearExtra();
     G.pl.setRangeNm(G.rangeNm);
-    G.main = 'plot'; layout();
+    G.main = 'plot'; G.instr = G.disp === 'radar' ? 'radar' : 'plot'; layout();
+    if (G.disp === 'both' && G.layout.tri) { G.instr = 'both'; applyPanes(); sizeViews(); }
+    setupRadar();
     // kokonaiskuormitus: maamerkit, turvalaitteet, maasto
     // maasto rakennetaan vasta, kun maamerkit ja turvalaitteet on luettu (latvuskerros jätetään majakoiden ja maamerkkien ympäriltä pois)
     G.view.terrain.setGate(true);
@@ -181,6 +242,33 @@
     G.view.rebase(); G.pl.rebase();
     G.t0load = performance.now(); G.lastT = performance.now();
     requestAnimationFrame(loop);
+  }
+
+  // ---------- tutka ----------
+  // Tutka saa oman sijaintinsa, tosisuuntansa, nopeutensa ja aikansa samasta tilasta (G.S) kuin plotteri ja käyttää jaettua Aineisto-moduulia.
+  // Aika on simulaatioaika ja kuluva 0,1 s:n askel mukana, jolloin pyyhkäisy etenee tasaisesti, pysähtyy tauolla ja kulkee nopeutetussa ajossa mukana.
+  function feedRadar() {
+    var S = G.S, w = P.worldToEN(S.x, S.y);
+    G.radar.paivita({ e: w.e, n: w.n, suunta: L.trueHdg(S), nopeusMs: S.v, aika: S.clockMs + G.acc * 1000 });
+  }
+  function setupRadar() {
+    if (G.radar) { try { G.radar.tuhoa(); } catch (e) {} G.radar = null; }
+    G.radarOn = true; $('radarOff').hidden = true; G.radarSec = 0; G.radarMainSec = 0; G.lastRadarT = 0; G.radarReady = true;
+    if (G.rec) G.rec.radar = [{ t: 0, on: true }];
+    if (G.disp === 'plot') { G.radarOpt = null; return; }
+    G.radarOpt = { aineisto: root.Aineisto, alue: 1.5, suuntaYlos: true, ui: true, eblVrm: true, kuvavali: 50 };
+    G.radar = root.Tutka.luoTutka($('radar'), G.radarOpt);
+    root.__radar = G.radar;
+    applyPanes();
+    G.radarReady = false;
+    feedRadar();
+    G.radar.valmis().then(function () { G.radarReady = true; });
+  }
+  function setRadar(on) {
+    if (G.radarOn === on) return;
+    G.radarOn = on; $('radarOff').hidden = on;
+    if (G.radar) { G.radar.asetaHairio({ pois: !on }); if (on && G.S) feedRadar(); }
+    if (G.S) { logCustom('tutka', on ? 1 : 0); if (G.rec) G.rec.radar.push({ t: G.S.t, on: on }); }
   }
 
   // ---------- komennot ----------
@@ -244,6 +332,9 @@
     $('swapBtn').addEventListener('click', swapViews);
     $('plotOffBtn').addEventListener('click', function () { setPlotter(false); });
     $('plotOnBtn').addEventListener('click', function () { setPlotter(true); });
+    $('rOffBtn').addEventListener('click', function () { setRadar(false); });
+    $('radarOnBtn').addEventListener('click', function () { setRadar(true); });
+    $('pInstrBtn').addEventListener('click', cycleInstr); $('rInstrBtn').addEventListener('click', cycleInstr);
     $('rangeBox').addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
       G.rangeNm = Number(b.getAttribute('data-r')); G.pl.setRangeNm(G.rangeNm); G.lastPlotT = 0;
@@ -280,6 +371,7 @@
       else if (k === 'q' || k === 'Q') G.gazeKey = -1;
       else if (k === 'e' || k === 'E') G.gazeKey = 1;
       else if (k === 'Tab') swapViews();
+      else if (k === 'r' || k === 'R') cycleInstr();
       else if (k === 'p' || k === 'P') togglePause();
       else if (k === '1') setSpeedFactor(0); else if (k === '2') setSpeedFactor(1); else if (k === '5') setSpeedFactor(2); else if (k === '0') setSpeedFactor(3);
       else handled = false;
@@ -322,6 +414,7 @@
     if (S.t - G.lastConvT > 2) { G.lastConvT = S.t; var l = P.worldToLonLat(S.x, S.y); S.conv = P.convergenceDeg(l.lon, l.lat); }
     if (G.auto && !G.auto.done) G.auto.step(S);
     var e = S.x + G.origin.e, n = S.y + G.origin.n;
+    if (G.radar && G.radarShown && G.radarOn) { G.radarSec += dt; if (G.radarMain) G.radarMainSec += dt; }
     // tallenne
     if (G.rec) {
       G.rec._acc += dt;
@@ -356,6 +449,7 @@
     $('groundText').textContent = hit.reason === 'maa' ? 'Alus ajoi maalle.' : 'Syvyys alle ' + fnum(root.Liike.SETTINGS.draftM, 1) + ' m, syväys ' + fnum(root.Liike.SETTINGS.draftM, 1) + ' m.';
     $('groundBanner').hidden = false;
     // näytä paikka kartalla
+    if (G.disp !== 'radar' && G.instr === 'radar') G.instr = 'plot';
     G.main = 'plot'; applyPanes(); sizeViews();
     G.pl.addExtraPoint({ x: hit.x, y: hit.y }, '<div class="grd">✕</div>', 'plot-pin');
     G.pl.update(S.x, S.y, S.hdg);
@@ -432,7 +526,8 @@
       v.terrain.tick(14);
       var j = v.terrain.info(), t = (performance.now() - G.t0load) / 1000;
       var prog = Math.min(0.95, 0.15 + 0.8 * Math.min(1, t / 12));
-      var idle = v.terrain.idle() && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && t > 1.2;
+      if (G.radar && performance.now() - G.lastRadarT >= 100) { G.lastRadarT = performance.now(); feedRadar(); }
+      var idle = v.terrain.idle() && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && t > 1.2 && G.radarReady;
       setLoad(idle ? 1 : prog, 'Ladataan maastoa ' + (j.jobs + j.queued) + ' ruutua');
       v.render(S, dtReal);
       if (idle || t > 60) {
@@ -458,12 +553,16 @@
     }
     // plotteri ja käyttöliittymä
     var nowMs = performance.now();
-    if (G.plotterOn && nowMs - G.lastPlotT > ((G.layout.wide || G.main === 'plot') ? 70 : 250)) {
+    if (G.plotterOn && G.plotShown && nowMs - G.lastPlotT > ((G.layout.wide || G.main === 'plot') ? 70 : 250)) {
       G.lastPlotT = nowMs; G.pl.update(S.x, S.y, S.hdg); G.pl.syncAids(S.x, S.y, false);
       if (G.route) { var nt = H.nextTurn(G.route, (H.project(G.route, S.x + G.origin.e, S.y + G.origin.n, G.leg != null ? G.leg : null)).cum, S.v); G.pl.setNext(nt ? P.enToWorld(nt.turn.e, nt.turn.n) : null); }
     }
     if (nowMs - G.lastTrailT > 1000 && S.v > 0.3) {
-      G.lastTrailT = nowMs; G.trail.push({ x: S.x, y: S.y }); if (G.trail.length > 3000) G.trail.shift(); if (G.plotterOn) G.pl.setTrail(G.trail);
+      G.lastTrailT = nowMs; G.trail.push({ x: S.x, y: S.y }); if (G.trail.length > 3000) G.trail.shift(); if (G.plotterOn && G.plotShown) G.pl.setTrail(G.trail);
+    }
+    // tutka: tila 50 ms:n välein, kuva 50 ms:n välein kun tutka on puhelimen päänäkymä ja muuten 100 ms:n välein, ettei 3D-piirto kärsi
+    if (G.radar && G.radarShown && G.radarOn && nowMs - G.lastRadarT >= 50) {
+      G.lastRadarT = nowMs; G.radarOpt.kuvavali = (G.radarMain && !G.layout.wide) ? 50 : 100; feedRadar();
     }
     if (frameN % 3 === 0) updateUi();
   }
@@ -483,6 +582,7 @@
     if (G.mode === 'debrief') return;
     clearTimeout(G.endTimer);
     G.mode = 'debrief'; G.frozen = true;
+    if (G.radar) G.radar.vapautaRuudut();     // tutkan ruudukko (enintään noin 39 Mt) vapautetaan, uusi ajo rakentaa sen uudelleen
     if (G.rec) { G.rec.aborted = why === 'aborted'; G.rec.endMs = G.S.clockMs; }
     $('groundBanner').hidden = true; $('toast').hidden = true; $('menu').hidden = true;
     if (!G.route || !G.rec) { // vapaa ajo: ei purkua
@@ -490,9 +590,24 @@
     }
     $('game').hidden = true; $('debrief').hidden = false;
     var an = H.analyze(G.rec, G.S); root.__analysis = an;
+    radarStats(an);
     renderDebrief(an, why);
     requestAnimationFrame(function () { renderDebriefMap(an); });
   }
+
+  // Tutkan käyttö purkua varten: kuinka suuren osan ajasta tutka oli näkyvissä (päällä ja ruudulla) ja kuinka paljon sitä katsottiin suurena ruutuna
+  function radarStats(an) {
+    an.radarUsed = G.disp !== 'plot'; an.radarVisSec = 0; an.radarVisPct = null; an.radarMainSec = 0; an.radarMainPct = null; an.radarOffSec = 0;
+    if (!an.radarUsed || !an.ok || !(an.timeSec > 0)) return;
+    an.radarVisSec = Math.min(an.timeSec, G.radarSec); an.radarMainSec = Math.min(an.radarVisSec, G.radarMainSec);
+    an.radarVisPct = an.radarVisSec / an.timeSec * 100; an.radarMainPct = an.radarMainSec / an.timeSec * 100;
+    var ev = G.rec.radar || [], t0 = G.rec.t[0], tEnd = G.rec.t[G.rec.t.length - 1], off = 0;
+    for (var i = 0; i < ev.length; i++) {
+      if (!ev[i].on) { var tn = i + 1 < ev.length ? ev[i + 1].t : tEnd; off += Math.max(0, Math.min(tn, tEnd) - Math.max(ev[i].t, t0)); }
+    }
+    an.radarOffSec = off;
+  }
+  function cmdLabel(c) { return c.kind === 'tutka' ? (c.value ? 'Tutka päälle' : 'Tutka pois') : H.cmdText(c); }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function offsetText(m) {
@@ -516,6 +631,9 @@
       '<tr><td>Aikabudjetti ' + G.targetKn + ' kn</td><td class="n">' + H.mmss(budgetSec) + (an.finished ? ' (' + (an.timeSec <= budgetSec ? '−' : '+') + H.mmss(Math.abs(an.timeSec - budgetSec)) + ')' : '') + '</td></tr>' +
       '<tr><td>Pohjakosketukset</td><td class="n">' + (an.groundings.length ? an.groundings.length + ' kpl' : 'ei yhtään') + '</td></tr>' +
       (an.plotterOffSec > 0 ? '<tr><td>Plotteri pois päältä</td><td class="n">' + H.mmss(an.plotterOffSec) + '</td></tr>' : '') +
+      (an.radarUsed && an.radarVisPct != null ? '<tr><td>Tutka näkyvissä</td><td class="n">' + fnum(an.radarVisPct, 0) + ' % ajasta (' + H.mmss(an.radarVisSec) + ')</td></tr>' +
+        '<tr><td class="dim">josta päänäkymänä tai omana ruutunaan</td><td class="n">' + fnum(an.radarMainPct, 0) + ' % ajasta (' + H.mmss(an.radarMainSec) + ')</td></tr>' : '') +
+      (an.radarOffSec > 0 ? '<tr><td>Tutka pois päältä</td><td class="n">' + H.mmss(an.radarOffSec) + '</td></tr>' : '') +
       '</tbody></table></div></div>');
     // 1. väyläalue
     h.push('<div class="db-sec"><h2>1. Väylä</h2>' + (an.fairwayPct == null ? '<p>Väyläalueen tietoa ei ollut saatavilla.</p>' :
@@ -538,7 +656,7 @@
     // komentoloki
     var cl = an.cmdLog.map(function (c) {
       var rel = c.turnNo == null ? '' : (Math.abs(c.offsetM) < 1 ? 'käännöspisteellä ' : Math.round(Math.abs(c.offsetM)) + ' m ' + (c.offsetM < 0 ? 'ennen ' : 'jälkeen ')) + 'käännös ' + c.turnNo;
-      return '<tr><td>' + H.mmss(c.t) + '</td><td>' + esc(H.cmdText(c)) + '</td><td class="dim">' + esc(rel) + '</td></tr>';
+      return '<tr><td>' + H.mmss(c.t) + '</td><td>' + esc(cmdLabel(c)) + '</td><td class="dim">' + esc(rel) + '</td></tr>';
     }).join('');
     h.push('<div class="db-sec"><h2>Komentoloki</h2>' + (cl ? '<div class="tblwrap"><table class="db"><thead><tr><th>Aika</th><th>Komento</th><th>Paikka</th></tr></thead><tbody>' + cl + '</tbody></table></div>' : '<p>Ei komentoja.</p>') + '</div>');
     $('dbBody').innerHTML = h.join('');

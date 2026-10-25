@@ -92,11 +92,27 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #game.land #stage{grid-column:1;grid-row:2}
 #game.land #cmd{grid-column:2;grid-row:2;overflow-y:auto;border-top:0;border-left:1px solid #0a2132}
 #game.land .cb{min-height:48px}
-#game.wide #paneP,#game.wide #pane3d{top:0;bottom:0;width:50%;border:0;border-radius:0;aspect-ratio:auto;box-shadow:none}
-#game.wide #paneP{left:0;right:auto}#game.wide #pane3d{left:50%;right:auto}
+#game.land .row.r6{grid-template-columns:repeat(6,1fr)}
+#game.wide #paneP,#game.wide #pane3d,#game.wide #paneR{top:0;bottom:0;width:50%;border:0;border-radius:0;aspect-ratio:auto;box-shadow:none}
+#game.wide #paneP,#game.wide #paneR{left:0;right:auto}#game.wide #pane3d{left:50%;right:auto}
+/* kolme ruutua (leveys vähintään 1440 px): plotteri, 3D ja tutka */
+#game.tri #paneP{left:0;width:33.3334%}#game.tri #pane3d{left:33.3334%;width:33.3333%}#game.tri #paneR{left:66.6667%;width:33.3333%}
 #game.wide .pane.small .hud{display:block}
 #game.wide .hud-hdg{display:block}
 #game.wide #swapBtn{display:none}
+/* tutka */
+#paneR{background:#020a06}
+.radar-head{position:absolute;left:8px;top:6px;z-index:26;display:flex;gap:6px}
+.rbtn{min-width:46px;min-height:46px;padding:4px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(14,28,40,.9);color:#fff;font-weight:650}
+.rbtn:active{background:var(--accent);border-color:#5fc0ea}
+.radar-box{position:absolute;left:0;right:0;bottom:0;top:var(--rtop,58px)}
+#radar{position:absolute;left:0;top:0;width:100%;height:100%;display:block;background:#020a06}
+#radarOff{position:absolute;inset:0;z-index:25;background:#020a06;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:20px;font-weight:600}
+#radarOff .big{width:180px}
+.hud-instr{right:8px;bottom:8px;min-height:44px;min-width:44px;padding:4px 12px;border:1px solid var(--line);font-weight:650}
+.pane.small .radar-head,.pane.small .tutka-ui{display:none}
+.pane.small .radar-box{top:0}
+.pane.small.bl{right:auto;left:8px;top:auto;bottom:8px}
 @media (max-height:430px){#cmd .status{padding-bottom:2px}.cb{min-height:44px;font-size:16px}.row{margin-top:4px}.hud-range button{min-height:44px}}
 
 /* purku */

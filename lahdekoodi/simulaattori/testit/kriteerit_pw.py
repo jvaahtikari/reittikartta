@@ -22,14 +22,17 @@ with sync_playwright() as pw:
             e0, n0 = int(E) + 150, int(N) + 150
             open_view(p, e0, n0)
             r = p.evaluate('''([num, ex, ey]) => {
-              const pos = __view.aids.mesh.geometry.attributes.position.array, xs=[], zs=[];
-              for (let i = 0; i < pos.length; i += 3) { if (Math.abs(pos[i]-ex) < 2.5 && Math.abs(pos[i+2]+ey) < 2.5 && pos[i+1] < 0.3) { xs.push(pos[i]); zs.push(pos[i+2]); } }
-              const mx = xs.reduce((a,b)=>a+b,0)/xs.length, mz = zs.reduce((a,b)=>a+b,0)/zs.length;
+              // instanssien maailmapaikat: ryhmä on käännetty (ylos: y), joten luetaan koordinaatit matrixWorld * instanceMatrix
+              const g = __view.aids.group; g.updateMatrixWorld(true);
+              let best = null; const v = new THREE.Vector3(), m = new THREE.Matrix4(), mw = new THREE.Matrix4();
+              g.traverse(o => { if (!o.isInstancedMesh) return; for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, m); mw.multiplyMatrices(o.matrixWorld, m); v.setFromMatrixPosition(mw);
+                const d = Math.hypot(v.x - ex, -v.z - ey); if (!best || d < best.d) best = { d, x: v.x, y: -v.z, malli: o.userData.malli }; } });
               const a = Merkit.byNumber(num);
-              return {n: xs.length, x: mx, y: -mz, ax: a.x, ay: a.y, name: a.nimi};
+              return { best, ax: a.x, ay: a.y, name: a.nimi };
             }''', [str(num), E - e0, N - n0])
+            r['n'] = 1; r['x'] = r['best']['x']; r['y'] = r['best']['y']
             err = math.hypot(r['x'] - (E - e0), r['y'] - (N - n0))
-            print('C2 turvalaite', num, r['name'], 'verkon pisteitä', r['n'], 'virhe', round(err, 3), 'm', 'OK' if err < 2 else 'EI')
+            print('C2 turvalaite', num, r['name'], 'malli', r['best']['malli'], 'virhe', round(err, 3), 'm', 'OK' if err < 2 else 'EI')
             res['c2_aid_%d' % num] = err
         p.screenshot(path=os.path.join(out, '_c2_viitta.png'))
     if which in ('all', 'c2b'):

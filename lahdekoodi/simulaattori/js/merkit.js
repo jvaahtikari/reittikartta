@@ -52,7 +52,7 @@
       var en = root.Paikka.lonlatToEN(ll.lon, ll.lat), key = Math.round(en.e) + '/' + Math.round(en.n) + '/' + (p.nimi || '');
       if (signs.has(key)) return;
       var w = root.Paikka.lonlatToWorld(ll.lon, ll.lat);
-      signs.set(key, { key: key, nimi: p.nimi || '', laji: Number(p.lajityyppi), tyyppi: Number(p.tyyppi), kilpi: p.lisakilpi1 || '', x: w.x, y: w.y, e: en.e, n: en.n });
+      signs.set(key, { key: key, nimi: p.nimi || '', laji: Number(p.lajityyppi), tyyppi: Number(p.tyyppi), kilpi: p.lisakilpi1 || '', arvo: p.rajoitusarvo == null ? null : Number(p.rajoitusarvo), x: w.x, y: w.y, e: en.e, n: en.n });
     });
   }
 

@@ -121,7 +121,7 @@
 
     // ---- maasto ----
     var terrain = root.Maasto.create(scene, { buildings: opts.buildings });
-    var aids3d = root.Merkit3D.create(scene), landmarks = root.Maamerkit3D.create(scene);
+    var aids3d = root.Merkit3D.create(scene, { groundAt: function (x, y) { return terrain.heightAt(x, y, true); } }), landmarks = root.Maamerkit3D.create(scene);
     // ---- alus ----
     var runko = root.Runko.build(THREE, root.Runko.DATA, { interior: true, merge: true });
     // Suorituskyky: rungon PBR-materiaalit (MeshStandardMaterial) vaihdetaan Lambert-materiaaleiksi, koska ohjelmistopiirrossa ja heikoilla puhelimilla

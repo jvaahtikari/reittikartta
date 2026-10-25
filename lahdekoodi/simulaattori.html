@@ -46,6 +46,15 @@
       </div>
       <div class="hint" id="budgetHint"></div>
     </div>
+    <div class="field" role="group" aria-labelledby="lblDisp">
+      <div class="lbl" id="lblDisp">Näytöt</div>
+      <div class="seg" id="segDisp">
+        <button type="button" data-v="plot" class="on">Plotteri</button>
+        <button type="button" data-v="radar">Tutka</button>
+        <button type="button" data-v="both">Molemmat</button>
+      </div>
+      <div class="hint" id="dispHint"></div>
+    </div>
     <div class="field" role="group" aria-labelledby="lblEye">
       <div class="lbl" id="lblEye">Silmäpiste kuljettajan näkymässä</div>
       <div class="seg" id="segEye">
@@ -100,6 +109,7 @@
         <span class="u">mpk</span>
       </div>
       <button type="button" class="hud hud-off" id="plotOffBtn">Plotteri pois</button>
+      <button type="button" class="hud hud-instr instr-btn" id="pInstrBtn" hidden>Tutka</button>
       <div class="hud hud-turn" id="turnBox" hidden>
         <div class="tb-row"><b id="turnTitle">Käännös</b><span id="turnInfo"></span></div>
         <div class="tb-row sm"><span id="progInfo"></span><span id="budgetInfo"></span></div>
@@ -110,6 +120,15 @@
       <div id="v3" class="v3"></div>
       <div class="hud hud-hdg" id="v3hud">---° · 0,0 kn</div>
       <button type="button" class="hud hud-gaze" id="gazeBtn" hidden>Katse suoraan</button>
+    </div>
+    <!-- tutka -->
+    <div id="paneR" class="pane" hidden>
+      <div class="radar-head" id="radarHead">
+        <button type="button" class="rbtn instr-btn" id="rInstrBtn" hidden>Plotteri</button>
+        <button type="button" class="rbtn" id="rOffBtn">Tutka pois</button>
+      </div>
+      <div class="radar-box" id="radarBox"><canvas id="radar" aria-label="Tutkakuva"></canvas></div>
+      <div id="radarOff" hidden>Tutka pois<button type="button" id="radarOnBtn" class="big">Päälle</button></div>
     </div>
     <button type="button" id="swapBtn" class="swap" aria-label="Vaihda näkymä" hidden></button>
     <div id="groundBanner" hidden>
@@ -153,7 +172,7 @@
     <button type="button" class="big" id="mEye">Silmäpiste: navigoija</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle. Tab: näkymän vaihto. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle. Tab: näkymän vaihto. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: yhden sormen veto asettaa EBL:n ja kahden sormen nipistys VRM:n.</div>
   </div>
 </div>
 
@@ -177,12 +196,15 @@
 <script src="lib/protomaps-leaflet.js"></script>
 <script src="simulaattori/lib/three.min.js"></script>
 <script src="js/symbols.js"></script>
+<script src="js/signs.js"></script>
 <script src="simulaattori/js/paikka.js"></script>
 <script src="simulaattori/js/liike.js"></script>
 <script src="simulaattori/js/mvt.js"></script>
 <script src="simulaattori/js/aineisto.js"></script>
+<script src="simulaattori/js/tutka.js"></script>
 <script src="simulaattori/js/runko.js"></script>
 <script src="simulaattori/js/merkit.js"></script>
+<script src="simulaattori/js/merimerkit3d.js"></script>
 <script src="simulaattori/js/merkit3d.js"></script>
 <script src="simulaattori/js/maamerkit3d.js"></script>
 <script src="simulaattori/js/maasto.js"></script>
