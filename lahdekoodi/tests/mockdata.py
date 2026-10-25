@@ -247,7 +247,7 @@ AIS_SHIPS = [
     dict(mmsi=230100005, name='VANHA ALUS', call='OHOLD', imo=0, type=70, dest='', draught=0, eta=0,
          ref=(40, 10, 5, 5), lat=61.640, lng=23.800, sog=5.0, cog=90.0, hd=90, nav=0, age=90 * 60, bulk=True),
     dict(mmsi=230100006, name='HIMMEA ALUS', call='OHDIM', imo=0, type=80, dest='', draught=0, eta=0,
-         ref=(70, 10, 6, 6), lat=61.605, lng=23.790, sog=0.0, cog=360.0, hd=511, nav=1, age=15 * 60, bulk=True),
+         ref=(70, 10, 6, 6), lat=61.605, lng=23.790, sog=0.0, cog=200.0, hd=511, nav=1, age=15 * 60, bulk=True),
     # alustiedot puuttuvat bulkkivastauksesta mutta löytyvät kutsulla /vessels/{mmsi}
     dict(mmsi=230100007, name='YKSITTAIS ALUS', call='OH7777', imo=0, type=37, dest='', draught=15, eta=0,
          ref=(6, 3, 2, 2), lat=61.622, lng=23.735, sog=4.0, cog=120.0, hd=511, nav=8, age=40, bulk=False),
@@ -261,6 +261,16 @@ AIS_SHIPS = [
          ref=(10, 5, 3, 3), lat=61.60001, lng=23.70002, sog=0.0, cog=360.0, hd=511, nav=1, age=50, bulk=True),
     dict(mmsi=230100011, name='VAINO TESTI', call='OHVT', imo=0, type=31, dest='', draught=0, eta=0,
          ref=(12, 6, 3, 3), lat=61.615, lng=23.785, sog=3.0, cog=200.0, hd=201, nav=0, age=70, bulk=True),
+    # satama: laiturissa olevia aluksia, joilla on keulasuunta ja mitat (rungot todellisessa mittakaavassa). Laiturissa olevan aluksen
+    # kulku (cog) on kohinaa, ja sen on tarkoituksella eri kuin keulasuunta.
+    dict(mmsi=230100012, name='LAITURIN RAHTI', call='OHLR', imo=0, type=70, dest='', draught=0, eta=0,
+         ref=(83, 16, 7, 7), lat=61.7000, lng=23.9000, sog=0.0, cog=200.0, hd=90, nav=5, age=60, bulk=True),
+    dict(mmsi=230100013, name='LAITURIN TANKKI', call='OHLT', imo=0, type=80, dest='', draught=0, eta=0,
+         ref=(110, 20, 9, 9), lat=61.7000, lng=23.90265, sog=0.1, cog=33.0, hd=90, nav=5, age=45, bulk=True),
+    dict(mmsi=230100014, name='HINAAJA CHARLIE', call='OHTC', imo=0, type=52, dest='', draught=0, eta=0,
+         ref=(14, 6, 5, 5), lat=61.7000, lng=23.90568, sog=0.0, cog=360.0, hd=270, nav=5, age=45, bulk=True),
+    dict(mmsi=230100015, name='LUOTSI 1', call='OHL1', imo=0, type=50, dest='', draught=0, eta=0,
+         ref=(10, 5, 3, 3), lat=61.70027, lng=23.9010, sog=0.0, cog=360.0, hd=0, nav=5, age=45, bulk=True),
 ]
 AIS_EXTRA_FIRST = 231000000
 

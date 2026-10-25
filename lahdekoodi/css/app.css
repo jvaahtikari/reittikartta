@@ -604,11 +604,19 @@ body.night .legnote { background: #1b2026; } body.night .legnote b { color: #f2f
 body.night .ais-s { filter: drop-shadow(0 0 1px rgba(255,255,255,.6)); }
 .ais-n { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
   font: 600 11px/1 var(--font); color: #111; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; }
+.ais-n.t { transform: translate(-50%, -100%); }
+.ais-n.b { transform: translate(-50%, 0); }
+.ais-n.l { transform: translate(-100%, -50%); }
 .ais-n.sar { color: #b53f00; font-weight: 700; }
 body.night .ais-n { color: #eee; text-shadow: 0 0 2px #000, 0 0 3px #000; }
 body.night .ais-n.sar { color: #ff9a5c; }
+/* Rungon (ais-hull) napautuksen ottaa vastaan vain rungon oma muoto ja sen ympärillä oleva läpinäkyvä reunus (ais-hit).
+   Muuten pitkän tai vinon rungon laatikko peittäisi vierekkäiset alukset. */
+.ais-ico.ais-hullico { pointer-events: none !important; }
+.ais-hull-s { position: absolute; }
+.ais-hull-s .ais-hit { pointer-events: all; cursor: pointer; }
 /* reitin, mittauksen tai paikan poiminnan aikana napautus menee aluksen läpi kartalle */
-#map.mode-cross .ais-ico { pointer-events: none !important; }
+#map.mode-cross .ais-ico, #map.mode-cross .ais-ico * { pointer-events: none !important; }
 
 /* aluksen kortti */
 .ais-popup .leaflet-popup-content { margin: 10px 12px 12px; font: 13px/1.35 var(--font); }

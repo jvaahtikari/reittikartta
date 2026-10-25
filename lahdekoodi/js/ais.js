@@ -33,6 +33,9 @@
   var DIM_OPACITY = 0.45;
   var MAX_AGE_MS = 3600000;                  // yli tunnin vanhaa sijaintia ei piirretä eikä haeta
   var VECTOR_MIN = 0.1;                      // nopeusvektori: 6 minuuttia eli 0,1 tuntia
+  var HULL_MIN_PX = 18;                      // runko piirretään todellisessa mittakaavassa, kun sen pituus näytöllä on vähintään tämä
+  var HULL_BOW = 0.18;                       // keula kapenee kärkeen noin 18 % rungon pituudesta
+  var CIRCLE_MAX = 40;                       // suunnattoman aluksen ympyrä kasvaa aluksen pituuden mukaan, enintään tähän kokoon
   var GRAY = '#9aa3ab';
   var SAR = '#ff6a13';
   var EDGE = '#0d1b26';
@@ -275,36 +278,82 @@
     // laiturissa tai ankkurissa olevan aluksen GPS-kohina ei tee siitä liikkuvaa
     if (moving && (p.navStat === 1 || p.navStat === 5) && sog < 2) moving = false;
     var dir = p.heading != null ? p.heading : p.cog;
-    return { rescue: t === 51, moving: moving, color: typeColor(t), dir: dir, arrow: moving && dir != null, vdir: p.cog != null ? p.cog : p.heading };
+    // rungon suunta: liikkuvalla keulasuunta tai sen puuttuessa kulku, paikallaan olevalla vain keulasuunta, koska levossa olevan aluksen kulku on kohinaa
+    var hdir = moving ? dir : p.heading;
+    return { rescue: t === 51, moving: moving, color: typeColor(t), dir: dir, hdir: hdir, arrow: moving && dir != null, vdir: p.cog != null ? p.cog : p.heading };
   }
 
   // Merkki: liikkuva alus on keulasuuntaan kierretty nuolenkärki, muut ympyrä. Pelastusalus on suurempi ja sen reuna paksumpi.
-  function halfOf(kind) {
-    if (kind.arrow) return (kind.rescue ? 27 : 22) / 2;
-    return (kind.rescue ? 15 : 10) / 2;
+  function arrowSvg(kind) {
+    var c = kind.color, w = kind.rescue ? 17 : 14, ht = kind.rescue ? 27 : 22, sw = kind.rescue ? 1.7 : 1;
+    return '<svg class="ais-s" width="' + w + '" height="' + ht + '" viewBox="0 0 14 22" style="transform:rotate(' + Math.round(kind.dir) + 'deg)" aria-hidden="true">' +
+      '<path d="M7 1.2L12.6 20.2L7 16.4L1.4 20.2Z" fill="' + c + '" stroke="' + EDGE + '" stroke-width="' + sw + '" stroke-linejoin="round"/></svg>';
   }
-  function shapeSvg(kind) {
-    var c = kind.color;
-    if (kind.arrow) {
-      var w = kind.rescue ? 17 : 14, ht = kind.rescue ? 27 : 22, sw = kind.rescue ? 1.7 : 1;
-      return '<svg class="ais-s" width="' + w + '" height="' + ht + '" viewBox="0 0 14 22" style="transform:rotate(' + Math.round(kind.dir) + 'deg)" aria-hidden="true">' +
-        '<path d="M7 1.2L12.6 20.2L7 16.4L1.4 20.2Z" fill="' + c + '" stroke="' + EDGE + '" stroke-width="' + sw + '" stroke-linejoin="round"/></svg>';
-    }
-    var d = kind.rescue ? 15 : 10, s2 = kind.rescue ? 2.2 : 1;
+  function circleSvg(kind, d) {
+    var s2 = kind.rescue ? 2.2 : 1;
     return '<svg class="ais-s" width="' + d + '" height="' + d + '" viewBox="0 0 ' + d + ' ' + d + '" aria-hidden="true">' +
-      '<circle cx="' + d / 2 + '" cy="' + d / 2 + '" r="' + (d / 2 - s2 / 2) + '" fill="' + c + '" stroke="' + EDGE + '" stroke-width="' + s2 + '"/></svg>';
+      '<circle cx="' + d / 2 + '" cy="' + d / 2 + '" r="' + (d / 2 - s2 / 2) + '" fill="' + kind.color + '" stroke="' + EDGE + '" stroke-width="' + s2 + '"/></svg>';
+  }
+
+  // Rungon ääriviiva todellisessa mittakaavassa. AIS-sijainti on antennin vertailupiste: A metriä keulaan, B perään,
+  // C paapuuriin (vasemmalle) ja D styyrpuuriin (oikealle). Runko on suora ja keula kapenee kärkeen, perä on suora.
+  // Aluksen omassa koordinaatistossa u osoittaa keulaan ja v styyrpuuriin, ja ne käännetään keulasuunnan mukaan kartan pikseleiksi.
+  function hullPoints(v, dir, mpp) {
+    var rad = dir * Math.PI / 180, fx = Math.sin(rad), fy = -Math.cos(rad), sx = Math.cos(rad), sy = Math.sin(rad);
+    var bow = (v.a + v.b) * HULL_BOW, tip = (v.d - v.c) / 2;
+    return [[-v.b, -v.c], [-v.b, v.d], [v.a - bow, v.d], [v.a, tip], [v.a - bow, -v.c]].map(function (q) {
+      return [(q[0] * fx + q[1] * sx) / mpp, (q[0] * fy + q[1] * sy) / mpp];
+    });
+  }
+  function r1(x) { return Math.round(x * 10) / 10; }
+
+  // Valitsee aluksen piirtotavan: runko, nuoli vai ympyrä. mpp on metrejä pikseliä kohden aluksen leveysasteella.
+  function shapeOf(c, mpp, hit) {
+    var k = c.kind, v = c.v, len = v ? v.a + v.b : 0, wid = v ? v.c + v.d : 0;
+    if (k.hdir != null && len > 0 && wid > 0 && len / mpp >= HULL_MIN_PX) {
+      var pts = hullPoints(v, k.hdir, mpp), x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      pts.forEach(function (q) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); });
+      var sw = k.rescue ? 2 : 1;
+      var hw = Math.max(6, hit - wid / mpp);        // läpinäkyvä napautusalue levittää kapean rungon sormelle sopivaksi
+      var pad = Math.ceil(hw / 2 + sw) + 1;
+      var str = pts.map(function (q) { return r1(q[0] - x0 + pad) + ',' + r1(q[1] - y0 + pad); }).join(' ');
+      var w = r1(x1 - x0 + 2 * pad), h = r1(y1 - y0 + 2 * pad);
+      return {
+        shape: 'runko', box: { x0: x0, y0: y0, x1: Math.max(x1, 3), y1: y1 }, popupY: Math.round(Math.min(y0, -hit / 2)) + 2, lenPx: len / mpp,
+        svg: '<svg class="ais-s ais-hull-s" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="left:' + r1(hit / 2 + x0 - pad) + 'px;top:' + r1(hit / 2 + y0 - pad) + 'px" aria-hidden="true">' +
+          '<polygon class="ais-hit" points="' + str + '" fill="none" stroke="transparent" stroke-width="' + r1(hw) + '" stroke-linejoin="round"/>' +
+          '<polygon class="ais-hull" points="' + str + '" fill="' + k.color + '" stroke="' + EDGE + '" stroke-width="' + sw + '" stroke-linejoin="round"/></svg>'
+      };
+    }
+    if (k.arrow) {
+      var ah = k.rescue ? 27 : 22;
+      var aw = k.rescue ? 17 : 14;
+      return { shape: 'nuoli', box: { x0: -aw / 2, y0: -ah / 2, x1: aw / 2, y1: ah / 2 }, popupY: -Math.round(hit / 2) + 2, svg: arrowSvg(k) };
+    }
+    // ilman suuntaa aluksen ympyrä kasvaa tarkemmilla tasoilla aluksen pituuden mukaiseksi, jotta laiturissa oleva alus erottuu
+    var d = k.rescue ? 15 : 10;
+    if (k.hdir == null && len > 0) d = Math.round(Math.min(CIRCLE_MAX, Math.max(d, len / mpp)));
+    return { shape: 'ympyra', box: { x0: -d / 2, y0: -d / 2, x1: d / 2, y1: d / 2 }, popupY: -Math.round(hit / 2) + 2, svg: circleSvg(k, d) };
   }
 
   // Merkin ympärillä on läpinäkyvä napautusalue, jotta pieni ympyrä on helppo osua myös sormella.
+  // Rungolla napautuksen ottaa vastaan vain rungon oma muoto ja sen ympärillä oleva läpinäkyvä reunus (ks. css), jottei vierekkäisten alusten napautusalueet peitä toisiaan.
   function build(c, label, hit) {
-    var k = c.kind, half = halfOf(k);
+    var k = c.kind, s = c.shape, b = s.box, h2 = hit / 2, lab = '';
+    if (label) {
+      // nimi oikealla rungon vieressä, ja ahtaassa paikassa rungon ylä-, ala- tai vasemmalla puolella
+      var pos = label.pos, st = pos === 'r' ? 'left:' + Math.round(h2 + b.x1 + 3) + 'px'
+        : pos === 'l' ? 'left:' + Math.round(h2 + b.x0 - 3) + 'px'
+        : 'left:' + Math.round(h2 + (b.x0 + b.x1) / 2) + 'px;top:' + Math.round(h2 + (pos === 't' ? b.y0 - 2 : b.y1 + 2)) + 'px';
+      lab = '<span class="ais-n' + (pos === 'r' ? '' : ' ' + pos) + (k.rescue ? ' sar' : '') + '" style="' + st + '">' + UI.esc(label.name) + '</span>';
+    }
     var html = '<div class="ais-w" data-mmsi="' + c.k + '" data-moving="' + (k.moving ? 1 : 0) + '" data-rescue="' + (k.rescue ? 1 : 0) +
-      '" data-shape="' + (k.arrow ? 'nuoli' : 'ympyra') + '"' + (c.dim ? ' style="opacity:' + DIM_OPACITY + '"' : '') + '>' + shapeSvg(k) +
-      (label ? '<span class="ais-n' + (k.rescue ? ' sar' : '') + '" style="left:' + Math.round(hit / 2 + half + 3) + 'px">' + UI.esc(label) + '</span>' : '') + '</div>';
-    return { html: html, size: hit, zio: c.k === pinned ? 2000 : k.rescue ? 1000 : k.moving ? 300 : 0 };
+      '" data-shape="' + s.shape + '"' + (s.shape === 'runko' ? ' data-len="' + Math.round(s.lenPx) + '" data-dir="' + Math.round(k.hdir) + '"' : '') +
+      (c.dim ? ' style="opacity:' + DIM_OPACITY + '"' : '') + '>' + s.svg + lab + '</div>';
+    return { html: html, size: hit, popupY: s.popupY, cls: s.shape === 'runko' ? 'ais-ico ais-hullico' : 'ais-ico', zio: c.k === pinned ? 2000 : k.rescue ? 1000 : k.moving ? 300 : 0 };
   }
   function mkIcon(b) {
-    return L.divIcon({ className: 'ais-ico', html: b.html, iconSize: [b.size, b.size], iconAnchor: [b.size / 2, b.size / 2], popupAnchor: [0, -Math.round(b.size / 2) + 2] });
+    return L.divIcon({ className: b.cls, html: b.html, iconSize: [b.size, b.size], iconAnchor: [b.size / 2, b.size / 2], popupAnchor: [0, b.popupY] });
   }
 
   function clearAll() {
@@ -340,26 +389,45 @@
     if (cands.length > MAX_DRAWN) cands.length = MAX_DRAWN;
 
     var hit = UI.isTouch() ? 38 : 26;
-    // nimet: etusijajärjestyksessä, ja nimi joka osuisi jo sijoitetun nimen päälle jätetään pois
+    // metrejä pikseliä kohden aluksen leveysasteella (Web Mercator venyttää, joten mittakaava riippuu leveysasteesta)
+    var mppAt = function (lat) { return 40075016.686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z + 8); };
+    cands.forEach(function (c) { c.shape = shapeOf(c, mppAt(c.p.lat), hit); });
+    // nimet: etusijajärjestyksessä. Nimi sijoitetaan rungon oikealle puolelle, ja jos se osuisi sijoitetun nimen tai toisen aluksen päälle,
+    // rungolle kokeillaan vielä ylä-, ala- ja vasenta puolta. Jos mikään paikka ei ole vapaa, nimi jätetään pois.
     var placed = [], labels = {}, wanted = 0;
+    cands.forEach(function (c) {
+      c.pt = map.latLngToContainerPoint([c.p.lat, c.p.lng]);
+      var bx = c.shape.box;
+      c.rect = { x0: c.pt.x + bx.x0, x1: c.pt.x + bx.x1, y0: c.pt.y + bx.y0, y1: c.pt.y + bx.y1 };
+    });
+    var overlaps = function (r, o) { return r.x0 < o.x1 && r.x1 > o.x0 && r.y0 < o.y1 && r.y1 > o.y0; };
+    var clash = function (r, self) {
+      var i;
+      for (i = 0; i < placed.length; i++) if (overlaps(r, placed[i])) return true;
+      for (i = 0; i < cands.length; i++) if (cands[i] !== self && overlaps(r, cands[i].rect)) return true;
+      return false;
+    };
     cands.forEach(function (c) {
       if (!(z >= LABEL_Z || (c.kind.rescue && z >= LABEL_Z_SAR))) return;
       if (!c.v || !c.v.name) {
         if (wanted < 8 && !noVes[c.k]) { wanted++; needVessel(c.k).then(function (v) { if (v) renderSoon(); }); }
         return;
       }
-      var pt = map.latLngToContainerPoint([c.p.lat, c.p.lng]);
-      var half = halfOf(c.kind);
-      var x0 = pt.x + half + 3, r = { x0: x0, x1: x0 + c.v.name.length * 7.2 + 4, y0: pt.y - 8, y1: pt.y + 8 };
-      for (var i = 0; i < placed.length; i++) {
-        var o = placed[i];
-        if (r.x0 < o.x1 && r.x1 > o.x0 && r.y0 < o.y1 && r.y1 > o.y0) return;
+      var pt = c.pt, bx = c.shape.box, w = c.v.name.length * 7.2 + 4, cx = pt.x + (bx.x0 + bx.x1) / 2;
+      var opts = [{ pos: 'r', x0: pt.x + bx.x1 + 3, y0: pt.y - 8 }];
+      if (c.shape.shape === 'runko') {
+        opts.push({ pos: 't', x0: cx - w / 2, y0: pt.y + bx.y0 - 18 }, { pos: 'b', x0: cx - w / 2, y0: pt.y + bx.y1 + 2 }, { pos: 'l', x0: pt.x + bx.x0 - 3 - w, y0: pt.y - 8 });
       }
-      placed.push(r);
-      labels[c.k] = c.v.name;
+      for (var i = 0; i < opts.length; i++) {
+        var r = { x0: opts[i].x0, x1: opts[i].x0 + w, y0: opts[i].y0, y1: opts[i].y0 + 16 };
+        if (clash(r, c)) continue;
+        placed.push(r);
+        labels[c.k] = { name: c.v.name, pos: opts[i].pos };
+        return;
+      }
     });
 
-    var mpp = 40075016.686 * Math.cos(ctr.lat * Math.PI / 180) / Math.pow(2, z + 8);   // metriä pikseliä kohden
+    var mpp = mppAt(ctr.lat);
     var seen = {};
     cands.forEach(function (c) {
       var k = c.k, b = build(c, labels[k], hit), d = drawn[k], ll = [c.p.lat, c.p.lng];
