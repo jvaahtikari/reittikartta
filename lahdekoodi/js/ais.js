@@ -392,7 +392,7 @@
     // metrejä pikseliä kohden aluksen leveysasteella (Web Mercator venyttää, joten mittakaava riippuu leveysasteesta)
     var mppAt = function (lat) { return 40075016.686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z + 8); };
     cands.forEach(function (c) { c.shape = shapeOf(c, mppAt(c.p.lat), hit); });
-    // nimet: etusijajärjestyksessä. Nimi sijoitetaan rungon oikealle puolelle, ja jos se osuisi sijoitetun nimen tai toisen aluksen päälle,
+    // nimet: etusijajärjestyksessä. Nimi sijoitetaan aluksen oikealle puolelle, ja jos se osuisi jo sijoitetun nimen tai toisen aluksen rungon päälle,
     // rungolle kokeillaan vielä ylä-, ala- ja vasenta puolta. Jos mikään paikka ei ole vapaa, nimi jätetään pois.
     var placed = [], labels = {}, wanted = 0;
     cands.forEach(function (c) {
@@ -401,10 +401,18 @@
       c.rect = { x0: c.pt.x + bx.x0, x1: c.pt.x + bx.x1, y0: c.pt.y + bx.y0, y1: c.pt.y + bx.y1 };
     });
     var overlaps = function (r, o) { return r.x0 < o.x1 && r.x1 > o.x0 && r.y0 < o.y1 && r.y1 > o.y0; };
+    var sz = map.getSize();
     var clash = function (r, self) {
       var i;
+      // rungon nimi ei saa jäädä osittain näytön ulkopuolelle
+      if (self.shape.shape === 'runko' && (r.x0 < 0 || r.x1 > sz.x || r.y0 < 0 || r.y1 > sz.y)) return true;
       for (i = 0; i < placed.length; i++) if (overlaps(r, placed[i])) return true;
-      for (i = 0; i < cands.length; i++) if (cands[i] !== self && overlaps(r, cands[i].rect)) return true;
+      for (i = 0; i < cands.length; i++) {
+        var o = cands[i];
+        // merkin nimi saa osua toiseen pieneen merkkiin, kuten ennenkin, mutta rungon nimi väistää kaikkia aluksia ja muut nimet runkoja ja suurennettuja ympyröitä
+        var obstacle = self.shape.shape === 'runko' || o.shape.shape === 'runko' || o.rect.x1 - o.rect.x0 >= 18;
+        if (o !== self && obstacle && overlaps(r, o.rect)) return true;
+      }
       return false;
     };
     cands.forEach(function (c) {

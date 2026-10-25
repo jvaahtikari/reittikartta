@@ -127,10 +127,13 @@ Kartalla näkyvät alukset, jotka lähettävät AIS-sijaintia. Sijainnit ja alus
 **Merkit.** Alukset piirretään tasolta 8 alkaen, ja vain näkymässä olevat alukset (enintään 400 kerrallaan) piirretään. Jos aluksia on enemmän, etusijalla ovat pelastusalukset ja liikkuvat alukset.
 - Liikkuva alus, jonka nopeus on vähintään 0,5 solmua, on nuolenkärki keulan suuntaan. Jos keulasuuntaa ei ole, käytetään kulkusuuntaa.
 - Paikallaan oleva, ankkurissa oleva tai kiinnitetty alus on ympyrä.
+- Tarkemmilla tasoilla alus piirretään AIS-ilmoituksen mittojen mukaisena runkona todellisessa mittakaavassa, sekä liikkuva että paikallaan oleva. Runko tulee näkyviin, kun sen pituus näytöllä on vähintään noin 18 pikseliä, joten 100 metrin alus on runko tasolta 14 alkaen ja 20 metrin hinaaja tasolta 17 alkaen. Runko on suora ja sen keula kapenee kärkeen. AIS-sijainti on antennin kohdalla, eikä se ole rungon keskellä, ja nopeusvektori lähtee siitä. Rungon napautus avaa saman kortin kuin merkin, ja nimi näkyy rungon vieressä.
+- Runko käännetään aluksen keulasuuntaan. Liikkuvalle alukselle käytetään keulasuunnan puuttuessa kulkusuuntaa, mutta paikallaan olevalle vain keulasuuntaa, koska levossa olevan aluksen kulkusuunta on kohinaa.
+- Jos mittoja tai keulasuuntaa ei ole, alus piirretään merkkinä. Suunnattoman aluksen ympyrä kasvaa tarkemmilla tasoilla aluksen pituuden mukaiseksi, enintään 40 pikselin kokoon, jotta laiturissa oleva alus erottuu.
 - Väri kertoo aluksen tyypin.
 - Liikkuvalle alukselle piirretään ohut kuuden minuutin nopeusvektori, jonka pituus on matka, jonka alus kulkee kuudessa minuutissa nykyisellä nopeudellaan.
-- Etsintä- ja pelastusalus (tyyppi 51) on kirkkaan oranssi, hieman suurempi ja paksureunainen, ja sen nimi näkyy jo tasolta 10. Muiden alusten nimet näkyvät tasolta 12, ja päällekkäin menevä nimi jätetään pois.
-- Yli kymmenen minuuttia vanha sijainti piirretään himmeänä, eikä yli tunnin vanhaa sijaintia piirretä lainkaan.
+- Etsintä- ja pelastusalus (tyyppi 51) on kirkkaan oranssi ja paksureunainen, ja merkkinä se on hieman tavallista suurempi. Sen nimi näkyy jo tasolta 10. Muiden alusten nimet näkyvät tasolta 12. Runkojen nimi siirtyy ahtaassa paikassa rungon ylä- tai alapuolelle, ja päällekkäin menevä nimi jätetään pois.
+- Yli kymmenen minuuttia vanha sijainti piirretään himmeänä, rungotkin, eikä yli tunnin vanhaa sijaintia piirretä lainkaan.
 - Yönäyttö ei muuta AIS-merkkien värejä.
 
 | Tyyppi | Väri |

@@ -103,7 +103,7 @@ with sync_playwright() as pw:
     want = ['230100001', '230100002', '230100003', '230100004', '230100006', '230100007', '230100008', '230100009', '230100010', '230100011']
     check(got == want, 'merkit piirtyvät (10 alusta, yli tunnin vanha puuttuu): %s' % got)
     check('230100005' not in got, 'yli 60 minuuttia vanha sijainti ei näy')
-    check(page.evaluate("Ais.count") == 11, 'vanha sijainti on silti haettu aineistoon (11 alusta)')
+    check(page.evaluate("Ais.count") == 16, 'vanha sijainti on silti haettu aineistoon (16 alusta)')
     check(page.evaluate("getComputedStyle(document.querySelector('.leaflet-ais-pane')).zIndex") == '465', 'AIS-pane turvalaitteiden (460) yläpuolella')
     check(page.evaluate("document.querySelectorAll('.leaflet-ais-pane .ais-ico').length") == 10, 'merkit ovat aisPanessa')
     check('AIS: Fintraffic / Digitraffic, CC BY 4.0' in page.inner_text('.leaflet-control-attribution'), 'attribuutio näkyy, kun kerros on päällä')
@@ -158,7 +158,7 @@ with sync_playwright() as pw:
     page.evaluate("App.map.setView([61.62, 23.76], 9)"); page.wait_for_timeout(700)
     check(page.locator('.ais-n').count() == 0 and len(ids(page)) >= 9, 'tasolla 9 ei nimiä, alukset näkyvät')
     page.evaluate("App.map.setView([61.62, 23.76], 7)"); page.wait_for_timeout(700)
-    check(len(ids(page)) == 0 and page.evaluate("Ais.count") == 11, 'alle tason 8 aluksia ei piirretä, tieto säilyy')
+    check(len(ids(page)) == 0 and page.evaluate("Ais.count") == 16, 'alle tason 8 aluksia ei piirretä, tieto säilyy')
     check(not page.locator('.leaflet-control-attribution:has-text("AIS:")').count() == 0, 'attribuutio säilyy, kun kerros on päällä')
     page.evaluate("App.map.setView([62.5, 25.0], 13)"); page.wait_for_timeout(700)
     check(len(ids(page)) == 0, 'näkymän ulkopuoliset alukset eivät piirry')
@@ -178,6 +178,145 @@ with sync_playwright() as pw:
     shot(page, 'ais-02-yonaytto')
     rescue_menu(page, 'Yönäyttö')
     check(not page.evaluate("document.body.classList.contains('night')"), 'yönäyttö pois')
+
+
+    # --- rungot todellisessa mittakaavassa ---
+    HULL_JS = """(m) => {
+        const w = document.querySelector('.ais-w[data-mmsi="' + m + '"]');
+        if (!w) return null;
+        const out = { shape: w.dataset.shape, len: +w.dataset.len || null, dir: w.dataset.dir === undefined ? null : +w.dataset.dir, opacity: getComputedStyle(w).opacity };
+        const svg = w.querySelector('svg');
+        const ic = w.parentElement.getBoundingClientRect();
+        const ox = ic.left + ic.width / 2, oy = ic.top + ic.height / 2;       // AIS-vertailupiste = ikonin keskipiste
+        const sb = svg.getBoundingClientRect();
+        out.svgW = +svg.getAttribute('width');
+        const poly = w.querySelector('polygon.ais-hull');
+        if (poly) {
+          out.pts = poly.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number)).map(q => [sb.left + q[0] - ox, sb.top + q[1] - oy]);
+          out.fill = poly.getAttribute('fill'); out.stroke = poly.getAttribute('stroke'); out.sw = +poly.getAttribute('stroke-width');
+          out.hitSw = +w.querySelector('polygon.ais-hit').getAttribute('stroke-width');
+          out.pe = getComputedStyle(w.querySelector('polygon.ais-hit')).pointerEvents;
+          const pb = poly.getBoundingClientRect(); out.bbox = [pb.left - ox, pb.top - oy, pb.right - ox, pb.bottom - oy];
+        }
+        const n = w.querySelector('.ais-n');
+        if (n) { const nb = n.getBoundingClientRect(); out.label = [nb.left - ox, nb.top - oy, nb.right - ox, nb.bottom - oy, n.textContent, n.className]; }
+        return out;
+    }"""
+
+    RUNKO_IDS = """[...document.querySelectorAll('.ais-w[data-shape="runko"]')].map(e => e.dataset.mmsi)"""
+
+    def hull(m):
+        return page.evaluate(HULL_JS, str(m))
+
+    def mpp_at(lat, z):
+        return 40075016.686 * math.cos(math.radians(lat)) / 2 ** (z + 8)
+
+    def axes(h):
+        """Rungon ulottuvuus keulasuunnassa (u, keulaan) ja sitä vastaan kohtisuoraan (v, styyrpuuriin) vertailupisteestä pikseleinä."""
+        d = math.radians(h['dir'])
+        u = [x * math.sin(d) - y * math.cos(d) for x, y in h['pts']]
+        v = [x * math.cos(d) + y * math.sin(d) for x, y in h['pts']]
+        return min(u), max(u), min(v), max(v)
+
+    def near(got, want, rel=0.1, tol=1.5):
+        return abs(got - want) <= max(abs(want) * rel, tol)
+
+    def go(lat, lng, z, wait=900):
+        page.evaluate("App.map.setView([%f, %f], %d)" % (lat, lng, z)); page.wait_for_timeout(wait)
+
+    # matalalla tasolla edelleen merkit, ja runko tulee, kun sen pituus on vähintään 18 px (99 m: taso 13 on 11 px, taso 14 on 22 px)
+    go(61.625, 23.770, 13)
+    check(hull(230100001)['shape'] == 'nuoli', 'tasolla 13 (rungon pituus alle 18 px) alus piirretään edelleen nuolena')
+    go(61.625, 23.770, 14)
+    h = hull(230100001)
+    check(h['shape'] == 'runko' and h['len'] == round(99 / mpp_at(61.625, 14)), 'tasolla 14 (22 px) alus piirtyy rungoksi: pituus %s px' % h['len'])
+
+    # taso 16: mitat A+B ja C+D pikseleinä, keula oikeaan suuntaan ja kärkeen kapeneva muoto
+    go(61.625, 23.770, 16)
+    m16 = mpp_at(61.625, 16)
+    h = hull(230100001)
+    u0, u1, v0, v1 = axes(h)
+    check(h['shape'] == 'runko' and near(u1 - u0, 99 / m16), 'tasolla 16 runko on %.0f px pitkä, AIS-mittojen A+B (99 m) mukaan %.0f px' % (u1 - u0, 99 / m16))
+    check(near(u1, 83 / m16) and near(u0, -16 / m16), 'vertailupiste on A = 83 m keulasta ja B = 16 m perästä (keula %.0f px, perä %.0f px)' % (u1, u0))
+    check(near(v0, -7 / m16) and near(v1, 7 / m16), 'leveys C + D = 14 m jakautuu vertailupisteen molemmille puolille (%.1f ... %.1f px)' % (v0, v1))
+    check(h['dir'] == 47 and len(h['pts']) == 5, 'runko on käännetty keulasuuntaan 47° ja siinä on viisi kulmaa (suora perä, kapeneva keula)')
+    bow = max(h['pts'], key=lambda q: q[0] * math.sin(math.radians(47)) - q[1] * math.cos(math.radians(47)))
+    sho = sorted(h['pts'], key=lambda q: -(q[0] * math.sin(math.radians(47)) - q[1] * math.cos(math.radians(47))))[1:3]
+    taper = (u1 - (sho[0][0] * math.sin(math.radians(47)) - sho[0][1] * math.cos(math.radians(47)))) / (u1 - u0)
+    check(0.15 <= taper <= 0.20, 'keula kapenee kärkeen %.0f %% rungon pituudesta' % (taper * 100))
+    check(h['fill'] == '#2e9e44' and h['stroke'] == '#0d1b26' and h['sw'] == 1 and h['opacity'] == '1', 'täyttö tyyppivärillä, ohut tumma reuna, ei himmennystä')
+    check(h['pe'] == 'all' and h['hitSw'] >= 26 - 14 / m16 - 1, 'rungon ympärillä on läpinäkyvä napautusalue (%.0f px)' % h['hitSw'])
+    check(h['label'] and h['label'][5] == 'ais-n' and h['label'][0] >= max(q[0] for q in h['pts']) and h['label'][4] == 'TESTI RAHTI', 'nimi rungon oikealla puolella')
+    check(page.locator('.ais-ico.ais-hullico').count() >= 1 and page.evaluate("getComputedStyle(document.querySelector('.ais-hullico')).pointerEvents") == 'none', 'rungon ikonin laatikko ei ota napautuksia, vain runko')
+    shot(page, 'hull-01-z16-rahtialus')
+    # nopeusvektori lähtee vertailupisteestä
+    vstart = page.evaluate("""(() => { const v = document.querySelector('path.ais-vec[stroke="#2e9e44"]'); const w = document.querySelector('.ais-w[data-mmsi="230100001"]').parentElement.getBoundingClientRect();
+        const p = v.getPointAtLength ? v.getPointAtLength(0) : null; const m = v.getScreenCTM(); const q = new DOMPoint(p.x, p.y).matrixTransform(m);
+        return [q.x - (w.left + w.width / 2), q.y - (w.top + w.height / 2)]; })()""")
+    check(abs(vstart[0]) <= 1.5 and abs(vstart[1]) <= 1.5, 'nopeusvektori lähtee AIS-vertailupisteestä (poikkeama %.1f, %.1f px)' % tuple(vstart))
+    # rungon napautus avaa saman kortin kuin merkki
+    page.locator('.ais-w[data-mmsi="230100001"] .ais-hit').click(); page.wait_for_timeout(600)
+    check(page.locator('.leaflet-popup .ais-pop').count() == 1 and 'TESTI RAHTI' in page.inner_text('.leaflet-popup') and '230100001' in page.inner_text('.leaflet-popup'), 'rungon klikkaus avaa aluksen kortin')
+    check(page.locator('.ais-task').is_visible(), 'kortissa on tehtäväpainike')
+    page.evaluate("document.querySelector('.leaflet-popup-close-button').click()"); page.wait_for_timeout(300)
+
+    # laiturissa oleva alus: vain keulasuunta kelpaa, kulku (200°) on kohinaa
+    go(61.7001, 23.9012, 16)
+    m = mpp_at(61.70, 16)
+    h = hull(230100012)
+    u0, u1, v0, v1 = axes(h)
+    check(h['shape'] == 'runko' and h['dir'] == 90, 'laiturissa oleva alus on keulasuunnan 90° mukainen eikä kulun (200°) mukainen')
+    check(near(u1 - u0, 99 / m) and near(u1, 83 / m) and near(u0, -16 / m), 'laiturissa olevan aluksen mitat pikseleinä: pituus %.0f px (odotettu %.0f px)' % (u1 - u0, 99 / m))
+    pts = h['pts']
+    check(max(q[0] for q in pts) - min(q[0] for q in pts) > 3 * (max(q[1] for q in pts) - min(q[1] for q in pts)), 'itään osoittava runko on vaakasuora')
+    h2 = hull(230100013)
+    check(h2['shape'] == 'runko' and near(axes(h2)[1] - axes(h2)[0], 130 / m), 'viereinen säiliöalus (130 m) piirtyy omassa mitassaan')
+    # nimet eivät mene toisen aluksen rungon päälle
+    clash = page.evaluate("""(() => { const out = []; document.querySelectorAll('.ais-n').forEach(n => { const a = n.getBoundingClientRect();
+        document.querySelectorAll('.ais-w').forEach(w => { if (w.contains(n)) return; const poly = w.querySelector('polygon.ais-hull'); const s = poly || w.querySelector('svg'); if (!poly && +s.getAttribute('width') < 18) return;
+          const b = s.getBoundingClientRect(); if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) out.push(n.textContent + ' / ' + w.dataset.mmsi); }); }); return out; })()""")
+    check(not clash, 'nimi ei osu toisen aluksen rungon tai suurennetun ympyrän päälle %s' % clash)
+    shot(page, 'hull-02-laituri-z16')
+    page.locator('.ais-w[data-mmsi="230100012"] .ais-hit').click(); page.wait_for_timeout(600)
+    check('LAITURIN RAHTI' in page.inner_text('.leaflet-popup'), 'laiturissa olevan aluksen rungon klikkaus avaa kortin')
+    page.evaluate("document.querySelector('.leaflet-popup-close-button').click()"); page.wait_for_timeout(300)
+
+    # ei keulasuuntaa: ympyrä, joka kasvaa aluksen pituuden mukaan (enintään 40 px), eikä kulku käännä sitä
+    k16 = hull(230100016)
+    check(k16['shape'] == 'ympyra' and k16['svgW'] == min(40, round(40 / m)) and k16['dir'] is None, 'paikallaan oleva alus ilman keulasuuntaa on ympyrä, jonka koko vastaa pituutta (%s px)' % k16['svgW'])
+    go(61.7001, 23.9012, 14)
+    check(hull(230100016)['svgW'] == 10, 'karkealla tasolla suunnaton ympyrä on tavallisen merkin kokoinen (%s px)' % hull(230100016)['svgW'])
+    go(61.7001, 23.9012, 17)
+    check(hull(230100016)['svgW'] == 40, 'ympyrän koko rajoittuu 40 px:ään (%s px)' % hull(230100016)['svgW'])
+
+    # tyypit ja ominaisuudet runkona: ilman mittoja merkki, himmennys ja pelastusalus, kulku kelpaa liikkuvalle ilman keulasuuntaa
+    go(61.605, 23.790, 16)
+    hh = hull(230100006)
+    check(hh['shape'] == 'runko' and hh['dir'] == 300 and hh['opacity'] == '0.45' and hh['fill'] == '#d4282f', 'ankkurissa olevan, yli 10 minuuttia vanhan aluksen runko on himmeä ja keulasuunnan (300°) mukainen')
+    go(61.608, 23.775, 17)
+    nd = hull(230100008)
+    check(nd['shape'] == 'ympyra' and nd['svgW'] == 10, 'alus ilman mittoja piirretään tarkimmallakin tasolla merkkinä (%s px)' % nd['svgW'])
+    go(61.622, 23.735, 17)
+    check(hull(230100007)['shape'] == 'nuoli', 'pieni alus (9 m) on tasolla 17 vielä nuoli (16 px)')
+    go(61.622, 23.735, 18)
+    y18 = hull(230100007)
+    check(y18['shape'] == 'runko' and y18['dir'] == 120 and axes(y18)[1] - axes(y18)[0] > 25, 'liikkuvalla alukselle ilman keulasuuntaa kelpaa kulku (120°): runko %s px' % round(axes(y18)[1] - axes(y18)[0]))
+    go(61.630, 23.752, 18)
+    sar = hull(230100003)
+    check(sar['shape'] == 'runko' and sar['fill'] == '#ff6a13' and sar['sw'] == 2 and sar['dir'] == 272, 'pelastusalus on oranssi runko, jonka reuna on paksumpi')
+    shot(page, 'hull-03-pelastusalus-z18')
+
+    # ECDIS-pohjalla tasolla 15 laiturissa olevat alukset
+    page.evaluate("ChartAPI.setBase('enc-ecdis')")
+    go(61.7002, 23.9022, 15, 1500)
+    ids15 = sorted(page.evaluate(RUNKO_IDS))
+    check(ids15 == ['230100012', '230100013'], 'ECDIS-pohjalla tasolla 15 suuret laiturialukset ovat runkoja ja pienet (tasolla 15 alle 18 px) merkkejä: %s' % ids15)
+    shot(page, 'hull-04-ecdis-z15')
+    go(61.7002, 23.9022, 17, 1500)
+    check(len(page.evaluate(RUNKO_IDS)) >= 4, 'tasolla 17 myös hinaaja ja luotsialus ovat runkoja')
+    shot(page, 'hull-05-ecdis-z17')
+    page.evaluate("ChartAPI.setBase('raster')"); page.wait_for_timeout(300)
+    go(61.62, 23.76, 13)
 
     # --- kortti ---
     page.locator('.ais-w[data-mmsi="230100001"]').click()
@@ -372,7 +511,7 @@ with sync_playwright() as pw:
     page.wait_for_timeout(800)
     t0 = page.evaluate("(() => { const t = performance.now(); Ais.sync(); return performance.now() - t; })()")
     n = page.locator('.ais-w').count()
-    check(n == 400 and page.evaluate("Ais.count") == 911, 'näkymässä enintään 400 alusta (aineistossa %d)' % page.evaluate("Ais.count"))
+    check(n == 400 and page.evaluate("Ais.count") == 916, 'näkymässä enintään 400 alusta (aineistossa %d)' % page.evaluate("Ais.count"))
     check(page.locator('.ais-w[data-rescue="1"]').count() == 2, 'pelastusalukset ovat mukana, kun alukset joudutaan rajaamaan')
     check(page.locator('.ais-w[data-moving="1"]').count() >= 398, 'liikkuvat alukset ovat etusijalla paikallaan olevien edellä')
     print('     piirto 400 aluksella: %.0f ms' % t0)

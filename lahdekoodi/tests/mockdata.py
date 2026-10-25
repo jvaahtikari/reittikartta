@@ -247,7 +247,7 @@ AIS_SHIPS = [
     dict(mmsi=230100005, name='VANHA ALUS', call='OHOLD', imo=0, type=70, dest='', draught=0, eta=0,
          ref=(40, 10, 5, 5), lat=61.640, lng=23.800, sog=5.0, cog=90.0, hd=90, nav=0, age=90 * 60, bulk=True),
     dict(mmsi=230100006, name='HIMMEA ALUS', call='OHDIM', imo=0, type=80, dest='', draught=0, eta=0,
-         ref=(70, 10, 6, 6), lat=61.605, lng=23.790, sog=0.0, cog=200.0, hd=511, nav=1, age=15 * 60, bulk=True),
+         ref=(70, 10, 6, 6), lat=61.605, lng=23.790, sog=0.0, cog=200.0, hd=300, nav=1, age=15 * 60, bulk=True),
     # alustiedot puuttuvat bulkkivastauksesta mutta löytyvät kutsulla /vessels/{mmsi}
     dict(mmsi=230100007, name='YKSITTAIS ALUS', call='OH7777', imo=0, type=37, dest='', draught=15, eta=0,
          ref=(6, 3, 2, 2), lat=61.622, lng=23.735, sog=4.0, cog=120.0, hd=511, nav=8, age=40, bulk=False),
@@ -271,6 +271,9 @@ AIS_SHIPS = [
          ref=(14, 6, 5, 5), lat=61.7000, lng=23.90568, sog=0.0, cog=360.0, hd=270, nav=5, age=45, bulk=True),
     dict(mmsi=230100015, name='LUOTSI 1', call='OHL1', imo=0, type=50, dest='', draught=0, eta=0,
          ref=(10, 5, 3, 3), lat=61.70027, lng=23.9010, sog=0.0, cog=360.0, hd=0, nav=5, age=45, bulk=True),
+    # laiturissa oleva alus, jolla on mitat ja kohiseva kulku mutta ei keulasuuntaa: piirretään suuntaamattomana ympyränä
+    dict(mmsi=230100016, name='KOHINA ALUS', call='OHKA', imo=0, type=80, dest='', draught=0, eta=0,
+         ref=(30, 10, 5, 5), lat=61.69975, lng=23.9015, sog=0.0, cog=77.0, hd=511, nav=5, age=45, bulk=True),
 ]
 AIS_EXTRA_FIRST = 231000000
 
