@@ -34,7 +34,23 @@
     minKorkeusM: 1.2,        // maa-alueen vähimmäiskorkeus (kivet, ruovikko, laiturit, rantapenkka), ei näy paljaassa korkeusmallissa
     latvusPeitto: 30,        // latvuspeitto (%), jolla puusto lasketaan esteeksi
     rakennusKrs: { '3+': 12, '1-2': 6, none: 5 },
-    nb: 512                  // sädettä kohden askelia
+    rakennusLapaisy: 0.6,    // hyvässä virityksessä rakennuksen varjokorkeus on (1 - tämä) × korkeus (kortteleiden väleistä ja katujen suunnista näkee läpi)
+    taajamaLuokat: { taajama: 1, varastoalue: 1 },   // maastokuvion luokat, joiden maa on rakennettua aluetta (hyvässä virityksessä kaiun pohjataso kohonnut)
+    nb: 512,                 // sädettä kohden askelia
+    // Kaikumallin viritystilat (vaihe 3e). 'huono' toistaa vaiheen 3c kuvan (ensimmäinen osuma kirkkain, loiva ranta heikko, jälkihehku nopea),
+    // 'hyva' kuvaa oikein viritettyä tutkaa: yhtenäinen kirkas rantaviiva ja maa-alue täyttyneenä niin pitkälle kuin se näkyy.
+    //   pohjaMaa, pohjaMetsa: tasaisen näkyvän maan voimakkuus (ennen etäisyysvaimennusta), pohjaKorkeus: korkeuden lisä (kerrotaan sqrt(H/25))
+    //   rinneOsuus: osuus, jonka korkeus ja rinne vaikuttavat rinnekaiun voimakkuuteen (0,3 + 0,7 Hf = 0,3 ja 0,7)
+    //   rantaE, rantaLeveysM: rantaviivan kaiun alaraja (rantapenkka, kivet, rantapuusto) ja sen leveys, joka hiipuu kohti pohjatasoa
+    //   nakyvyysM, nakyvyysPohja: varjorajan yläpuolella korkeus, jolla kaiku on täysi, ja heikoin kerroin heti varjorajan yläpuolella
+    //   rangeR0: etäisyysvaimennuksen mittakaava (1 / (1 + (s / R0)^2)), jalkihehku: [pysyvä osa, nopeasti haalistuva osa]
+    //   kiintePDet: kiinteiden merkkien havaintotodennäköisyys (null = luokan oma), kiinteaVaihtelu: kiinteiden merkkien amplitudin vaihtelu +-
+    //   kohinaViritys: vastaanottimen kohina, jonka viritys lisää (hairio.kohina), svelyMaxM: rantaviivan pitkittäissivelyn enimmäispituus metreinä, svelyHiipuu: sivelyn hiipuminen
+    huono: { pohjaMaa: 0.14, pohjaMetsa: 0.28, pohjaKorkeus: 0.08, rinneAlku: 0.3, rantaE: 0.3, rantaLeveysM: 0, nakyvyysM: 1.5, nakyvyysPohja: 0,
+      rangeR0: 7000, jalkihehku: [0.55, 0.45], kiintePDet: null, kiinteaVaihtelu: [0.9, 1.0], kohinaViritys: 0.3 },
+    hyva: { pohjaMaa: 0.55, pohjaMetsa: 0.72, pohjaKorkeus: 0, rinneAlku: 0, rantaE: 1.0, rantaLeveysM: 20, nakyvyysM: 0.3, nakyvyysPohja: 1.0,
+      rangeR0: 14000, jalkihehku: [0.95, 0.05], sateita3: 600, kiintePDet: 1.0, kiinteaVaihtelu: [1, 1], kohinaViritys: 0, pehmeys: 0.5, svelyMaxM: 500, svelyHiipuu: 0.35,
+      rakennusE: 1.0, taajamaE: 0.8, rinneKaltevuus: 0.4, varjoTol: 0.008, varjoMatkaM: 200, varjoE: 0.85 }
   };
   var TS = 128;                              // ruudukon ruudun sivu soluina
   // Solukoon mukaan: vektoriruudun, korkeusruudun ja puustoruudun zoom
@@ -367,13 +383,14 @@
     // ---------- tila ----------
     var C = {
       alueIdx: 5, suuntaYlos: opt.suuntaYlos !== false, ebl: 0, vrm: 0.5, sade: 0, sadeSuodatin: 0, jalkiIdx: 0, vahvistus: 1,
-      hairio: { kohina: 0, suuntavirhe: 0, heikko: 0, pois: false }, antenniM: opt.antenniM || M.antenniM
+      hairio: { kohina: 0, suuntavirhe: 0, heikko: 0, pois: false }, antenniM: opt.antenniM || M.antenniM,
+      viritys: opt.viritys === 'huono' ? 'huono' : 'hyva'
     };
     if (opt.alue) C.alueIdx = nearestRange(opt.alue);
     var S = { e: 0, n: 0, hdg: 0, kn: 0, t: 0, conv: 0, convE: 1e9, convN: 1e9, onTila: false };
     var NR = 360, rangeM = 0, step = 1, cell = 4, TSm = TS * cell, invC = 1 / cell, invTSm = 1 / TSm;
-    var raw = null, trail = null, rayT = null, hit = null, firstB = null, mf5 = null;
-    var Hb = new Float32Array(NB), Fb = new Uint8Array(NB), Eb = new Float32Array(NB), Ab = new Float32Array(NB), Mb = new Float32Array(NB);
+    var raw = null, trail = null, rayT = null, hit = null, firstB = null, mf5 = null, hitI = null, endI = null;
+    var Hb = new Float32Array(NB), Sb = new Float32Array(NB), Tb = new Uint8Array(NB), Fb = new Uint8Array(NB), Eb = new Float32Array(NB), Ab = new Float32Array(NB), Mb = new Float32Array(NB);
     var acc = 0, nextK = 0, rev = 0, lastT = null, tilasto = { kierrosMs: 0, piirtoMs: 0, piirtoMax: 0, piirrot: 0, sateita: 0, ruutuja: 0, rakennusMs: 0 };
 
     // ---------- ruudukko ----------
@@ -444,7 +461,7 @@
       var c = s.c, L = s.L, cs = s.cs;
       var m00x = cs[0].x, m00y = cs[0].y, ax = cs[1].x - m00x, ay = cs[1].y - m00y, bx = cs[2].x - m00x, by = cs[2].y - m00y;
       var det = ax * by - ay * bx, N = TS * TS, i, j, k;
-      var flag = new Uint8Array(N), gr = new Float32Array(N), bh = null;
+      var flag = new Uint8Array(N), gr = new Float32Array(N), bh = null, qa = new Uint8Array(N);   // qa: bitti 7 = rakennettu alue (taajama), alabitit = korkeuslisä (puusto) tai varjokorkeuden vähennys (rakennus), yksikkö 0,5 m
       // 1) maa oletuksena kaikkialla, missä vektoriruutu on
       var vecTiles = [];
       for (k = 0; k < s.vec.list.length; k++) if (s.vec.tiles[k]) vecTiles.push({ x: s.vec.list[k].x, y: s.vec.list[k].y, d: s.vec.tiles[k] });
@@ -477,7 +494,9 @@
         var o = kerroin(vt, mk.extent);
         mk.features.forEach(function (f) {
           var lk = f.props.luokka;
-          if (f.type !== 3 || (lk !== 'jarvi' && lk !== 'virtavesi')) return;
+          if (f.type !== 3) return;
+          if (M.taajamaLuokat[lk]) { taytaMonikulmio(f.parts.map(function (p) { return muunna(p, o, new Float64Array(p.length)); }), qa, 128, TS); return; }
+          if (lk !== 'jarvi' && lk !== 'virtavesi') return;
           var rings = f.parts.map(function (p) { return muunna(p, o, new Float64Array(p.length)); });
           taytaMonikulmio(rings, flag, 0, TS);
         });
@@ -555,17 +574,19 @@
       for (k = 0; k < N; k++) {
         if (!flag[k]) continue;
         var g0 = gr[k] > 0 ? gr[k] : 0, H;
-        if (flag[k] === 2) H = g0 + (bh && bh[k] ? bh[k] : M.rakennusKrs.none);
-        else { H = g0 + treeH[k] * M.latvusKerroin; if (treeH[k] > 0) flag[k] = 3; }
+        if (flag[k] === 2) { var bk = bh && bh[k] ? bh[k] : M.rakennusKrs.none; H = g0 + bk; qa[k] |= Math.min(127, Math.round(2 * M.rakennusLapaisy * bk)); }
+        else { H = g0 + treeH[k] * M.latvusKerroin; if (treeH[k] > 0) { flag[k] = 3; qa[k] |= Math.min(127, Math.round(treeH[k] * 2 * (1 - M.latvusKerroin))); } }
         if (H < M.minKorkeusM) H = M.minKorkeusM;
         hdm[k] = Math.min(32000, Math.round(H * 10));
       }
       var t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       tilasto.rakennusMs += t1 - t0; tilasto.ruutuja++;
-      return { f: flag, h: hdm, vain: seen };
+      var maa = false, hmx = 0; for (k = 0; k < N; k++) if (flag[k]) { maa = true; var hk = hdm[k] + (flag[k] === 3 ? (qa[k] & 127) * 5 : 0); if (hk > hmx) hmx = hk; }
+      return { f: flag, h: hdm, q: qa, vain: seen, maa: maa, hmax: hmx * 0.1 };
     }
 
     function tallennaRuutu(c, ti, tj, tile) {
+      if (tile.hmax > hmaxM) hmaxM = tile.hmax;     // varjoraja seuraa korkeinta ladattua estettä
       ruudut.set(ruutuAvain(c, ti, tj), tile);
       if (ruudut.size > MAX_RUUTUA) ruudut.delete(ruudut.keys().next().value);
     }
@@ -583,7 +604,7 @@
             tallennaRuutu(job.c, job.ti, job.tj, rakennaRuutu(s));
           }).catch(function (e) {
             if (typeof console !== 'undefined') console.warn('Tutka: ruudun rakennus epäonnistui', e);
-            tallennaRuutu(job.c, job.ti, job.tj, { f: new Uint8Array(TS * TS), h: new Int16Array(TS * TS), vain: 0 });
+            tallennaRuutu(job.c, job.ti, job.tj, { f: new Uint8Array(TS * TS), h: new Int16Array(TS * TS), q: null, vain: 0, maa: false });
           }).then(function () {
             odottaa.delete(key); rakennetaan--; kasitteleJono(); ilmoitaValmis();
           });
@@ -683,56 +704,128 @@
       var key = ruutuAvain(cell, ti, tj), t = ruudut.get(key);
       return t || null;
     }
-    var K2 = 1 / (2 * M.kerroinK * M.maaR);
+    var segB = new Int16Array(64), segE = new Int16Array(64), segT = new Array(64), segC = new Float64Array(128), hSuf = new Float64Array(65);   // säteen ruutujaksot
+    var NOLLA = new Uint8Array(TS * TS);   // tyhjä lisätietotaulukko (huono viritys ja ruudut ilman lisätietoa)
+    var hmaxM = 70;   // korkein mahdollinen este (m vedenpinnasta, myös loistojen valot): varjoraja
+    var K2 = 1 / (2 * M.kerroinK * M.maaR), ensiIdx = -1, ensiEnd = -1, alW = new Float64Array(NB), invS = new Float64Array(NB), attG = new Float64Array(NB), attB = new Float64Array(NB);
     // Marssii yhden säteen (tosisuunta th, aste) ja täyttää Eb (0..1), Hb, Fb, Ab (näkyvyyskulma), Mb (varjokulma) taulukot.
     // Palauttaa ensimmäisen maaosuman etäisyyden (m) tai 0.
     function marssi(th, aikaS, revNo, seed, ilmanKohinaa) {
       var gb = (th - S.conv) * RAD, dx = Math.sin(gb), dy = Math.cos(gb);
-      var oe = S.e, on = S.n, ha = C.antenniM, i, s;
-      var ti = 0, tj = 0, tile = null, ce0 = 0, cn0 = 0, have = false, cti = -1e9, ctj = -1e9, tf = null, th2 = null;
+      var oe = S.e, on = S.n, i, s, j;
+      var ti = 0, tj = 0, tile = null, ce0 = 0, cn0 = 0, tf = null, th2 = null, tq = NOLLA;
       var firstLand = -1;
-      // 1) näytteenotto
-      for (i = 0; i < NB; i++) {
-        s = (i + 1) * step;
-        if (s > rangeM * 1.0001) { Hb[i] = 0; Fb[i] = 0; continue; }
+      var amax = -1e9, jW = Math.max(1, Math.round(M.ikkunaM / step)), g = C.vahvistus * (1 - 0.5 * C.hairio.heikko);
+      var ensiEndAuki = true; ensiEnd = -1;
+      Eb.fill(0);
+      var P = C.viritys === 'huono' ? M.huono : M.hyva, rr0 = 1 / P.rangeR0, nBand = Math.max(1, Math.round(P.rantaLeveysM / step)), maaJ = 0, m0 = P.rinneAlku, m1 = 1 - m0;
+      var varjoRaja = P === M.hyva, hyvaM = varjoRaja, tol = hyvaM ? P.varjoTol : 0, iEdge = -1, nPen = hyvaM ? Math.max(1, Math.round(P.varjoMatkaM / step)) : 0, att = hyvaM ? attG : attB, invRK = hyvaM ? 1 / P.rinneKaltevuus : 0;           // hyvässä virityksessä säde lopetetaan, kun mikään kauempana oleva ei enää voi näkyä
+      // Ruutu kerrallaan: ensin näytteenotto (maski ja korkeus) ruudun matkalta, sitten näkyvyys ja kaiun voimakkuus samalta matkalta.
+      // Ruudun poistumisaskel lasketaan etukäteen. Ruudut, joissa ei ole lainkaan maata (tai ruutua ei ole), ohitetaan kerralla vetenä.
+      // Kulma al = (H - ha) / s - s K2 = alW[i] + H invS[i] (taulukot lasketaan alueen vaihtuessa), joten jakolaskua ei tarvita.
+      // 0) säteen ruutujaksot etukäteen (ruutu, ensimmäinen ja viimeinen askel) ja jäljellä olevien ruutujen korkein este (varjorajan pysäytykseen)
+      var nSeg = 0, q0 = 0;
+      while (q0 < NB) {
+        s = (q0 + 1) * step;
         var e = oe + s * dx, n = on + s * dy;
         ti = Math.floor(e * invTSm); tj = Math.floor(n * invTSm);
-        if (ti !== cti || tj !== ctj) {
-          cti = ti; ctj = tj; tile = haeRuutu(ti, tj);
-          if (tile) { tf = tile.f; th2 = tile.h; ce0 = ti * TSm; cn0 = tj * TSm; }
-        }
-        if (!tile) { Hb[i] = 0; Fb[i] = 0; continue; }
-        var ci = ((e - ce0) * invC) | 0, cj = ((n - cn0) * invC) | 0, id = cj * TS + ci;
-        var f = tf[id];
-        Fb[i] = f;
-        if (f) { Hb[i] = th2[id] * 0.1; if (firstLand < 0 && s >= M.minEtaisyysM) firstLand = i; } else Hb[i] = 0;
+        var tl = haeRuutu(ti, tj), ce = ti * TSm, cn = tj * TSm;
+        var ex = dx > 1e-9 ? (ce + TSm - oe) / dx : dx < -1e-9 ? (ce - oe) / dx : 1e18, ey = dy > 1e-9 ? (cn + TSm - on) / dy : dy < -1e-9 ? (cn - on) / dy : 1e18;
+        var qe = Math.floor((ex < ey ? ex : ey) / step - 1e-6);      // ensimmäinen askel, joka ei enää ole tässä ruudussa
+        if (qe <= q0) qe = q0 + 1; if (qe > NB) qe = NB;
+        segB[nSeg] = q0; segE[nSeg] = qe; segT[nSeg] = tl; segC[2 * nSeg] = ce; segC[2 * nSeg + 1] = cn; nSeg++; q0 = qe;
       }
-      // 2) näkyvyys ja kaiun voimakkuus
-      var amax = -1e9, jW = Math.max(1, Math.round(M.ikkunaM / step)), range2 = 1 / 7000, g = C.vahvistus * (1 - 0.5 * C.hairio.heikko);
-      for (i = 0; i < NB; i++) {
-        s = (i + 1) * step;
-        var H = Hb[i], al = (H - ha) / s - s * K2, E = 0;
-        if (s >= M.minEtaisyysM && Fb[i] && al > amax) {
-          var dh = (al - amax) * s;                            // korkeus näkölinjan yläpuolella, m
-          var vis = dh >= M.nakyvyysM ? 1 : dh / M.nakyvyysM;
-          if (Fb[i] === 2) E = 0.9 + 0.1 * Math.min(1, H / 14);
-          else {
-            var Hp = i - jW >= 0 ? Hb[i - jW] : 0;
-            var sg = (H - Hp) / (jW * step);                   // rinteen nousu tutkaa kohti
-            var F = sg <= 0 ? 0 : Math.sqrt(Math.min(1, sg / 0.6));
-            var Hf = Math.sqrt(Math.min(1, H / 25));
-            var B = (Fb[i] === 3 ? 0.28 : 0.14) + 0.08 * Hf;
-            E = B + (1 - B) * F * (0.3 + 0.7 * Hf);
+      if (varjoRaja) {
+        hSuf[nSeg] = 0;
+        for (var qs = nSeg - 1; qs >= 0; qs--) { var tt = segT[qs], hv = tt && tt.maa ? tt.hmax : 0; hSuf[qs] = hSuf[qs + 1] > hv ? hSuf[qs + 1] : hv; }
+      }
+      for (var sgi = 0; sgi < nSeg; sgi++) {
+        i = segB[sgi]; var iEnd = segE[sgi]; tile = segT[sgi]; ce0 = segC[2 * sgi]; cn0 = segC[2 * sgi + 1];
+        var i1 = i;
+        if (!tile || !tile.maa) {
+          Hb.fill(0, i, iEnd); Fb.fill(0, i, iEnd);
+        } else {
+          tf = tile.f; th2 = tile.h; tq = (hyvaM && tile.q) || NOLLA;
+          var fx = (oe + (i + 1) * step * dx - ce0) * invC, fy = (on + (i + 1) * step * dy - cn0) * invC, sx = step * dx * invC, sy = step * dy * invC;   // solukoordinaatit, askel kerrallaan
+          for (j = i; j < iEnd; j++, fx += sx, fy += sy) {
+            s = (j + 1) * step;
+            var ci = fx | 0, cj = fy | 0;
+            if (ci < 0) ci = 0; else if (ci >= TS) ci = TS - 1; if (cj < 0) cj = 0; else if (cj >= TS) cj = TS - 1;
+            var id = cj * TS + ci, f = tf[id];
+            Fb[j] = f;
+            if (f) {
+              var hh = th2[id] * 0.1, sh = hh, qv = tq[id];
+              if (qv) { if (f === 3) hh += (qv & 127) * 0.5; else if (f === 2) sh = hh - (qv & 127) * 0.5; }   // hyvä viritys: latvuston yläpinta kaikuu (varjo vanhalla korkeudella), rakennuksen varjo huokoinen
+              Hb[j] = hh; Sb[j] = sh; Tb[j] = qv >> 7;
+              if (firstLand < 0 && s >= M.minEtaisyysM) firstLand = j;
+            } else Hb[j] = 0;
           }
-          if (!Fb[i - 1] && i > 0 && Fb[i] !== 2 && E < 0.3) E = 0.3;   // vesirajan ja maan kulma ja rannan kasvillisuus kaikuvat aina jonkin verran
-          E *= vis / (1 + s * s * range2 * range2) * g;
         }
-        Ab[i] = al; if (al > amax) amax = al; Mb[i] = amax;
-        Eb[i] = E > 1 ? 1 : E;
+        // 2) näkyvyys ja kaiun voimakkuus tämän ruudun askelille
+        for (i = i1; i < iEnd; i++) {
+          var fl = Fb[i];
+          if (!fl) {                                              // vesi: kulma kasvaa etäisyyden mukana, joten se on samalla suurin tähän asti nähty kulma
+            var aw = alW[i]; Ab[i] = aw; if (aw > amax) { amax = aw; iEdge = i; } Mb[i] = amax; maaJ = 0;
+            if (ensiEndAuki && firstLand >= 0 && i > firstLand) { ensiEnd = i - 1; ensiEndAuki = false; }
+            continue;
+          }
+          s = (i + 1) * step; maaJ++;
+          var H = Hb[i], al = alW[i] + H * invS[i], E = 0;
+          Ab[i] = al;
+          if (al <= amax && (al <= amax - tol || i - iEdge > nPen)) { Mb[i] = amax; continue; }       // varjossa (hyvässä virityksessä varjon reunan taipuma-alue, enintään varjoTol kulmaa ja varjoMatkaM matkaa varjon reunasta, jää tämän yli)
+          var als = Sb[i] === H ? al : alW[i] + Sb[i] * invS[i];             // varjokulma (latvuston ja rakennuksen läpäisy)
+          if (s >= M.minEtaisyysM) {
+            var dh = (al - amax) * s;                            // korkeus varjorajan yläpuolella, m (varjon reunalla negatiivinen)
+            var vis = dh >= P.nakyvyysM ? 1 : dh > 0 ? P.nakyvyysPohja + (1 - P.nakyvyysPohja) * dh / P.nakyvyysM : P.varjoE * (1 - (amax - al) / tol) * (1 - (i - iEdge) / nPen);
+            if (hyvaM) {
+              // Hyvä viritys: tasainen näkyvä maa pohjatasolla, rinne, ranta ja rakennukset kirkkaammin, metsä (latvusto) aina vähintään pohjaMetsa
+              if (fl === 2) E = P.rakennusE;
+              else {
+                var B = fl === 3 ? P.pohjaMetsa : P.pohjaMaa;
+                if (Tb[i] && B < P.taajamaE) B = P.taajamaE;
+                E = B;
+                var sg = i >= jW ? (H - Hb[i - jW]) / (jW * step) : H / (jW * step);   // rinteen nousu tutkaa kohti
+                if (sg > 0) { var xs = sg * invRK; if (xs > 1) xs = 1; E += (1 - B) * xs * (2 - xs); }   // rinteen kaiku kasvaa nopeasti loivillakin rinteillä (kuten neliöjuuri, ilman neliöjuurta)
+                if (maaJ <= nBand) {                             // rantapenkka, kivet ja rantakasvillisuus kaikuvat aina: alaraja hiipuu rannasta sisämaahan
+                  var cb = nBand > 1 ? P.rantaE - (P.rantaE - B) * (maaJ - 1) / nBand : P.rantaE;
+                  if (E < cb) E = cb;
+                }
+              }
+            } else {
+              if (fl === 2) E = 0.9 + 0.1 * Math.min(1, H / 14);
+              else {
+                var Hp2 = i - jW >= 0 ? Hb[i - jW] : 0;
+                var sg2 = (H - Hp2) / (jW * step);
+                var F = sg2 <= 0 ? 0 : Math.sqrt(Math.min(1, sg2 / 0.6));
+                var Hf = Math.sqrt(Math.min(1, H / 25));
+                var B2 = (fl === 3 ? P.pohjaMetsa : P.pohjaMaa) + P.pohjaKorkeus * Hf;
+                E = B2 + (1 - B2) * F * (m0 + m1 * Hf);
+                if (maaJ <= nBand) { var cb2 = nBand > 1 ? P.rantaE - (P.rantaE - B2) * (maaJ - 1) / nBand : P.rantaE; if (E < cb2) E = cb2; }
+              }
+              if (fl === 2 && maaJ <= nBand && E < P.rantaE) E = P.rantaE;
+            }
+            E *= vis * att[i] * g;
+          }
+          if (als > amax) { amax = als; iEdge = i; } Mb[i] = amax;
+          Eb[i] = E > 1 ? 1 : E;
+        }
+        // varjoraja: jos jäljellä olevissa ruuduissa ei ole maata tai niiden korkein este ei enää nouse suurimman nähdyn kulman (miinus taipuma) yläpuolelle, loppu on varjoa
+        if (varjoRaja && sgi + 1 < nSeg) {
+          var hs = hSuf[sgi + 1];
+          if (hs <= 0 || amax - tol > ((hs > C.antenniM ? hs : C.antenniM) - C.antenniM) * invS[iEnd] - (iEnd + 1) * step * K2) {
+            Hb.fill(0, iEnd); Fb.fill(0, iEnd); Mb.fill(amax, iEnd); Ab.set(alW.subarray(iEnd), iEnd);
+            if (ensiEndAuki && firstLand >= 0) { ensiEnd = iEnd - 1; ensiEndAuki = false; }
+            break;
+          }
+        }
       }
-      // 3) pulssin pituus: kaiku jatkuu muutaman askeleen eteenpäin
+      ensiIdx = firstLand; if (firstLand >= 0 && ensiEndAuki) ensiEnd = NB - 1;   // ensimmäisen yhtenäisen maa-alueen viimeinen askel
+      // 3) pulssin pituus: kaiku jatkuu muutaman askeleen eteenpäin (vain ensimmäisen maa-askeleen jälkeen, sitä ennen kaiku on nolla)
       var tail = Math.min(3, Math.round(M.pulssiM / step));
-      if (tail > 0) for (i = NB - 1; i > 0; i--) {
+      if (P === M.hyva) {
+        // Hyvä viritys: kaiku jatkuu pulssin pituudelta kaikilla alueilla (voimakas kaiku pidempään kuin heikko): q = max(E, q - askel / (1,25 pulssia))
+        if (firstLand >= 0) { var dec = step / (1.25 * M.pulssiM), qd = 0; for (i = firstLand; i < NB; i++) { qd -= dec; if (Eb[i] > qd) qd = Eb[i]; else Eb[i] = qd > 0 ? qd : 0; if (qd < 0) qd = 0; } }
+      } else if (tail > 0 && firstLand >= 0) for (i = NB - 1; i > firstLand; i--) {
         var q = 0.62 * Eb[i - 1]; if (tail > 1 && i > 1) q = Math.max(q, 0.35 * Eb[i - 2]); if (tail > 2 && i > 2) q = Math.max(q, 0.18 * Eb[i - 3]);
         if (q > Eb[i]) Eb[i] = q;
       }
@@ -746,16 +839,26 @@
     }
     function refineHit(oe, on, dx, dy, i) {   // puolitushaku edellisen askeleen (vesi) ja tämän askeleen (maa) välillä
       var hi = (i + 1) * step, lo = i * step;
-      if (i === 0 || landAt(oe, on, dx, dy, lo)) return hi;
+      // ruutu haetaan kerran: kaikki haun pisteet ovat askeleen sisällä, eli (lähes aina) samassa ruudussa kuin ensimmäinen maa-askel
+      var e1 = oe + hi * dx, n1 = on + hi * dy, ti1 = Math.floor(e1 * invTSm), tj1 = Math.floor(n1 * invTSm), t1 = haeRuutu(ti1, tj1), tf1 = t1 ? t1.f : null;
+      function maa(s) {
+        var e = oe + s * dx, n = on + s * dy, ti = Math.floor(e * invTSm), tj = Math.floor(n * invTSm);
+        if (ti !== ti1 || tj !== tj1) return landAt(oe, on, dx, dy, s);
+        if (!tf1) return 0;
+        return tf1[(((n - tj * TSm) * invC) | 0) * TS + (((e - ti * TSm) * invC) | 0)];
+      }
+      if (i === 0 || maa(lo)) return hi;
       for (var it = 0; it < 7; it++) {
         var mid = (lo + hi) / 2;
-        if (landAt(oe, on, dx, dy, mid)) hi = mid; else lo = mid;
+        if (maa(mid)) hi = mid; else lo = mid;
       }
       return hi;
     }
 
     // Kaiun lisäykset: turvalaitteet, veden kohina, sadeharso, vastaanottimen kohina
     var rng = mulberry(12345);
+    // Vastaanottimen kohina: käyttäjän asettama (asetaHairio) tai viritystilan oma, kumpi on suurempi
+    function kohinaTeho() { var v = (C.viritys === 'huono' ? M.huono : M.hyva).kohinaViritys; return C.hairio.kohina > v ? C.hairio.kohina : v; }
     function lisaaHairio(th, aikaS, revNo) {
       var i, s;
       // sea clutter: lähellä oleva veden kohina, sisävesillä vähäinen. Pisteitä arvotaan eksponenttijakaumalla (keskimäärin 0,9 sädettä kohden).
@@ -781,23 +884,26 @@
           if (rs() < cl * 0.55) { var vv = (0.12 + 0.38 * rs()) * sup; if (vv > Eb[i]) Eb[i] = vv; }
         }
       }
-      if (C.hairio.kohina > 0) {
-        var pk = 0.01 * C.hairio.kohina;
-        for (i = 0; i < NB; i++) if (rs() < pk) { var vk = 0.10 + 0.3 * rs(); if (vk > Eb[i]) Eb[i] = vk; }
+      var kohina = kohinaTeho();
+      if (kohina > 0) {
+        var pk = Math.min(0.5, 0.01 * kohina), lq = Math.log(1 - pk);   // jokainen askel on kohinapiste todennäköisyydellä pk: välit arvotaan geometrisella jakaumalla (yksi arvonta pistettä kohden)
+        i = Math.floor(Math.log(1 - rs()) / lq);
+        while (i < NB) { var vk = 0.10 + 0.3 * rs(); if (vk > Eb[i]) Eb[i] = vk; i += 1 + Math.floor(Math.log(1 - rs()) / lq); }
       }
     }
     function lisaaAidit(k, th, revNo) {
       if (aidDirty) paivitaAidRel();
       var hw = M.keilaAste * 0.5 * 1.35;
       for (var q = 0; q < aidRel.length; q++) {
-        var a = aidRel[q], d = Math.abs(((a.b - th + 540) % 360) - 180);
+        var a = aidRel[q], d = a.b - th; if (d < 0) d = -d; if (d > 180) d = 360 - d;
         if (d > hw) continue;
         var cl = a.a.luokka, r = a.r;
         if (r > cl.maxR) continue;
         var rr = mulberry((parseInt(a.a.numero, 10) || q) * 2654435 + revNo * 40503);
-        var pdet = cl.kiinteä ? cl.p0 : Math.max(0.12, Math.min(cl.p0, 1.25 - r / 2000));
+        var PV = C.viritys === 'huono' ? M.huono : M.hyva, kv = PV.kiinteaVaihtelu;
+        var pdet = cl.kiinteä ? (PV.kiintePDet != null ? PV.kiintePDet : cl.p0) : Math.max(0.12, Math.min(cl.p0, 1.25 - r / 2000));
         if (rr() > pdet) continue;
-        var amp = cl.v * (cl.kiinteä ? (0.9 + 0.1 * rr()) : (0.55 + 0.45 * rr())) * (1 - d / (hw * 1.15));
+        var amp = cl.v * (cl.kiinteä ? (kv[0] + (kv[1] - kv[0]) * rr()) : (0.55 + 0.45 * rr())) * (1 - d / (hw * 1.15));
         // näkyvyys: antennin näkölinja ei saa jäädä esteen taakse
         var bi = Math.min(NB - 1, Math.floor(r / step) - 1); if (bi < 0) continue;
         var Ha = Math.max(cl.hs, Hb[bi]), al = (Ha - C.antenniM) / r - r * K2, ref = Mb[Math.max(0, bi - 3)];
@@ -825,13 +931,20 @@
           trail[base + i] = old > nw ? old : nw;
         }
       }
-      var fb = NB;
-      for (i = 0; i < NB; i++) {
-        var E = Eb[i];
-        if (tf > 0 && E < 0.35) E *= (1 - 0.45 * tf);
-        var q8 = E * 255 + 0.5 | 0;
-        raw[base + i] = q8;
-        if (q8 > 0 && fb === NB) fb = i;
+      var fb = NB, i0 = 0;
+      while (i0 < NB && Eb[i0] === 0) i0++;       // kaiku alkaa vasta ensimmäisestä nollasta poikkeavasta askeleesta (vesi lähellä on nollaa)
+      if (i0 > 0) raw.fill(0, base, base + i0);
+      if (tf > 0) {
+        for (i = i0; i < NB; i++) {
+          var E = Eb[i];
+          if (E < 0.35) E *= (1 - 0.45 * tf);
+          var q8 = E * 255 + 0.5 | 0;
+          raw[base + i] = q8;
+          if (q8 > 0 && fb === NB) fb = i;
+        }
+      } else {
+        for (i = i0; i < NB; i++) raw[base + i] = Eb[i] * 255 + 0.5 | 0;
+        for (i = i0; i < NB; i++) if (raw[base + i] > 0) { fb = i; break; }
       }
       firstB[k] = (jd > 0 && trail) ? 0 : fb;
       rayT[k] = t;
@@ -839,7 +952,7 @@
     function sade(k, aikaS, t) {
       var th = k * 360 / NR;
       var h = marssi(th, aikaS, rev);
-      hit[k] = h;
+      hit[k] = h; hitI[k] = ensiIdx; endI[k] = ensiEnd;
       if (C.hairio.pois) { for (var i = 0; i < NB; i++) Eb[i] = 0; talleta(k, t); return; }
       lisaaHairio(th, aikaS, rev);
       lisaaAidit(k, th, rev);
@@ -850,9 +963,10 @@
     function alustaPuskurit() {
       var mpk = ALUEET[C.alueIdx];
       rangeM = mpk * NM; step = rangeM / NB;
-      NR = mpk <= 0.75 ? 720 : 360;
+      for (var q = 0; q < NB; q++) { var sq = (q + 1) * step; alW[q] = -C.antenniM / sq - sq * K2; invS[q] = 1 / sq; attG[q] = 1 / (1 + sq * sq / (M.hyva.rangeR0 * M.hyva.rangeR0)); attB[q] = 1 / (1 + sq * sq / (M.huono.rangeR0 * M.huono.rangeR0)); }
+      NR = mpk <= 0.75 ? 720 : C.viritys === 'huono' ? 360 : mpk <= 3.2 ? M.hyva.sateita3 : 360;   // 720 sädettä pienillä alueilla, hyvässä virityksessä tihennetty (sateita3) aina 3 mpk:iin asti, huonossa vaiheen 3c tapaan
       cell = soluKoko(mpk); TSm = TS * cell; invC = 1 / cell; invTSm = 1 / TSm;
-      raw = new Uint8Array(NR * NB); rayT = new Float64Array(NR).fill(-1e9); hit = new Float32Array(NR); firstB = new Uint16Array(NR).fill(NB); mf5 = new Uint16Array(NR).fill(NB);
+      raw = new Uint8Array(NR * NB); rayT = new Float64Array(NR).fill(-1e9); hit = new Float32Array(NR); hitI = new Int16Array(NR).fill(-1); endI = new Int16Array(NR).fill(-1); firstB = new Uint16Array(NR).fill(NB); mf5 = new Uint16Array(NR).fill(NB);
       trail = JALJET[C.jalkiIdx] > 0 ? new Uint8Array(NR * NB) : null;
       acc = 0; nextK = 0;
       aidDirty = true; lutDirty = true;
@@ -911,7 +1025,7 @@
     var ctx = canvas.getContext('2d'), ec = null, ectx = null, eimg = null, e32 = null, EP = 0;
     var geom = { w: 0, h: 0, dpr: 1, cx: 0, cy: 0, r: 0, ui: null };
     var lutDirty = true, lutAng = null, lutB0 = null, lutBn = null, lastDraw = -1e9, fA = null, fT = null;
-    var ui = null;
+    var ui = null, vbuf = null;    // vbuf: testikäytössä kaikuruudun voimakkuus (0 ... 255) pikseleittäin ennen väripalettia
 
     function asettelu() {
       var cw = canvas.clientWidth || canvas.width || 300, ch = canvas.clientHeight || canvas.height || 300;
@@ -931,7 +1045,7 @@
       if (ui) asetteleUi();
     }
     function rakennaLut() {
-      var n = EP * EP, half = EP / 2, f = NB / half;
+      var n = EP * EP, half = EP / 2, f = NB / half, hw = C.viritys === 'huono' ? 0.5 : 0.71;   // pikselin säteittäinen peitto (hyvässä: pikselin koko lävistäjä, jottei rantaviivan pikseli jää tyhjäksi)
       lutAng = new Float32Array(n); lutB0 = new Uint16Array(n); lutBn = new Uint8Array(n);
       for (var py = 0; py < EP; py++) for (var px = 0; px < EP; px++) {
         var x = px + 0.5 - half, y = py + 0.5 - half, rr = Math.sqrt(x * x + y * y), p = py * EP + px;
@@ -940,18 +1054,40 @@
         lutAng[p] = a / (2 * Math.PI) * NR;
         var b0, bn;
         if (f <= 1) { b0 = Math.min(NB - 1, Math.floor(rr * f)); bn = 1; }
-        else { b0 = Math.max(0, Math.floor((rr - 0.5) * f)); var b1 = Math.min(NB - 1, Math.floor((rr + 0.5) * f)); bn = Math.max(1, Math.min(6, b1 - b0 + 1)); }
+        else { b0 = Math.max(0, Math.floor((rr - hw) * f)); var b1 = Math.min(NB - 1, Math.floor((rr + hw) * f)); bn = Math.max(1, Math.min(6, b1 - b0 + 1)); }
         lutB0[p] = b0; lutBn[p] = bn;
       }
       fA = new Float32Array(NR); fT = new Float32Array(NR);
       lutDirty = false;
     }
+    // Rantaviivan pitkittäissively (vain hyvä viritys). Vaakakeila on 2° leveä, joten viistosti säteeseen nähden kulkeva ranta kaikuu keilassa koko matkaltaan:
+    // säteen ensimmäisen osuman kaiku levitetään niiden askelten yli, jotka ovat viereisten säteiden ensimmäisten osumien välissä, kunhan maa-alue on yhtenäinen (enintään M.hyva.svelyMaxM).
+    // Näin rantaviiva ei katkea säteiden väliin (maksimi, joten ei kaksinkertaista kaikua), eikä saaren ja kaukaisen rannan välille synny viirua.
+    function rantaSively() {
+      var P = M.hyva, e0, i0, kl, kr, n, lo, hi, lim, j, base, v, cap = Math.max(1, Math.round(P.svelyMaxM / step));
+      for (var k = 0; k < NR; k++) {
+        i0 = hitI[k]; if (i0 < 0) continue;
+        base = k * NB; e0 = raw[base + i0]; if (e0 < 40) continue;
+        kl = k === 0 ? NR - 1 : k - 1; kr = k === NR - 1 ? 0 : k + 1;
+        lo = i0; hi = i0;
+        // naapurin ranta kauempana: sively omaa maa-aluetta pitkin naapurin osumaan asti. Naapurin ranta lähempänä: sively naapurin maa-aluetta vastaan, jos se ulottuu tämän säteen osumaan
+        n = hitI[kl]; if (n >= 0) { if (n > i0) { if (n > hi) hi = n; } else if (n < i0 && endI[kl] >= i0 - 1 && n < lo) lo = n; }
+        n = hitI[kr]; if (n >= 0) { if (n > i0) { if (n > hi) hi = n; } else if (n < i0 && endI[kr] >= i0 - 1 && n < lo) lo = n; }
+        if (hi > endI[k]) hi = endI[k];
+        if (lo === hi) continue;
+        if (hi > i0 + cap) hi = i0 + cap; if (lo < i0 - cap) lo = i0 - cap;
+        for (j = i0 + 1; j <= hi; j++) { v = e0 * (1 - P.svelyHiipuu * (j - i0) / (hi - i0 + 1)) + 0.5 | 0; if (v > raw[base + j]) raw[base + j] = v; }
+        for (j = i0 - 1; j >= lo; j--) { v = e0 * (1 - P.svelyHiipuu * (i0 - j) / (i0 - lo + 1)) + 0.5 | 0; if (v > raw[base + j]) raw[base + j] = v; }
+        if (lo < firstB[k]) firstB[k] = lo;
+      }
+    }
     function kuvaKaiut(nytMs) {
       if (lutDirty) rakennaLut();
-      var jd = JALJET[C.jalkiIdx], k;
+      if (C.viritys !== 'huono') rantaSively();
+      var jd = JALJET[C.jalkiIdx], k, jh = (C.viritys === 'huono' ? M.huono : M.hyva).jalkihehku;
       for (k = 0; k < NR; k++) {
         var age = (nytMs - rayT[k]) / 1000;
-        fA[k] = age > 1e5 ? 0 : (0.55 + 0.45 * Math.exp(-age / 1.3));
+        fA[k] = age > 1e5 ? 0 : (jh[0] + jh[1] * Math.exp(-age / 1.3));
         fT[k] = (jd > 0 && trail && age < 1e5) ? Math.max(0, 1 - age / jd) : 0;
       }
       var off = (C.suuntaYlos ? S.hdg + C.hairio.suuntavirhe : 0) / 360 * NR, n = EP * EP, p, NRm = NR;
@@ -966,13 +1102,48 @@
       }
       // vaakakeilan leveys: naapurisäteiden kaiku painotettuna Gaussin keilalla (3 dB:n leveys M.keilaAste)
       var sig = M.keilaAste / 2.355, dlt = 360 / NR, w1 = Math.exp(-0.5 * Math.pow(dlt / sig, 2)), w2 = Math.exp(-0.5 * Math.pow(2 * dlt / sig, 2));
-      var wide = NR > 400;
+      var SOFT_W = M.hyva.pehmeys, wide = NR > 400, hyva = C.viritys !== 'huono';
+      if (hyva) {
+        // Hyvä viritys: pikselin kaiku on viiden lähimmän säteen painotettu maksimi, ja paino on Gaussin keilan arvo pikselin todellisella kulmaetäisyydellä säteestä
+        // (ei lähimmän säteen kokopainoa), jolloin rintamien reunat pehmenevät eikä yksittäisiä rakeita synny.
+        var QN = 16, wt = new Float32Array(QN * 5), qq, oo;
+        for (qq = 0; qq < QN; qq++) for (oo = -2; oo <= 2; oo++) { var dd = (oo - ((qq + 0.5) / QN - 0.5)) * dlt; wt[qq * 5 + oo + 2] = Math.exp(-0.5 * dd * dd / (sig * sig)); }
+        for (p = 0; p < n; p++) {
+          var cnt2 = lutBn[p];
+          if (!cnt2) { e32[p] = 0; if (vbuf) vbuf[p] = 0; continue; }
+          var u2 = lutAng[p] + off + 0.5, k0 = u2 | 0, fq = ((u2 - k0) * QN) | 0; if (k0 >= NRm) k0 -= NRm; if (k0 >= NRm) k0 -= NRm;
+          var b00 = lutB0[p];
+          if (b00 + cnt2 <= mf5[k0]) { e32[p] = BG32; if (vbuf) vbuf[p] = 0; continue; }
+          var ka = k0 - 2; if (ka < 0) ka += NRm; var kb = ka + 1; if (kb >= NRm) kb -= NRm; var kc = k0, kd = kc + 1; if (kd >= NRm) kd -= NRm; var ke = kd + 1; if (ke >= NRm) ke -= NRm;
+          // k0 = ray nearest (u2 - 0.5 rounding is handled by the weights: offset o relative to nearest)
+          var wq = fq * 5, ca = fA[ka] * wt[wq], cb2 = fA[kb] * wt[wq + 1], cc = fA[kc] * wt[wq + 2], cd = fA[kd] * wt[wq + 3], ce = fA[ke] * wt[wq + 4];
+          var ba = ka * NB, bb = kb * NB, bc = kc * NB, bd = kd * NB, be = ke * NB, vt2 = 0, b2, bj, y;
+          var ma = 0, mb = 0, mc = 0, md = 0, me = 0;   // säteittäinen maksimi kullakin säteellä
+          for (b2 = 0; b2 < cnt2; b2++) {
+            bj = b00 + b2;
+            y = raw[ba + bj]; if (y > ma) ma = y;
+            y = raw[bb + bj]; if (y > mb) mb = y;
+            y = raw[bc + bj]; if (y > mc) mc = y;
+            y = raw[bd + bj]; if (y > md) md = y;
+            y = raw[be + bj]; if (y > me) me = y;
+            if (useTrail) { var y1 = trail[bc + bj] * fT[kc]; if (y1 > vt2) vt2 = y1; }
+          }
+          ma *= ca; mb *= cb2; mc *= cc; md *= cd; me *= ce;
+          var vv = ma > mb ? ma : mb; if (mc > vv) vv = mc; if (md > vv) vv = md; if (me > vv) vv = me;
+          vv = vv * (1 - SOFT_W) + SOFT_W * (ma + mb + mc + md + me) / (wt[wq] + wt[wq + 1] + wt[wq + 2] + wt[wq + 3] + wt[wq + 4]);   // pehmennys: keilapainotettu maksimi ja keilapainotettu keskiarvo
+          if (vv > 255) vv = 255;
+          if (vbuf) vbuf[p] = vv;
+          e32[p] = (vt2 * 0.5 > vv) ? PAL_T[vt2 | 0] : PAL_E[vv | 0];
+        }
+        ectx.putImageData(eimg, 0, 0);
+        return;
+      }
       for (p = 0; p < n; p++) {
         var cnt = lutBn[p];
-        if (!cnt) { e32[p] = 0; continue; }
+        if (!cnt) { e32[p] = 0; if (vbuf) vbuf[p] = 0; continue; }
         var u = lutAng[p] + off + 0.5, kk = u | 0; if (kk >= NRm) kk -= NRm; if (kk >= NRm) kk -= NRm;
         var kl = kk === 0 ? NRm - 1 : kk - 1, kr = kk === NRm - 1 ? 0 : kk + 1, b0 = lutB0[p];
-        if (b0 + cnt <= mf5[kk]) { e32[p] = BG32; continue; }
+        if (b0 + cnt <= mf5[kk]) { e32[p] = BG32; if (vbuf) vbuf[p] = 0; continue; }
         var kl2 = kl === 0 ? NRm - 1 : kl - 1, kr2 = kr === NRm - 1 ? 0 : kr + 1;
         var v = 0, vt = 0, b, bi, x0, x1, x2;
         for (b = 0; b < cnt; b++) {
@@ -988,6 +1159,7 @@
           if (useTrail) { var y0 = trail[kk * NB + bi] * fT[kk]; if (y0 > vt) vt = y0; }
         }
         if (v > 255) v = 255;
+        if (vbuf) vbuf[p] = v;
         e32[p] = (vt * 0.5 > v) ? PAL_T[vt | 0] : PAL_E[v | 0];
       }
       ectx.putImageData(eimg, 0, 0);
@@ -1041,6 +1213,7 @@
       var kapea = geom.w < 300;
       tekstiHalolla(kapea ? 'ALUE ' + nmTxt(mpk) : 'ALUE ' + nmTxt(mpk) + ' mpk', lx, ty, 'left');
       tekstiHalolla(kapea ? 'REN ' + nmTxt(mpk / 4) : 'RENGAS ' + nmTxt(mpk / 4) + ' mpk', lx, ty + lh, 'left');
+      if (C.viritys === 'huono') tekstiHalolla(kapea ? 'VIR HUONO' : 'VIRITYS HUONO', lx, ty + 2 * lh, 'left');
       tekstiHalolla(kapea ? (C.suuntaYlos ? 'S\u2191 ' : 'N\u2191 ') + pad3(S.hdg) + '\u00b0' : (C.suuntaYlos ? 'SUUNTA YLÖS ' : 'POHJOINEN YLÖS ') + pad3(S.hdg) + '°', rx, ty, 'right');
       tekstiHalolla(kapea ? fnum(S.kn, 1) + ' kn' : 'NOPEUS ' + fnum(S.kn, 1) + ' kn', rx, ty + lh, 'right');
       if (naytaEV) {
@@ -1197,6 +1370,16 @@
       trail = i > 0 ? new Uint8Array(NR * NB) : null;
       paivitaUi(); paivitaMuutos();
     }
+    // Tutkan viritys: 'hyva' (oletus, yhtenäinen rantaviiva ja täyttynyt maa-alue) tai 'huono' (vaiheen 3c kuva ja vastaanottimen kohina 0,3)
+    function asetaViritys(v) {
+      var uusi = v === 'huono' ? 'huono' : 'hyva';
+      if (uusi === C.viritys) return uusi;
+      C.viritys = uusi;
+      alustaPuskurit();       // säteiden määrä riippuu virityksestä, joten kuva piirtyy uudelleen seuraavalla pyyhkäisyllä
+      varmista(true);
+      paivitaMuutos();
+      return uusi;
+    }
     function asetaVahvistus(v) { C.vahvistus = Math.max(0.2, Math.min(1.5, Number(v) || 1)); }
     // Häiriöt vaihetta 5 varten: { kohina: 0..1, heikko: 0..1 (lähettimen teho), suuntavirhe: aste, pois: boolean, sade: 0..1 }
     function asetaHairio(h) {
@@ -1209,8 +1392,9 @@
       paivitaMuutos();
     }
     function lue() {
+      var h = JSON.parse(JSON.stringify(C.hairio)); h.kohina = kohinaTeho();   // viritystilan kohina mukana
       return { alue: ALUEET[C.alueIdx], rengasvali: ALUEET[C.alueIdx] / 4, suuntaYlos: C.suuntaYlos, ebl: C.ebl, vrm: C.vrm, sade: C.sade, sadeSuodatin: C.sadeSuodatin,
-        jalkiS: JALJET[C.jalkiIdx], hairio: JSON.parse(JSON.stringify(C.hairio)), suunta: S.hdg, nopeus: S.kn, e: S.e, n: S.n, sateita: NR, askel: step, solu: cell };
+        jalkiS: JALJET[C.jalkiIdx], hairio: h, viritys: C.viritys, suunta: S.hdg, nopeus: S.kn, e: S.e, n: S.n, sateita: NR, askel: step, solu: cell };
     }
     function valmis() {
       return new Promise(function (res) {
@@ -1238,7 +1422,7 @@
     // Marssii säteen annetussa tosisuunnassa ja palauttaa profiilin taulukkoina (ei kirjoita puskureihin).
     function profiili(suuntaDeg) {
       var h = marssi(norm360(suuntaDeg), S.t / 1000, rev);
-      var out = { s: [], H: [], F: [], alfa: [], amax: [], E: [], ensiOsuma: h };
+      var out = { s: [], H: [], F: [], alfa: [], amax: [], E: [], ensiOsuma: h, ensiIdx: ensiIdx };
       for (var i = 0; i < NB; i++) { out.s.push((i + 1) * step); out.H.push(Hb[i]); out.F.push(Fb[i]); out.alfa.push(Ab[i]); out.amax.push(Mb[i]); out.E.push(Eb[i]); }
       return out;
     }
@@ -1334,12 +1518,12 @@
     if (opt.tila) paivita(opt.tila);
 
     return {
-      paivita: paivita, asetaAlue: asetaAlue, asetaSuuntaYlos: asetaSuuntaYlos, asetaEBL: asetaEBL, asetaVRM: asetaVRM, asetaSade: asetaSade,
+      paivita: paivita, asetaViritys: asetaViritys, tila: lue, asetaAlue: asetaAlue, asetaSuuntaYlos: asetaSuuntaYlos, asetaEBL: asetaEBL, asetaVRM: asetaVRM, asetaSade: asetaSade,
       asetaSadeSuodatin: asetaSadeSuodatin, asetaJalki: asetaJalki, asetaVahvistus: asetaVahvistus, asetaHairio: asetaHairio,
       lue: lue, vapautaRuudut: vapautaRuudut, valmis: valmis, taytaKierros: taytaKierros, piirra: piirra, kaynnista: kaynnista, pysayta: pysayta, tuhoa: tuhoa, kohteet: kohteet,
       tilasto: function () { return JSON.parse(JSON.stringify(tilasto)); },
       verkko: function () { return lukija.tilasto; },
-      testi: { jonotila: function () { return { puuttuu: puuttuvat().length, jono: jono.length, rakennetaan: rakennetaan, aids: aidsPending, ruudut: ruudut.size, odottajia: odottajat.length, cell: cell, rangeM: rangeM }; }, profiili: profiili, ensiOsumat: ensiOsumat, maaAt: maaAt, rantaviivaSegmentit: rantaviivaSegmentit, vesiRenkaat: vesiRenkaat, konvergenssi: function () { return S.conv; }, vakiot: M, ruutuja: function () { return ruudut.size; }, geom: function () { return geom; } }
+      testi: { kaikuPuskuri: function (paalle) { vbuf = paalle ? new Uint8Array(EP * EP) : null; }, kaikuKuva: function () { return vbuf ? { n: EP, v: vbuf, r: EP / 2, nb: NB, nr: NR, askel: step } : null; }, raaka: function () { return { raw: raw, nb: NB, nr: NR, askel: step }; }, jonotila: function () { return { puuttuu: puuttuvat().length, jono: jono.length, rakennetaan: rakennetaan, aids: aidsPending, ruudut: ruudut.size, odottajia: odottajat.length, cell: cell, rangeM: rangeM }; }, profiili: profiili, ensiOsumat: ensiOsumat, maaAt: maaAt, rantaviivaSegmentit: rantaviivaSegmentit, vesiRenkaat: vesiRenkaat, konvergenssi: function () { return S.conv; }, vakiot: M, ruutuja: function () { return ruudut.size; }, geom: function () { return geom; } }
     };
   }
 

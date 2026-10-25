@@ -23,7 +23,7 @@
     layout: { land: false, wide: false, tri: false, tp: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, budgetSec: null, finishedAt: null,
     // mittarit: disp = aloitusvalinta (plot, radar, both), instr = näytettävä mittari (plot, radar, both = kolme ruutua)
     disp: 'plot', instr: 'plot', plotShown: true, radar: null, radarOpt: null, radarOn: true, radarShown: false, radarMain: false, radarReady: true,
-    lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0
+    lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0
   };
   root.__sim = G;
 
@@ -34,10 +34,11 @@
       if (o.northUp != null) G.northUp = !!o.northUp; if (o.raster != null) G.raster = !!o.raster;
       if (o.vecIdx != null) G.vecIdx = Math.max(0, Math.min(3, o.vecIdx | 0)); if (o.fovDeg) G.fovDeg = Number(o.fovDeg);
       if (o.rangeNm) G.rangeNm = Number(o.rangeNm); if (o.evOn != null) G.evOn = !!o.evOn;
+      if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, rangeNm: G.rangeNm, evOn: G.evOn })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, rangeNm: G.rangeNm, evOn: G.evOn, radarTune: G.radarTune })); } catch (e) {}
   }
   loadPrefs();
 
@@ -295,13 +296,21 @@
     G.radarOn = true; $('radarOff').hidden = true; G.radarSec = 0; G.radarMainSec = 0; G.lastRadarT = 0; G.radarReady = true;
     if (G.rec) G.rec.radar = [{ t: 0, on: true }];
     if (G.disp === 'plot') { G.radarOpt = null; return; }
-    G.radarOpt = { aineisto: root.Aineisto, alue: 1.5, suuntaYlos: true, ui: true, eblVrm: true, kuvavali: 50 };
+    G.radarOpt = { aineisto: root.Aineisto, alue: 1.5, suuntaYlos: true, ui: true, eblVrm: true, kuvavali: 50, viritys: G.radarTune };
     G.radar = root.Tutka.luoTutka($('radar'), G.radarOpt);
     root.__radar = G.radar;
     applyPanes();
     G.radarReady = false;
     feedRadar();
     G.radar.valmis().then(function () { G.radarReady = true; });
+  }
+  // Tutkan viritys (hyvä tai huono): valikon valinta, vaihto kirjataan komentolokiin kuten muut tutkan muutokset (1 = hyvä, 0 = huono)
+  function setRadarTune(v) {
+    if (G.radarTune === v) return;
+    G.radarTune = v; savePrefs();
+    if (G.radar) G.radar.asetaViritys(v);
+    if (G.S && G.mode === 'run') logCustom('tutkaviritys', v === 'hyva' ? 1 : 0);
+    updateMenuLabels();
   }
   function setRadar(on) {
     if (G.radarOn === on) return;
@@ -427,6 +436,7 @@
     $('gazeL').addEventListener('click', function () { G.view.setGaze(-60); });
     $('gazeR').addEventListener('click', function () { G.view.setGaze(60); });
     $('mOrient').addEventListener('click', function () { G.northUp = !G.northUp; G.pl.setHeadUp(!G.northUp); updateMenuLabels(); savePrefs(); });
+    $('mTune').addEventListener('click', function () { setRadarTune(G.radarTune === 'huono' ? 'hyva' : 'huono'); });
     $('mRaster').addEventListener('click', function () { G.raster = !G.raster; G.pl.setRasterVisible(G.raster); updateMenuLabels(); savePrefs(); });
     $('mFov').addEventListener('click', function () {
       var opts = [70, 80, 90, 100, 110], i = opts.indexOf(G.fovDeg); G.fovDeg = opts[(i + 1) % opts.length]; G.view.setHfov(G.fovDeg); updateMenuLabels(); savePrefs();
@@ -721,6 +731,7 @@
   }
   function cmdLabel(c) {
     if (c.kind === 'tutka') return c.value ? 'Tutka päälle' : 'Tutka pois';
+    if (c.kind === 'tutkaviritys') return c.value ? 'Tutkan viritys: hyvä' : 'Tutkan viritys: huono';
     if (c.kind === 'ebl') return 'Plotterin EBL ' + pad3(c.value) + '° T';
     if (c.kind === 'vrm') return 'Plotterin VRM ' + fnum(c.value, 2) + ' mpk';
     if (c.kind === 'eblvrm') return c.value ? 'Plotterin EBL ja VRM päälle' : 'Plotterin EBL ja VRM pois';
@@ -730,6 +741,7 @@
     $('mOrient').textContent = 'Plotteri: ' + (G.northUp ? 'pohjoinen ylös' : 'suunta ylös');
     $('mRaster').textContent = 'Plotterin pohja: ' + (G.raster ? 'rasterimerikartta' : 'vektorikartta');
     $('mFov').textContent = 'Kuvakulma: ' + G.fovDeg + '°';
+    $('mTune').textContent = 'Tutkan viritys: ' + (G.radarTune === 'huono' ? 'huono' : 'hyvä');
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }

@@ -112,3 +112,18 @@ Merkinnät tehdään määrittelyn kohdan 8 askelten mukaan. Päiväys 25.10.202
 - Kriteeri 4: `testit/aika_pw.py` 6/6: oletus Valittu aika 12:00, vihje päivälle, ajon kello 12.00.04, yövihje 22.00:lla, 3D kirkkaus yöllä 24 vs päivällä 94. Kuvat 3d_aloitus_oletus_1440.png, 3d_naistenlahti_oletusaika.png (keula 050 kohti Naistenlahtea), 3d_aloitus_yo.png, 3d_nakyma_yo.png.
 - Kriteeri 5: `testit/asettelu_3d_pw.py`, koot 1024x768, 1366x768, 1440x900, 1920x1080 (tutkalla ja ilman), tabletti 768x1024, puhelin. Korjattu: komentopalstan minimileveys 330 px (nopeusnapit 42 px -> 44 px), käännöslaatikko oikeaan alakulmaan ja plotterin EBL-paneeli alemmas kapealla r2-paneelilla. Kuvat shots/3d_asettelu_*.png.
 - Kriteeri 6 ja 7 ajettu: mobiili Chromium 42/0 ja WebKit 42/0 (myös yhden tiedoston versio), tutkatestit läpi, build.py ajettu (simulaattori.html 1,1 Mt), index.html ja dist/Reittikartta.html md5 edff5aed. Silmäpistekuvat ja 60 astetta vasemmalle Siilinkarin kohdalla otettu. Raportti kirjoitettu: RAPORTTI_vaihe3d.md. Poikkeama: eyeStandZ 3,50 m (3,65 m peittyy katon reunuksen taakse).
+
+## Vaihe 3e (26.10.2026, Sonnet-agentti): tutkan viritys
+- Tutkamoduulin työ on hakemistossa `/home/claude/tutka/` (työloki `TYOLOKI.md`, raportti `RAPORTTI_vaihe3e.md`). Uusi `tutka.js` kopioitu hakemistoon `js/` (md5 täsmää lähteen kanssa).
+- `sim.js`: asetus `G.radarTune` (hyva tai huono, oletus hyva, tallennetaan `sim.asetukset`-muistiin), `viritys` välitetään tutkan asetuksiin, `setRadarTune` vaihtaa tilan kutsulla `asetaViritys` ja kirjaa komentolokiin `tutkaviritys` (1 = hyvä, 0 = huono, purkunäkymässä `Tutkan viritys: hyvä` tai `huono`). Valikkoon lisätty painike `mTune` (`Tutkan viritys: hyvä` / `huono`). Muuta `sim.js`-koodia ei muutettu.
+- `build.py` ajettu, `simulaattori.html` 1,15 Mt ilman ulkoisia viittauksia. `index.html` ja `dist/Reittikartta.html` ennallaan (md5 edff5aed...). `plotteri.js`, `nakyma.js`, `liike.js`, `harjoitus.js`, merkit ja `maasto.js` ennallaan (muokkausajat ja sisältö samat).
+- Testit: `mobiili_pw.py` Chromium 42/0 ja WebKit 42/0, `tutka_mobiili_pw.py` Chromium 32/0 ja WebKit 30/0, `valkkyminen_pw.py` tyhjiä 0/20 (Chromium ja WebKit), `tutka_asettelu_pw.py` 0 virhettä, `asettelu_3d_pw.py` kaikki koot 0 virhettä, uusi `testit/tutka_viritys_pw.py` 10/0.
+- Huomio: `asettelu_3d_pw.py` ylikirjoittaa `3d_asettelu_*`-kuvat, joten ne palautettiin ennalleen ajon jälkeen.
+- Uudet kuvat `shots/3e_*` (1440 × 900 tutkalla, WebKit iPhone 14, valikko ja moduulin kuvat). Hyvän virityksen kuva on selvästi yhtenäisempi kuin 3d-vertailukuva, mutta korkea puusto jättää edelleen laajoja varjoja.
+
+## Vaihe 3e-2 (tutkan kaikumalli)
+
+- `js/tutka.js` päivitetty moduulin uudella versiolla (metsä ja rakennukset kaikuvat, pohjataso 0,55, taajama 0,8, kiinteät merkit ilman satunnaista amplitudia). `sim.js` ei muuttunut tässä kierroksessa.
+- `build.py` ajettu, `simulaattori.html` 1 155 652 tavua. `index.html` ja `dist/Reittikartta.html` ennallaan (md5 edff5aed...).
+- Testit: `tutka_viritys_pw.py` 10/0 (odottaa kaksi täyttä kierrosta), `mobiili_pw.py` Chromium 42/0 ja WebKit 42/0, `tutka_mobiili_pw.py` Chromium 32/0 ja WebKit 30/0, `valkkyminen_pw.py` 0 tyhjää, `tutka_asettelu_pw.py` 0 virhettä, `asettelu_3d_pw.py` 36/0, 36/0 ja 17/0.
+- Uudet kuvat `shots/3e2_*`. `3d_asettelu_*`-kuvat palautettiin varmuuskopiosta ajon jälkeen.
