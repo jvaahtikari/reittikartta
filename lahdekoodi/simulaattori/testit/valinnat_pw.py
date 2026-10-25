@@ -1,0 +1,25 @@
+"""Vaihe 3d: rasteripohja valintana, pohjoinen ylös ja purkunäkymän plotteri."""
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
+from pw import *
+out = os.path.join(os.path.dirname(__file__), '..', 'shots')
+with sync_playwright() as pw:
+    b, c = chromium(pw)
+    p = c.new_page(); errs = []; collect(p, errs)
+    p.goto(SIM + 'simulaattori.html?aineisto=' + PAKETTI + '&alku=1&preserve=1&auto=20&ff=3')
+    p.wait_for_function('window.__sim && window.__sim.mode==="run"', timeout=150000); p.wait_for_timeout(3000)
+    print('oletus raster', p.evaluate('__pl.isRaster()'), 'headUp', p.evaluate('__pl.isHeadUp()'))
+    p.evaluate('document.querySelector("#menuBtn, #menu, .ib[aria-label=Valikko]") && 0')
+    p.evaluate('__pl.setRasterVisible(true)'); p.wait_for_timeout(9000)
+    print('raster', p.evaluate('__pl.isRaster()'), p.evaluate('JSON.stringify(__pl.cacheInfo())'))
+    p.screenshot(path=os.path.join(out, '3d_plotteri_raster_valinta.png'))
+    p.evaluate('__pl.setRasterVisible(false); __pl.setHeadUp(false)'); p.wait_for_timeout(4000)
+    print('north-up', not p.evaluate('__pl.isHeadUp()'))
+    p.screenshot(path=os.path.join(out, '3d_plotteri_pohjoinen_ylos.png'))
+    p.evaluate('document.getElementById("mAbort").click()')
+    p.wait_for_timeout(2500)
+    print('purku nakyvissa', p.evaluate('!document.getElementById("debrief").hidden'))
+    p.wait_for_timeout(5000)
+    p.screenshot(path=os.path.join(out, '3d_purku_plotteri.png'))
+    print('virheet', errs[:5])
+    b.close()

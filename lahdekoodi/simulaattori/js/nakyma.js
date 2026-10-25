@@ -11,12 +11,13 @@
 
   // Näkymän asetukset (kaikki muutettavissa)
   var SETTINGS = {
-    hfovDeg: 70,              // vaakasuuntainen katselukulma vaakanäytöllä
-    portraitVfovDeg: 80,      // pystynäytöllä pystykulma, jotta vaakakulma ei kasva liian suureksi
+    hfovDeg: 100,             // vaakasuuntainen katselukulma leveällä ruudulla (asetus). Ihmisen käytännön näkökenttä on tätäkin laajempi, 100° on kompromissi vääristymän kanssa
+    hfovCompactDeg: 75,       // vaakasuuntainen katselukulma pienessä tai puhelimen ruudussa, jossa ruutu ei ole leveä (asetus, 70-80°)
+    portraitVfovDeg: 80,      // pystyruudussa (leveys pienempi kuin korkeus) pystykulma, jotta vaakakulma ei kasva liian suureksi (asetus, 70-80°)
     eyeX: 6.1, eyeY: -0.75,   // silmäpiste: x malli-m peräpeilistä, y SB positiivinen. Oletus on navigoijan paikka vasemmalla edessä (y -0,75)
     helmEyeY: 0.75,           // ruorimiehen paikka oikealla edessä (asetus, valitaan eyeY:ksi)
     floorZ: 1.55,             // ohjaamon lattia köliviivasta (hull_offsets.json)
-    eyeStandM: 1.65, eyeSitM: 1.25,   // silmä lattian yläpuolella seisten ja istuen
+    eyeStandZ: 3.50, eyeSitZ: 3.45,   // silmän korkeus köliviivasta seisten ja istuen (asetuksia). Tilaajan toivoma seisten-arvo 3,65 m on ikkunan yläreunan (window_top_z 3,62 m) yläpuolella eli katon sisällä, joten oletus on 3,50 m (pää juuri katon alla). Istuen silmä on tuulilasin alareunan (3,0 m) yläpuolella
     pivotX: 5.0,              // aluksen kääntöpiste malli-x
     waterlineZ: 0.78,         // vesiviivan korkeus köliviivasta kääntöpisteen kohdalla (syväys perässä 0,942 ja keulassa 0,615)
     fogDensity: 0.000075,     // FogExp2 (näkyvyys noin 20 km)
@@ -172,7 +173,7 @@
       runko.boat.position.copy(bp); runko.boat.updateMatrixWorld(true);
     })();
     var seated = false;
-    function eyeZ() { return S.floorZ + (seated ? S.eyeSitM : S.eyeStandM); }
+    function eyeZ() { return seated ? S.eyeSitZ : S.eyeStandZ; }
     rig.add(camera);
     function placeCamera() { camera.position.set(S.eyeX - S.pivotX, eyeZ() - S.waterlineZ, S.eyeY); }
     placeCamera();
@@ -191,8 +192,9 @@
     }
     function clearFree() { if (freeCam) { scene.remove(camera); rig.add(camera); camera.rotation.order = 'YXZ'; freeCam = false; placeCamera(); updateFov(); } }
 
-    function setSize(cw, ch) {
-      w = Math.max(1, cw); h = Math.max(1, ch);
+    var compact = false;
+    function setSize(cw, ch, compactMode) {
+      w = Math.max(1, cw); h = Math.max(1, ch); compact = !!compactMode;
       applyPixelRatio();
       updateFov();
     }
@@ -204,7 +206,7 @@
     }
     function updateFov() {
       var asp = w / h, v;
-      if (asp >= 1) v = 2 * Math.atan(Math.tan(S.hfovDeg * RAD / 2) / asp) / RAD; else v = S.portraitVfovDeg;
+      if (asp >= 1) v = 2 * Math.atan(Math.tan((compact ? S.hfovCompactDeg : S.hfovDeg) * RAD / 2) / asp) / RAD; else v = S.portraitVfovDeg;
       camera.fov = v; camera.aspect = asp; camera.updateProjectionMatrix();
     }
     function setPixelBudget(mp) { pixelMp = Math.max(S.pixelMinMp, Math.min(S.pixelMaxMp, mp)); applyPixelRatio(); }
@@ -296,7 +298,7 @@
 
     return {
       scene: scene, camera: camera, renderer: renderer, rig: rig, boat: runko, terrain: terrain, aids: aids3d, landmarks: landmarks, canvas: canvas, settings: S, uniforms: U, veil: veil,
-      setSize: setSize, render: render, setSimTime: setSimTime, setGaze: setGaze, getGaze: getGaze, setSeat: setSeat, setEye: setEye,
+      setSize: setSize, render: render, setSimTime: setSimTime, setGaze: setGaze, getGaze: getGaze, getGazeNow: function () { return gaze; }, hfov: function () { return 2 * Math.atan(Math.tan(camera.fov * RAD / 2) * camera.aspect) / RAD; }, setHfov: function (d) { S.hfovDeg = d; updateFov(); }, setSeat: setSeat, setEye: setEye,
       setPixelBudget: setPixelBudget, getPixelBudget: getPixelBudget, rendererStats: rendererStats, frameStats: frameStats, resetFrameStats: resetFrameStats,
       rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; },
       setFree: setFree, clearFree: clearFree,

@@ -1,11 +1,7 @@
 /* Simulaattorin tyylit. Väripaletti ja kirjasimet noudattavat Reittikartan ulkoasua. */
-.plot-view{position:relative;overflow:hidden;background:#cfe0ea}
-.plot-rot{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);transform-origin:50% 50%}
-.plot-map{position:absolute;inset:0;background:#cfe0ea}
-.plot-own{position:absolute;left:50%;top:70%;transform:translate(-50%,-50%);pointer-events:none;z-index:500}
-.plot-aid-ico{background:none;border:0}
-.plot-aid{position:relative}
-.plot-aid-name{position:absolute;white-space:nowrap;font:600 11px/1 sans-serif;color:#10294a;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff}
+.plot-view{position:relative;overflow:hidden;background:#faf0cb}
+.plot-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.plot-own{position:absolute;left:50%;top:70%;transform:translate(-50%,-50%);pointer-events:none;z-index:5}
 .plot-pin{background:none;border:0}
 
 /* ---------- Sovellus ---------- */
@@ -93,13 +89,32 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #game.land #cmd{grid-column:2;grid-row:2;overflow-y:auto;border-top:0;border-left:1px solid #0a2132}
 #game.land .cb{min-height:48px}
 #game.land .row.r6{grid-template-columns:repeat(6,1fr)}
-#game.wide #paneP,#game.wide #pane3d,#game.wide #paneR{top:0;bottom:0;width:50%;border:0;border-radius:0;aspect-ratio:auto;box-shadow:none}
-#game.wide #paneP,#game.wide #paneR{left:0;right:auto}#game.wide #pane3d{left:50%;right:auto}
-/* kolme ruutua (leveys vähintään 1440 px): plotteri, 3D ja tutka */
-#game.tri #paneP{left:0;width:33.3334%}#game.tri #pane3d{left:33.3334%;width:33.3333%}#game.tri #paneR{left:66.6667%;width:33.3333%}
-#game.wide .pane.small .hud{display:block}
-#game.wide .hud-hdg{display:block}
-#game.wide #swapBtn{display:none}
+/* leveä asettelu (deck): ulkonäkymä ylhäällä koko leveydeltä noin 60 % korkeudesta, alla rivissä plotteri, tutka ja komentopalsta (komennot oikealla).
+   Tabletilla pystyasennossa (tp) sama, mutta komentopalsta on rivin alla. */
+#game{--cmdw:clamp(330px,24vw,420px)}
+#game.deck{display:grid;grid-template-columns:minmax(0,1fr) var(--cmdw);grid-template-rows:auto minmax(0,1fr)}
+#game.deck #bar{grid-column:1 / 3;grid-row:1}
+#game.deck #stage{grid-column:1 / 3;grid-row:2}
+#game.deck #cmd{grid-column:2;grid-row:2;align-self:end;height:40%;z-index:35;overflow-y:auto;border-top:1px solid #0a2132;border-left:1px solid #0a2132;display:flex;flex-direction:column;justify-content:center}
+#game.deck .cb{min-height:48px}
+#game.deck .row.r6{grid-template-columns:repeat(6,1fr)}
+#game.deck .pane{border:0;border-radius:0;aspect-ratio:auto;box-shadow:none}
+#game.deck #pane3d{left:0;right:0;top:0;bottom:auto;width:auto;height:60%}
+#game.deck #paneP,#game.deck #paneR{top:60%;bottom:0;height:auto;left:0;right:auto;width:calc(100% - var(--cmdw))}
+#game.deck.r2 #paneP,#game.deck.r2 #paneR{width:calc((100% - var(--cmdw)) / 2)}
+#game.deck.r2 #paneR{left:calc((100% - var(--cmdw)) / 2)}
+#game.deck.tp{--cmdw:0px;display:flex;flex-direction:column}
+#game.deck.tp #stage{flex:1;min-height:0}
+#game.deck.tp #cmd{height:auto;align-self:auto;border-left:0;display:block;flex:none}
+#game.deck #pane3d.small .hud,#game.deck .pane.small .hud{display:block}
+#game.deck #swapBtn{display:none}
+#game.deck .hud-range{flex-direction:row;width:auto;align-items:center;padding:4px}
+#game.deck .hud-range button{min-width:54px}
+#game.deck .hud-range .u{padding:0 6px}
+#game.deck .plot-info{left:auto;right:8px}
+#game.deck .instr-btn{display:none}
+#game.deck .hud-turn{left:auto;right:8px;bottom:8px;width:min(340px,46%)}
+@media (max-width:1279px){#game.deck.r2 .plot-info{top:66px}#game.deck.r2 .hud-turn{width:auto;max-width:52%}#game.deck.r2 .hud-turn .tb-row.sm{display:none}}
 /* tutka */
 #paneR{background:#020a06}
 .radar-head{position:absolute;left:8px;top:6px;z-index:26;display:flex;gap:6px}
@@ -129,3 +144,22 @@ table.db td.n{text-align:right}
 .dim{color:var(--muted)}
 .pill{display:inline-block;border-radius:8px;padding:1px 8px;font-size:12px;font-weight:700;background:#35607f}
 .pill.bad{background:#a42}.pill.ok{background:#2a7a48}
+
+/* plotterin lukemat ja painikkeet */
+.plot-info{position:absolute;left:70px;top:8px;z-index:21;display:flex;flex-direction:column;gap:4px;align-items:flex-start;pointer-events:none}
+.plot-info .hud{position:static}
+.plot-info .pbtn{pointer-events:auto;min-height:44px;min-width:44px;padding:4px 12px;border:1px solid var(--line);font-weight:650;font-size:14px}
+.plot-info .pbtn[aria-pressed=true]{background:#0f5f8a;border-color:#5fc0ea}
+.plot-info .ro{padding:3px 8px;font:600 14px ui-monospace,Menlo,Consolas,monospace;border-radius:8px}
+.plot-info .ro-ebl{color:#8fd6ff}.plot-info .ro-vrm{color:#ffd24a}
+.pane.small .plot-info{display:none}
+/* kuljettajan näkymän kompassinauha ja katsenapit */
+.v3compass{position:absolute;left:0;top:0;width:100%;height:30px;z-index:19;pointer-events:none;display:block}
+.hud-hdg{top:36px}
+.gz{position:absolute;top:50%;transform:translateY(-50%);z-index:22;min-width:56px;min-height:64px;padding:4px 8px;border:1px solid var(--line);font-weight:650;font-size:15px;opacity:.82}
+.gz-l{left:8px}.gz-r{right:8px}
+.gz:active{background:var(--accent);opacity:1}
+.pane.small .gz,.pane.small .v3compass{display:none}
+.clockrow{display:flex;gap:8px;flex-wrap:wrap}
+input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:#fff}
+.start-night{color:#ffd9a0}

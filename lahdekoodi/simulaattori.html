@@ -6,8 +6,7 @@
   https://polyformproject.org/licenses/noncommercial/1.0.0
   Required Notice: Copyright 2026 Jussi Vaahtikari
 
-  Lisenssi koskee sovelluksen omaa koodia. Mukana oleva Leaflet 1.9.4 on BSD-2-lisensoitu (c) Vladimir Agafonkin ja
-  three.js r128 MIT-lisensoitu (c) three.js authors. Kartta- ja maastoaineistot ovat omien lisenssiensä alaisia, ks. aloitusnäytön lähteet.
+  Lisenssi koskee sovelluksen omaa koodia. Mukana oleva three.js r128 MIT-lisensoitu (c) three.js authors. Kartta- ja maastoaineistot ovat omien lisenssiensä alaisia, ks. aloitusnäytön lähteet.
 
   Ei navigointikäyttöön. Lähde: Liikenne- ja viestintävirasto.
   Ei täytä asianmukaisen merikartan vaatimuksia.
@@ -19,7 +18,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#15324a">
 <title>Simulaattori</title>
-<link rel="stylesheet" href="lib/leaflet.css">
 <link rel="stylesheet" href="simulaattori/css/sim.css">
 </head>
 <body>
@@ -65,17 +63,18 @@
     <div class="field" role="group" aria-labelledby="lblClk">
       <div class="lbl" id="lblClk">Kello</div>
       <div class="seg" id="segClock">
-        <button type="button" data-v="real" class="on">Oikea kello</button>
-        <button type="button" data-v="custom">Valitse aika</button>
+        <button type="button" data-v="custom" class="on">Valittu aika<small>oletus tänään 12.00</small></button>
+        <button type="button" data-v="real">Oikea kello<small>nykyhetki</small></button>
       </div>
-      <input type="time" id="clockIn" value="12:00" hidden aria-label="Kellonaika">
+      <div class="clockrow" id="clockRow"><input type="date" id="dateIn" aria-label="Päivä"><input type="time" id="clockIn" value="12:00" aria-label="Kellonaika"></div>
+      <div class="hint" id="clockHint"></div>
     </div>
 
     <button type="button" id="startBtn" class="big primary">Aloita</button>
     <div class="warn"><b>Ei navigointikäyttöön.</b> Aineistot ovat avointa dataa, eikä ohjelma täytä asianmukaisen merikartan vaatimuksia.</div>
     <details class="src"><summary>Lähteet ja käyttöehdot</summary>
       <p id="srcText">Sisältää Maanmittauslaitoksen, Väyläviraston, Liikenne- ja viestintäviraston, Luonnonvarakeskuksen sekä Digi- ja väestötietoviraston avointa aineistoa. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.</p>
-      <p>Rasterimerikartta: Liikenne- ja viestintävirasto. Kirjastot: Leaflet (BSD-2), three.js (MIT), PMTiles ja protomaps-leaflet (BSD-3). Ohjelman oma koodi: PolyForm Noncommercial 1.0.0.</p>
+      <p>Merikartan syvyysalueet: Liikenne- ja viestintävirasto, plotterin väritys Reittikartan vektorikartan mukaan. Valinnainen rasterimerikartta: Liikenne- ja viestintävirasto. Kirjastot: three.js (MIT) ja PMTiles (BSD-3). Ohjelman oma koodi: PolyForm Noncommercial 1.0.0.</p>
     </details>
   </div>
 </section>
@@ -100,8 +99,14 @@
   <div id="stage">
     <!-- plotteri -->
     <div id="paneP" class="pane">
-      <div id="plot" class="plot-view"><div class="plot-rot"><div class="plot-map"></div></div>
+      <div id="plot" class="plot-view">
         <svg class="plot-own" viewBox="-12 -16 24 32" width="26" height="34"><path d="M0 -14L9 12L0 7L-9 12Z" fill="#1f4e9c" stroke="#fff" stroke-width="2"/></svg>
+      </div>
+      <div class="plot-info" id="plotInfo">
+        <button type="button" class="hud pbtn ro-tgl" id="evBtn" aria-pressed="true">EBL / VRM</button>
+        <div class="hud ro ro-ebl">EBL 000° T</div>
+        <div class="hud ro ro-vrm">VRM 0,50 mpk</div>
+        <button type="button" class="hud pbtn ro-vec" id="vecBtn">Vektori 1 min</button>
       </div>
       <div id="plotOff" hidden>Plotteri pois<button type="button" id="plotOnBtn" class="big">Päälle</button></div>
       <div class="hud hud-range" id="rangeBox" role="group" aria-label="Mittakaava">
@@ -118,7 +123,10 @@
     <!-- kuljettajan näkymä -->
     <div id="pane3d" class="pane">
       <div id="v3" class="v3"></div>
+      <canvas id="v3compass" class="v3compass" aria-label="Kompassinauha"></canvas>
       <div class="hud hud-hdg" id="v3hud">---° · 0,0 kn</div>
+      <button type="button" class="hud gz gz-l" id="gazeL" aria-label="Katse vasemmalle 60 astetta">&#9664; 60°</button>
+      <button type="button" class="hud gz gz-r" id="gazeR" aria-label="Katse oikealle 60 astetta">60° &#9654;</button>
       <button type="button" class="hud hud-gaze" id="gazeBtn" hidden>Katse suoraan</button>
     </div>
     <!-- tutka -->
@@ -170,9 +178,12 @@
     <button type="button" class="big" id="mAbort">Keskeytä ja näytä purku</button>
     <button type="button" class="big" id="mSeat">Istuen / seisten</button>
     <button type="button" class="big" id="mEye">Silmäpiste: navigoija</button>
+    <button type="button" class="big" id="mOrient">Plotteri: suunta ylös</button>
+    <button type="button" class="big" id="mRaster">Plotterin pohja: vektorikartta</button>
+    <button type="button" class="big" id="mFov">Kuvakulma: 100°</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle. Tab: näkymän vaihto. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: yhden sormen veto asettaa EBL:n ja kahden sormen nipistys VRM:n.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. Tab: näkymän vaihto. Plotteri: veto asettaa EBL:n, rulla tai nipistys VRM:n, pilkku ja piste EBL:ää (Shift 10°), plus ja miinus VRM:ää, V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: yhden sormen veto asettaa EBL:n ja kahden sormen nipistys VRM:n.</div>
   </div>
 </div>
 
@@ -181,7 +192,7 @@
   <div class="db-inner">
     <h1 id="dbTitle">Purku</h1>
     <div id="dbStatus" class="sub"></div>
-    <div id="dbPlot" class="plot-view nodeown"><div class="plot-rot"><div class="plot-map"></div></div></div>
+    <div id="dbPlot" class="plot-view nodeown"></div>
     <div id="dbBody"></div>
     <div class="db-actions">
       <button type="button" class="big primary" id="dbAgain">Aja uudelleen</button>
@@ -191,9 +202,7 @@
   </div>
 </section>
 
-<script src="lib/leaflet.js"></script>
 <script src="lib/pmtiles.js"></script>
-<script src="lib/protomaps-leaflet.js"></script>
 <script src="simulaattori/lib/three.min.js"></script>
 <script src="js/symbols.js"></script>
 <script src="js/signs.js"></script>
