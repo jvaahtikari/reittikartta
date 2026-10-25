@@ -230,3 +230,91 @@ def sectors():
 def speed():
     return fc([{'type': 'Feature', 'geometry': {'type': 'Polygon', 'coordinates': [[[23.74, 61.60], [23.78, 61.60], [23.78, 61.62], [23.74, 61.62], [23.74, 61.60]]]},
                 'properties': {'id': 9300, 'suuruus': '10', 'rajoitustyyppi': 'Nopeusrajoitus'}}])
+
+
+# ---------- AIS (Fintrafficin Digitraffic Marine) ----------
+# Alukset Näsijärven testialueella. Nimissä on @-täytemerkkejä ja ylimääräisiä välilyöntejä kuten oikeassa aineistossa.
+# age = sijainnin ikä sekunteina, bulk = onko alus mukana alustietojen bulkkivastauksessa.
+AIS_SHIPS = [
+    dict(mmsi=230100001, name='TESTI  RAHTI@@@', call='OHRA1@@', imo=9194098, type=70, dest='NAANTALI@@@@', draught=60, eta=703104,
+         ref=(83, 16, 7, 7), lat=61.625, lng=23.770, sog=11.2, cog=45.0, hd=47, nav=0, age=20, bulk=True),
+    dict(mmsi=230100002, name='MS MATKUSTAJA', call='OHPX', imo=0, type=60, dest='', draught=0, eta=0,
+         ref=(60, 15, 8, 8), lat=61.618, lng=23.745, sog=0.0, cog=360.0, hd=511, nav=5, age=120, bulk=True),
+    dict(mmsi=230100003, name='PV PELASTAJA', call='OHSAR', imo=0, type=51, dest='TAMPERE', draught=0, eta=0,
+         ref=(8, 4, 2, 2), lat=61.630, lng=23.752, sog=8.5, cog=270.0, hd=272, nav=0, age=10, bulk=True),
+    dict(mmsi=230100004, name='PV LEPOLAITURI', call='OHLEP', imo=0, type=51, dest='', draught=0, eta=0,
+         ref=(8, 4, 2, 2), lat=61.612, lng=23.760, sog=0.1, cog=360.0, hd=511, nav=5, age=60, bulk=True),
+    dict(mmsi=230100005, name='VANHA ALUS', call='OHOLD', imo=0, type=70, dest='', draught=0, eta=0,
+         ref=(40, 10, 5, 5), lat=61.640, lng=23.800, sog=5.0, cog=90.0, hd=90, nav=0, age=90 * 60, bulk=True),
+    dict(mmsi=230100006, name='HIMMEA ALUS', call='OHDIM', imo=0, type=80, dest='', draught=0, eta=0,
+         ref=(70, 10, 6, 6), lat=61.605, lng=23.790, sog=0.0, cog=360.0, hd=511, nav=1, age=15 * 60, bulk=True),
+    # alustiedot puuttuvat bulkkivastauksesta mutta löytyvät kutsulla /vessels/{mmsi}
+    dict(mmsi=230100007, name='YKSITTAIS ALUS', call='OH7777', imo=0, type=37, dest='', draught=15, eta=0,
+         ref=(6, 3, 2, 2), lat=61.622, lng=23.735, sog=4.0, cog=120.0, hd=511, nav=8, age=40, bulk=False),
+    # alustietoja ei ole lainkaan: /vessels/{mmsi} vastaa 404
+    dict(mmsi=230100008, name='', call='', imo=0, type=0, dest='', draught=0, eta=0, ref=(0, 0, 0, 0),
+         lat=61.608, lng=23.775, sog=0.0, cog=360.0, hd=511, nav=15, age=30, bulk=False, vessel=False),
+    # nimien päällekkäisyys: kaksi alusta lähes samassa pisteessä
+    dict(mmsi=230100009, name='SAMASSA A', call='OHSA', imo=0, type=30, dest='', draught=0, eta=0,
+         ref=(10, 5, 3, 3), lat=61.600, lng=23.700, sog=0.0, cog=360.0, hd=511, nav=1, age=50, bulk=True),
+    dict(mmsi=230100010, name='SAMASSA B', call='OHSB', imo=0, type=36, dest='', draught=0, eta=0,
+         ref=(10, 5, 3, 3), lat=61.60001, lng=23.70002, sog=0.0, cog=360.0, hd=511, nav=1, age=50, bulk=True),
+    dict(mmsi=230100011, name='VAINO TESTI', call='OHVT', imo=0, type=31, dest='', draught=0, eta=0,
+         ref=(12, 6, 3, 3), lat=61.615, lng=23.785, sog=3.0, cog=200.0, hd=201, nav=0, age=70, bulk=True),
+]
+AIS_EXTRA_FIRST = 231000000
+
+
+def _ais_extra(n):
+    """Lisää n liikkuvaa rahtialusta ruudukkoon testialueen näkymässä (rajoituksen 400 alusta kokeiluun)."""
+    out = []
+    cols = 30
+    for i in range(n):
+        out.append(dict(mmsi=AIS_EXTRA_FIRST + i, name='EXTRA %d' % i, call='', imo=0, type=70, dest='', draught=0, eta=0,
+                        ref=(30, 10, 5, 5), lat=61.50 + (i // cols) * 0.0045, lng=23.50 + (i % cols) * 0.012,
+                        sog=6.0, cog=45.0, hd=45, nav=0, age=30, bulk=True))
+    return out
+
+
+def ais_ships(extra=0):
+    return AIS_SHIPS + _ais_extra(extra)
+
+
+def _iso(ms):
+    import datetime
+    return datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def ais_locations(now_ms, frm=None, mmsi=None, extra=0, drop=()):
+    """Digitrafficin /locations: sijainnit, joiden aika on vähintään frm (oletuksena vuorokausi sitten)."""
+    frm = now_ms - 86400000 if frm is None else frm
+    feats = []
+    for s in ais_ships(extra):
+        t = now_ms - s['age'] * 1000
+        if s['mmsi'] in drop or t < frm or (mmsi is not None and s['mmsi'] != mmsi):
+            continue
+        feats.append({'type': 'Feature', 'mmsi': s['mmsi'], 'geometry': {'type': 'Point', 'coordinates': [s['lng'], s['lat']]},
+                      'properties': {'mmsi': s['mmsi'], 'sog': s['sog'], 'cog': s['cog'], 'navStat': s['nav'], 'rot': -128,
+                                     'posAcc': True, 'raim': False, 'heading': s['hd'], 'timestamp': 5, 'timestampExternal': t}})
+    return json.dumps({'type': 'FeatureCollection', 'dataUpdatedTime': _iso(now_ms), 'features': feats}).encode(), \
+        max([f['properties']['timestampExternal'] for f in feats] or [0])
+
+
+def ais_vessel(s, now_ms):
+    a, b, c, d = s['ref']
+    return {'mmsi': s['mmsi'], 'name': s['name'], 'callSign': s['call'], 'imo': s['imo'], 'destination': s['dest'],
+            'draught': s['draught'], 'eta': s['eta'], 'posType': 1, 'referencePointA': a, 'referencePointB': b,
+            'referencePointC': c, 'referencePointD': d, 'shipType': s['type'], 'timestamp': now_ms - 86400000}
+
+
+def ais_vessels(now_ms, frm, extra=0):
+    """Digitrafficin /vessels?from=: alustiedot taulukkona. Bulkkivastauksesta puuttuvat alukset eivät ole mukana."""
+    return json.dumps([ais_vessel(s, now_ms) for s in ais_ships(extra)
+                       if s['bulk'] and s.get('vessel', True) and now_ms - 86400000 >= frm]).encode()
+
+
+def ais_vessel_one(mmsi, now_ms):
+    for s in AIS_SHIPS:
+        if s['mmsi'] == mmsi and s.get('vessel', True):
+            return json.dumps(ais_vessel(s, now_ms)).encode()
+    return None
