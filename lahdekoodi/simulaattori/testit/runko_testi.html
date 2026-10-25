@@ -1,0 +1,25 @@
+<!doctype html><html lang="fi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;height:100%;background:#9bb}canvas{display:block;width:100%;height:100%}</style></head><body>
+<canvas id="c"></canvas>
+<script src="../lib/three.min.js"></script><script src="../js/runko.js"></script>
+<script>
+const q=new URLSearchParams(location.search);
+const interior=q.get('interior')==='1', merge=q.get('merge')!=='0';
+const cv=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:false});
+renderer.setSize(innerWidth,innerHeight,false);
+const scene=new THREE.Scene(); scene.background=new THREE.Color('#aecbe0');
+scene.add(new THREE.HemisphereLight(0xffffff,0x6a7780,0.7));
+const sun=new THREE.DirectionalLight(0xffffff,0.8); sun.position.set(-8,14,12); scene.add(sun);
+const t0=performance.now();
+const r=Runko.build(THREE,Runko.DATA,{interior,merge});
+const dt=performance.now()-t0;
+scene.add(r.boat);
+const water=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshLambertMaterial({color:'#3d6d8c'})); water.rotation.x=-Math.PI/2; water.position.y=0.78; scene.add(water);
+const cam=new THREE.PerspectiveCamera(parseFloat(q.get('fov')||'50'),innerWidth/innerHeight,0.05,2000);
+if(interior){ const ez=1.55+1.65; cam.position.set(6.5,ez,0); cam.lookAt(30,ez-0.5,0); }
+else { cam.position.set(parseFloat(q.get('cx')||'-5'),parseFloat(q.get('cy')||'4'),parseFloat(q.get('cz')||'9')); cam.lookAt(6,1.5,0); }
+renderer.render(scene,cam);
+window.__info={build_ms:dt,stats:r.stats,calls:renderer.info.render.calls,tris:renderer.info.render.triangles};
+window.__ready=true;
+</script></body></html>

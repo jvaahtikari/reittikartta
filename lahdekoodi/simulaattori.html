@@ -1,0 +1,195 @@
+<!doctype html>
+<!--
+  Simulaattori – Pv417 Repa Näsijärvellä, päivänavigointi
+  Copyright 2026 Jussi Vaahtikari
+  Lisenssi: PolyForm Noncommercial 1.0.0
+  https://polyformproject.org/licenses/noncommercial/1.0.0
+  Required Notice: Copyright 2026 Jussi Vaahtikari
+
+  Lisenssi koskee sovelluksen omaa koodia. Mukana oleva Leaflet 1.9.4 on BSD-2-lisensoitu (c) Vladimir Agafonkin ja
+  three.js r128 MIT-lisensoitu (c) three.js authors. Kartta- ja maastoaineistot ovat omien lisenssiensä alaisia, ks. aloitusnäytön lähteet.
+
+  Ei navigointikäyttöön. Lähde: Liikenne- ja viestintävirasto.
+  Ei täytä asianmukaisen merikartan vaatimuksia.
+-->
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#15324a">
+<title>Simulaattori</title>
+<link rel="stylesheet" href="lib/leaflet.css">
+<link rel="stylesheet" href="simulaattori/css/sim.css">
+</head>
+<body>
+
+<!-- Aloitusnäyttö -->
+<section id="start" class="screen">
+  <div class="start-inner">
+    <h1>Simulaattori</h1>
+    <p class="sub">Pv417 Repa Näsijärvellä, päivänavigointi. Roolina navigoija.</p>
+
+    <div class="field" role="group" aria-labelledby="lblEx">
+      <div class="lbl" id="lblEx">Harjoitus</div>
+      <div class="seg" id="segEx">
+        <button type="button" data-v="h1" class="on">Harjoitus 1<small>Mustalahti – Siilinkari – Aitolahti</small></button>
+        <button type="button" data-v="free">Vapaa ajo<small>Mustalahdesta, ei reittiä</small></button>
+      </div>
+    </div>
+    <div class="field" id="fldSpeed" role="group" aria-labelledby="lblSp">
+      <div class="lbl" id="lblSp">Tavoitenopeus</div>
+      <div class="seg" id="segSpeed">
+        <button type="button" data-v="10">10 kn</button>
+        <button type="button" data-v="20">20 kn</button>
+        <button type="button" data-v="30" class="on">30 kn</button>
+      </div>
+      <div class="hint" id="budgetHint"></div>
+    </div>
+    <div class="field" role="group" aria-labelledby="lblEye">
+      <div class="lbl" id="lblEye">Silmäpiste kuljettajan näkymässä</div>
+      <div class="seg" id="segEye">
+        <button type="button" data-v="nav" class="on">Navigoija</button>
+        <button type="button" data-v="helm">Ruorimies</button>
+      </div>
+    </div>
+    <div class="field" role="group" aria-labelledby="lblClk">
+      <div class="lbl" id="lblClk">Kello</div>
+      <div class="seg" id="segClock">
+        <button type="button" data-v="real" class="on">Oikea kello</button>
+        <button type="button" data-v="custom">Valitse aika</button>
+      </div>
+      <input type="time" id="clockIn" value="12:00" hidden aria-label="Kellonaika">
+    </div>
+
+    <button type="button" id="startBtn" class="big primary">Aloita</button>
+    <div class="warn"><b>Ei navigointikäyttöön.</b> Aineistot ovat avointa dataa, eikä ohjelma täytä asianmukaisen merikartan vaatimuksia.</div>
+    <details class="src"><summary>Lähteet ja käyttöehdot</summary>
+      <p id="srcText">Sisältää Maanmittauslaitoksen, Väyläviraston, Liikenne- ja viestintäviraston, Luonnonvarakeskuksen sekä Digi- ja väestötietoviraston avointa aineistoa. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.</p>
+      <p>Rasterimerikartta: Liikenne- ja viestintävirasto. Kirjastot: Leaflet (BSD-2), three.js (MIT), PMTiles ja protomaps-leaflet (BSD-3). Ohjelman oma koodi: PolyForm Noncommercial 1.0.0.</p>
+    </details>
+  </div>
+</section>
+
+<!-- Lataus -->
+<div id="loading" hidden><div class="load-box"><div class="spin" aria-hidden="true"></div><div id="loadText">Ladataan maastoa</div><div class="bar"><i id="loadBar"></i></div></div></div>
+
+<!-- Peli -->
+<div id="game" hidden>
+  <header id="bar">
+    <button type="button" class="ib" id="menuBtn" aria-label="Valikko">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <div id="clock" aria-label="Kello">--:--:--</div>
+    <div id="exName" class="ex-name"></div>
+    <button type="button" class="ib txt" id="speedBtn" aria-label="Aikakerroin">1×</button>
+    <button type="button" class="ib" id="pauseBtn" aria-label="Tauko">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" id="pauseIco"><path d="M7 5v14M17 5v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <div id="stage">
+    <!-- plotteri -->
+    <div id="paneP" class="pane">
+      <div id="plot" class="plot-view"><div class="plot-rot"><div class="plot-map"></div></div>
+        <svg class="plot-own" viewBox="-12 -16 24 32" width="26" height="34"><path d="M0 -14L9 12L0 7L-9 12Z" fill="#1f4e9c" stroke="#fff" stroke-width="2"/></svg>
+      </div>
+      <div id="plotOff" hidden>Plotteri pois<button type="button" id="plotOnBtn" class="big">Päälle</button></div>
+      <div class="hud hud-range" id="rangeBox" role="group" aria-label="Mittakaava">
+        <button type="button" data-r="0.25">0,25</button><button type="button" data-r="0.5">0,5</button><button type="button" data-r="1" class="on">1</button><button type="button" data-r="2">2</button>
+        <span class="u">mpk</span>
+      </div>
+      <button type="button" class="hud hud-off" id="plotOffBtn">Plotteri pois</button>
+      <div class="hud hud-turn" id="turnBox" hidden>
+        <div class="tb-row"><b id="turnTitle">Käännös</b><span id="turnInfo"></span></div>
+        <div class="tb-row sm"><span id="progInfo"></span><span id="budgetInfo"></span></div>
+      </div>
+    </div>
+    <!-- kuljettajan näkymä -->
+    <div id="pane3d" class="pane">
+      <div id="v3" class="v3"></div>
+      <div class="hud hud-hdg" id="v3hud">---° · 0,0 kn</div>
+      <button type="button" class="hud hud-gaze" id="gazeBtn" hidden>Katse suoraan</button>
+    </div>
+    <button type="button" id="swapBtn" class="swap" aria-label="Vaihda näkymä" hidden></button>
+    <div id="groundBanner" hidden>
+      <b>Pohjakosketus</b><span id="groundText"></span>
+      <button type="button" class="big primary" id="groundBtn">Purku</button>
+    </div>
+    <div id="toast" role="status" hidden></div>
+  </div>
+
+  <div id="cmd">
+    <div class="status">
+      <div><span class="k">Käsky</span> <b id="ordHdg">Suunta 000</b> <b id="ordSpd">Nopeus 0 kn</b><span id="ordGentle" class="tag" hidden>loiva</span></div>
+      <div class="now"><span class="k">Nyt</span> <b id="nowHdg">000°</b> <b id="nowSpd">0,0 kn</b></div>
+    </div>
+    <div class="row r3">
+      <button type="button" class="cb" id="bLeft" aria-label="Vasen"><span class="ar">◀</span> Vasen</button>
+      <button type="button" class="cb tgl" id="bGentle" aria-pressed="false">Loiva</button>
+      <button type="button" class="cb" id="bRight" aria-label="Oikea">Oikea <span class="ar">▶</span></button>
+    </div>
+    <div class="row r6">
+      <button type="button" class="cb" id="bSlower" aria-label="Nopeus alas">−2</button>
+      <button type="button" class="cb sp" data-kn="6">6</button>
+      <button type="button" class="cb sp" data-kn="12">12</button>
+      <button type="button" class="cb sp" data-kn="20">20</button>
+      <button type="button" class="cb sp" data-kn="28">28</button>
+      <button type="button" class="cb" id="bFaster" aria-label="Nopeus ylös">+2</button>
+    </div>
+    <div class="row r3">
+      <button type="button" class="cb" id="bReverse">Peruutus hidas</button>
+      <button type="button" class="cb" id="bStop">Nopeus 0</button>
+      <button type="button" class="cb crash" id="bCrash">Crash stop</button>
+    </div>
+  </div>
+</div>
+
+<!-- Valikko -->
+<div id="menu" class="sheet" hidden>
+  <div class="sheet-box" role="dialog" aria-label="Valikko">
+    <button type="button" class="big" id="mAbort">Keskeytä ja näytä purku</button>
+    <button type="button" class="big" id="mSeat">Istuen / seisten</button>
+    <button type="button" class="big" id="mEye">Silmäpiste: navigoija</button>
+    <button type="button" class="big" id="mHelp">Näppäimet</button>
+    <button type="button" class="big" id="mClose">Sulje</button>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle. Tab: näkymän vaihto. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×.</div>
+  </div>
+</div>
+
+<!-- Purku -->
+<section id="debrief" class="screen" hidden>
+  <div class="db-inner">
+    <h1 id="dbTitle">Purku</h1>
+    <div id="dbStatus" class="sub"></div>
+    <div id="dbPlot" class="plot-view nodeown"><div class="plot-rot"><div class="plot-map"></div></div></div>
+    <div id="dbBody"></div>
+    <div class="db-actions">
+      <button type="button" class="big primary" id="dbAgain">Aja uudelleen</button>
+      <button type="button" class="big" id="dbStart">Aloitusnäyttö</button>
+    </div>
+    <div class="warn"><b>Ei navigointikäyttöön.</b> Purku on pelkkää tekstiä ja kuva, ei pisteytystä.</div>
+  </div>
+</section>
+
+<script src="lib/leaflet.js"></script>
+<script src="lib/pmtiles.js"></script>
+<script src="lib/protomaps-leaflet.js"></script>
+<script src="simulaattori/lib/three.min.js"></script>
+<script src="js/symbols.js"></script>
+<script src="simulaattori/js/paikka.js"></script>
+<script src="simulaattori/js/liike.js"></script>
+<script src="simulaattori/js/mvt.js"></script>
+<script src="simulaattori/js/aineisto.js"></script>
+<script src="simulaattori/js/runko.js"></script>
+<script src="simulaattori/js/merkit.js"></script>
+<script src="simulaattori/js/merkit3d.js"></script>
+<script src="simulaattori/js/maamerkit3d.js"></script>
+<script src="simulaattori/js/maasto.js"></script>
+<script src="simulaattori/js/nakyma.js"></script>
+<script src="simulaattori/js/plotteri.js"></script>
+<script src="simulaattori/js/pohja.js"></script>
+<script src="simulaattori/js/harjoitus.js"></script>
+<script src="simulaattori/js/sim.js"></script>
+</body>
+</html>
