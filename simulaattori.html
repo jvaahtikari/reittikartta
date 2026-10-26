@@ -126,7 +126,8 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #game.deck{display:grid;grid-template-columns:minmax(0,1fr) var(--cmdw);grid-template-rows:auto minmax(0,1fr)}
 #game.deck #bar{grid-column:1 / 3;grid-row:1}
 #game.deck #stage{grid-column:1 / 3;grid-row:2}
-#game.deck #cmd{grid-column:2;grid-row:2;align-self:end;height:40%;z-index:35;overflow-y:auto;border-top:1px solid #0a2132;border-left:1px solid #0a2132;display:flex;flex-direction:column;justify-content:center}
+#game.deck #cmd{grid-column:2;grid-row:2;align-self:end;height:40%;z-index:35;overflow-y:auto;border-top:1px solid #0a2132;border-left:1px solid #0a2132;display:flex;flex-direction:column;justify-content:flex-start}
+#game.deck #cmd>:first-child{margin-top:auto}#game.deck #cmd>:last-child{margin-bottom:auto}  /* keskitys ilman yläreunan leikkautumista (iPad 26.10.2026: Käsky-rivi jäi piiloon) */
 #game.deck:not(.tp) .row.r6{grid-template-columns:repeat(4,1fr)}
 #game.deck:not(.tp) #bSlower,#game.deck:not(.tp) #bFaster{grid-column:span 2}
 #game.deck:not(.tp) #bSlower{order:1}#game.deck:not(.tp) #bFaster{order:2}#game.deck:not(.tp) .cb.sp{order:3}
