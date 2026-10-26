@@ -3883,7 +3883,8 @@ const wallZ=(x,ya)=>{ const yb=ybTrunk(x), yt=ytTrunk(x), zt=zrTrunk(x), zd=zDec
 const wallK=(x,ya)=>{ const yb=ybTrunk(x), yt=ytTrunk(x); return ya>=yt?(zrTrunk(x)-zDeck(x))/(yb-yt):DZS/(yt-TK.roof_half); };
 var CABIN_TOP=zrTrunk;
 (function trunk(){
-  const m=new Mesh3(), P=TK.base_sb, h=TK.roof_half, x0=P[0][0], xt=9.50, xf=TK.roof_x_front;
+  // Käyttäjän palaute 26.10.2026: kajuutan seinät ovat valkoiset, katto mattamusta. Seinät ja kattopinnat eri verkkoihin.
+  const m=new Mesh3(), mk=new Mesh3(), P=TK.base_sb, h=TK.roof_half, x0=P[0][0], xt=9.50, xf=TK.roof_x_front;
   // Vaihe 1e: kohouma kolmiosaisena: kalteva sivuseinä (alareuna kansi, yläreuna käsijohdon linjalla), loiva kattotaso (seinän yläreunasta keskikaistaan) ja keskikaista
   const Tz=x=>zrTrunk(x), Sz=x=>zsTrunk(x);
   for(const s of [1,-1]){
@@ -3894,16 +3895,17 @@ var CABIN_TOP=zrTrunk;
     const NX=14;
     for(let i=0;i<NX;i++){ const xa=x0+(xt-x0)*i/NX, xb=x0+(xt-x0)*(i+1)/NX;
       const Ba=V3(xa,s*ybTrunk(xa),zDeck(xa)),Bb=V3(xb,s*ybTrunk(xb),zDeck(xb)),Ta=V3(xa,s*ytTrunk(xa),Tz(xa)),Tb=V3(xb,s*ytTrunk(xb),Tz(xb)),Sa=V3(xa,s*h,Sz(xa)),Sb=V3(xb,s*h,Sz(xb));
-      m.quadF(Ba,Bb,Tb,Ta,out);                      // sivuseinä
-      m.quadF(Ta,Tb,Sb,Sa,new THREE.Vector3(0,1,0)); }  // loiva kattotaso
-    m.quad(B1,B2,S1,T1,new THREE.Vector3(0.5,0.4,s)); // etusivun viisto seinä
-    { const Sx=V3(xt,s*h,Sz(xt)); m.quad(T1,Sx,S1,V3(xf,s*ytTrunk(xf),Tz(xf)),new THREE.Vector3(0,1,0)); m.tri(Sx,S1,V3(xf,s*h,Sz(xf)),new THREE.Vector3(0,1,0)); }
+      m.quadF(Ba,Bb,Tb,Ta,out);                      // sivuseinä (valkoinen)
+      mk.quadF(Ta,Tb,Sb,Sa,new THREE.Vector3(0,1,0)); }  // loiva kattotaso (mattamusta)
+    m.quad(B1,B2,S1,T1,new THREE.Vector3(0.5,0.4,s)); // etusivun viisto seinä (valkoinen)
+    { const Sx=V3(xt,s*h,Sz(xt)); mk.quad(T1,Sx,S1,V3(xf,s*ytTrunk(xf),Tz(xf)),new THREE.Vector3(0,1,0)); mk.tri(Sx,S1,V3(xf,s*h,Sz(xf)),new THREE.Vector3(0,1,0)); }
   }
   const a0=V3(x0,h,Sz(x0)), b0=V3(x0,-h,Sz(x0)), a1=V3(xf,h,Sz(xf)), b1=V3(xf,-h,Sz(xf));
-  m.quad(a0,a1,b1,b0,new THREE.Vector3(0,1,0));          // keskikaista
+  mk.quad(a0,a1,b1,b0,new THREE.Vector3(0,1,0));         // keskikaista (mattamusta)
   const f1=V3(TK.front_x,P[2][1],zDeck(TK.front_x)), f2=V3(TK.front_x,-P[2][1],zDeck(TK.front_x));
-  m.quad(a1,f1,f2,b1,new THREE.Vector3(1,0.5,0));        // keulan 45 asteen viisto
-  addMesh(boat,m.geom(),std(LIVERY.superstructure,{roughness:0.55,side:THREE.DoubleSide}));
+  m.quad(a1,f1,f2,b1,new THREE.Vector3(1,0.5,0));        // keulan 45 asteen viisto (valkoinen etuseinä)
+  addMesh(boat,m.geom(),std(LIVERY.cabinet,{roughness:0.55,side:THREE.DoubleSide}));
+  addMesh(boat,mk.geom(),std('#141516',{roughness:0.95,metalness:0,side:THREE.DoubleSide}));
   // sivuseinän ikkuna molemmin puolin: pyöristetty suorakulmio 0,353 x 0,168 m, keskipiste x 7,44 z 2,306 (YJ sivukuvanto)
   const wy=(x,z,s)=>{ const yb=ybTrunk(x), yt=ytTrunk(x), zt=Tz(x), zd=zDeck(x); const t=(z-zd)/(zt-zd); return s*(yb-t*(yb-yt)); };
   const fmat=std('#2b2d30',{roughness:0.6,side:THREE.DoubleSide}), gmat=std('#08090b',{roughness:0.15,side:THREE.DoubleSide});
@@ -3932,11 +3934,9 @@ var CABIN_TOP=zrTrunk;
     blk(0.04,0.012,0.17,0,ringZ+RT+0.006,sz*RR);                       // hihna renkaan putken yli
     for(const e of [-1,1]) blk(0.04,ringZ+RT,0.012,0,(ringZ+RT)/2,sz*(RR+e*0.085));   // hihnan jalat kattoon
   }
-  // suorakulmainen luukku: korotettu pyöristetty lohko, kansi kattopinnan suuntainen
-  const R=TK.rect_block, poly=rrect(R.x0,R.x1,-R.half,R.half,R.r,6);
-  addMesh(boat,prism(poly,zsTrunk(R.x1)-0.03,zsTrunk(R.x0)+R.h,0,{zTop:x=>zsTrunk(x)+R.h}),std('#d9d9d4',{roughness:0.5,side:THREE.DoubleSide}));   // vaalea ohut kehys
-  const pd=rrect(R.x0+0.03,R.x1-0.03,-R.half+0.03,R.half-0.03,R.r-0.03,6);
-  addMesh(boat,prism(pd,zsTrunk(R.x1)-0.03,zsTrunk(R.x0)+R.h,0,{zTop:x=>zsTrunk(x)+R.h+0.004}),std('#060708',{roughness:0.85,metalness:0,side:THREE.DoubleSide}));   // musta luukkupinta
+  // suorakulmainen luukku: matala mattamusta kansi kajuutan katolla, ei vaaleaa kehystä (käyttäjän palaute 26.10.2026)
+  const R=TK.rect_block, HL=Math.min(R.h,0.06), poly=rrect(R.x0,R.x1,-R.half,R.half,R.r,6);
+  addMesh(boat,prism(poly,zsTrunk(R.x1)-0.03,zsTrunk(R.x0)+HL,0,{zTop:x=>zsTrunk(x)+HL}),std('#141516',{roughness:0.95,metalness:0,side:THREE.DoubleSide}));   // matala musta luukku
   const pl=rrect(R.x0+0.012,R.x1-0.012,-R.half+0.012,R.half-0.012,R.r-0.012,6);
   
   const lx0=R.latch[0], lx1=R.latch[1], lw=R.latch[2], zl=zFrontTrunk((lx0+lx1)/2);
