@@ -24,7 +24,7 @@
     // mittarit: disp = aloitusvalinta (plot, radar, both), instr = näytettävä mittari (plot, radar, both = kolme ruutua)
     disp: 'plot', instr: 'plot', plotShown: true, radar: null, radarOpt: null, radarOn: true, radarShown: false, radarMain: false, radarReady: true,
     collision: null, collMs: { n: 0, sum: 0, max: 0 }, lastTorE: 1e9, lastTorN: 1e9,
-    lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0
+    lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0, gfx: null
   };
   root.__sim = G;
 
@@ -36,12 +36,19 @@
       if (o.vecIdx != null) G.vecIdx = Math.max(0, Math.min(3, o.vecIdx | 0)); if (o.fovDeg) G.fovDeg = Number(o.fovDeg);
       if (o.evOn != null) G.evOn = !!o.evOn;
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
+      if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx })); } catch (e) {}
   }
   loadPrefs();
+  // Grafiikka (vaihe 3j): täysi tai kevyt. Oletus on täysi leveällä näytöllä ja kevyt puhelimessa (lyhyempi sivu alle 700 px). Osoiteparametri laatu=kevyt|täysi ohittaa muistin.
+  function gfxNow() {
+    var q = qs.get('laatu'); if (q === 'kevyt' || q === 'light') return 'light'; if (q === 'täysi' || q === 'full') return 'full';
+    if (G.gfx) return G.gfx;
+    return Math.min(root.innerWidth || 1024, root.innerHeight || 768) < 700 ? 'light' : 'full';
+  }
 
   // ---------- apuja ----------
   function two(n) { return (n < 10 ? '0' : '') + n; }
@@ -174,6 +181,7 @@
     G.view = root.Nakyma.create($('v3'), { preserve: !!qs.get('preserve'), settings: { hfovDeg: G.fovDeg } });
     root.__view = G.view; root.__pl = G.pl;
     G.bridges = root.Sillat3D ? root.Sillat3D.attach(G.view) : null;   // sillat (vaihe 3i): piirto joka kuvalla view.render-kutsun yhteydessä, rebase addExtra-kautta
+    G.view.setQuality(gfxNow());
     new ResizeObserver(function () { layout(); }).observe($('stage'));
     new ResizeObserver(function () { sizeViews(); }).observe($('pane3d'));
     root.addEventListener('resize', layout);
@@ -539,6 +547,7 @@
     $('gazeR').addEventListener('click', function () { G.view.setGaze(60); });
     $('mOrient').addEventListener('click', function () { G.northUp = !G.northUp; G.pl.setHeadUp(!G.northUp); updateMenuLabels(); savePrefs(); });
     $('mTune').addEventListener('click', function () { setRadarTune(G.radarTune === 'huono' ? 'hyva' : 'huono'); });
+    $('mGfx').addEventListener('click', function () { G.gfx = gfxNow() === 'full' ? 'light' : 'full'; G.view.setQuality(G.gfx); updateMenuLabels(); savePrefs(); });
     $('mRaster').addEventListener('click', function () { G.raster = !G.raster; G.pl.setRasterVisible(G.raster); updateMenuLabels(); savePrefs(); });
     $('mFov').addEventListener('click', function () {
       var opts = [70, 80, 90, 100, 110], i = opts.indexOf(G.fovDeg); G.fovDeg = opts[(i + 1) % opts.length]; G.view.setHfov(G.fovDeg); updateMenuLabels(); savePrefs();
@@ -894,6 +903,7 @@
     $('mRaster').textContent = 'Plotterin pohja: ' + (G.raster ? 'rasterimerikartta' : 'vektorikartta');
     $('mFov').textContent = 'Kuvakulma: ' + G.fovDeg + '°';
     $('mTune').textContent = 'Tutkan viritys: ' + (G.radarTune === 'huono' ? 'huono' : 'hyvä');
+    $('mGfx').textContent = 'Grafiikka: ' + (gfxNow() === 'light' ? 'kevyt' : 'täysi');
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }

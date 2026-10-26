@@ -20,7 +20,10 @@
     eyeStandZ: 3.50, eyeSitZ: 3.45,   // silmän korkeus köliviivasta seisten ja istuen (asetuksia). Tilaajan toivoma seisten-arvo 3,65 m on ikkunan yläreunan (window_top_z 3,62 m) yläpuolella eli katon sisällä, joten oletus on 3,50 m (pää juuri katon alla). Istuen silmä on tuulilasin alareunan (3,0 m) yläpuolella
     pivotX: 5.0,              // aluksen kääntöpiste malli-x
     waterlineZ: 0.78,         // vesiviivan korkeus köliviivasta kääntöpisteen kohdalla (syväys perässä 0,942 ja keulassa 0,615)
-    fogDensity: 0.000075,     // FogExp2 (näkyvyys noin 20 km)
+    fogDensity: 0.000139,     // ilmaperspektiivi: läpäisy exp(-tiheys x etäisyys), 5 km:n päässä kontrasti noin puolet (0,50), 15 km:n päässä noin 0,12, eli kaukomaasto erottuu vielä siluettina (vaihe 3j)
+    exposure: 1.0,            // tonemappingin valotus (ACES Filmic)
+    windFromDeg: 225, windSpeed: 3,   // tuuli: suunta, josta tuulee (tosisuunta, oletus lounas) ja nopeus (m/s). Vesi lukee nämä, vaihe 4 voi muuttaa asetuksia (setWind)
+    cloudCover: 0.55,         // pilvien peitto 0...1 (kevyt grafiikka ei piirrä pilviä)
     maxDist: 8000,
     pixelBudgetMp: 0.55,      // piirtopuskurin pikselien enimmäismäärä (miljoonaa), tarkentuu kuvanopeuden mukaan
     pixelMinMp: 0.1, pixelMaxMp: 1.4,
@@ -30,48 +33,209 @@
     kiikariHfovDeg: 7, kiikariSuurennus: 7, kiikariTarinaDeg: 0.15, kiikariPitchMin: -8, kiikariPitchMax: 12
   };
 
+  // ---- värinhallinta (vaihe 3j) ----
+  // Ulostulo on sRGB ja tonemapping ACES Filmic. Materiaalien värit (heksat) ja kärkivärit on määritelty sRGB-arvoina, joten Lambert-varjostin muuntaa ne lineaarisiksi
+  // (diffuse, emissive ja kärkivärit pow 2,2) ennen valaistusta. Sumu lasketaan three.js r128:ssa tonemappingin ja koodauksen jälkeen eli näyttöavaruudessa, ja sen kaava
+  // vaihdetaan muotoon 1 - exp(-tiheys x etäisyys), jotta kaukomaasto ei häviä kokonaan (5 km: kontrasti noin 0,5, 15 km: noin 0,12). Taivas ja vesi piirretään suoraan näyttöavaruuteen.
+  (function patchThree() {
+    if (!THREE || THREE.__nakyma3j) return; THREE.__nakyma3j = true;
+    var SC = THREE.ShaderChunk, SL = THREE.ShaderLib;
+    SL.lambert.fragmentShader = SL.lambert.fragmentShader
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse * ( diffuse * ( diffuse * 0.305306011 + 0.682171111 ) + 0.012522878 ), opacity );')
+      .replace('vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = emissive * ( emissive * ( emissive * 0.305306011 + 0.682171111 ) + 0.012522878 );');
+    // Ohjelmistopiirtäjässä (SwiftShader) pow on kallis: sRGB-muunnokset korvataan monikulmiolla (sRGB -> lineaarinen) ja neliöjuurisarjalla (lineaarinen -> sRGB), virhe alle 1 %
+    SC.encodings_pars_fragment = SC.encodings_pars_fragment
+      .replace(/vec4 sRGBToLinear\( in vec4 value \) \{[\s\S]*?\n\}/, 'vec4 sRGBToLinear( in vec4 value ) {\n\treturn vec4( value.rgb * ( value.rgb * ( value.rgb * 0.305306011 + 0.682171111 ) + 0.012522878 ), value.a );\n}')
+      .replace(/vec4 LinearTosRGB\( in vec4 value \) \{[\s\S]*?\n\}/, 'vec4 LinearTosRGB( in vec4 value ) {\n\tvec3 v = max( value.rgb, vec3( 0.0 ) ); vec3 s1 = sqrt( v ); vec3 s2 = sqrt( s1 ); vec3 s3 = sqrt( s2 );\n\treturn vec4( 0.662002687 * s1 + 0.684122060 * s2 - 0.323583601 * s3 - 0.0225411470 * v, value.a );\n}');
+    SC.color_vertex = SC.color_vertex + '\n#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )\n\tvColor.rgb = vColor.rgb * ( vColor.rgb * ( vColor.rgb * 0.305306011 + 0.682171111 ) + 0.012522878 );\n#endif';
+    SC.fog_fragment = SC.fog_fragment.replace('float fogFactor = 1.0 - exp( - fogDensity * fogDensity * fogDepth * fogDepth );', 'float fogFactor = 1.0 - exp( - fogDensity * fogDepth );');
+  })();
+  function lin(hex) { return new THREE.Color(hex).convertSRGBToLinear(); }
+  function smooth01(x) { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); }
+  // Avainkehykset auringon korkeuden (aste) mukaan: taivaan ja sumun värit (näyttöavaruus), auringon väri, auringon ja hemisfäärivalon voimakkuus (lineaarinen) ja pilvien värit
+  var SKY_KEYS = [
+    { e: -9, hor: '#161d30', zen: '#05070f', sun: '#ff9a4a', sunI: 0.00, hemiSky: '#2b3a5c', hemiGnd: '#1a1d22', hemiI: 0.10, cloudLit: '#2a3248', cloudShade: '#10141f' },
+    { e: -3, hor: '#4a4a66', zen: '#12203f', sun: '#ff8a3a', sunI: 0.03, hemiSky: '#47557a', hemiGnd: '#2b2724', hemiI: 0.20, cloudLit: '#7a6a7e', cloudShade: '#2a2c40' },
+    { e: 1.5, hor: '#f2b27a', zen: '#3b5f9a', sun: '#ff9b4a', sunI: 0.34, hemiSky: '#8fa3c8', hemiGnd: '#5a4a3c', hemiI: 0.34, cloudLit: '#ffc890', cloudShade: '#7a6878' },
+    { e: 8, hor: '#f1d4a8', zen: '#4a7fbd', sun: '#ffc27a', sunI: 0.62, hemiSky: '#a8c0de', hemiGnd: '#6a6048', hemiI: 0.42, cloudLit: '#ffe6c4', cloudShade: '#98a4b8' },
+    { e: 20, hor: '#e4e6dc', zen: '#3472bd', sun: '#ffe2b8', sunI: 0.86, hemiSky: '#b4cde8', hemiGnd: '#6e6b4c', hemiI: 0.48, cloudLit: '#fffaf0', cloudShade: '#a9b9cf' },
+    { e: 45, hor: '#dfe6e8', zen: '#2b6bba', sun: '#fff0d8', sunI: 0.98, hemiSky: '#b9d2ee', hemiGnd: '#6e6f4e', hemiI: 0.52, cloudLit: '#ffffff', cloudShade: '#b0c0d6' }
+  ];
+  var KEYC = null;
+  function keyColors() {
+    return SKY_KEYS.map(function (k) {
+    return { e: k.e, hor: new THREE.Color(k.hor), zen: new THREE.Color(k.zen), sun: new THREE.Color(k.sun), sunI: k.sunI, hemiSky: lin(k.hemiSky), hemiGnd: lin(k.hemiGnd), hemiI: k.hemiI, cloudLit: new THREE.Color(k.cloudLit), cloudShade: new THREE.Color(k.cloudShade) };
+    });
+  }
+  // Auringon korkeuden mukaan interpoloitu taivasmalli
+  function skyModel(e) {
+    if (!KEYC) KEYC = keyColors();
+    var i = 0; while (i < KEYC.length - 2 && e > KEYC[i + 1].e) i++;
+    var a = KEYC[i], b = KEYC[i + 1], f = Math.min(1, Math.max(0, (e - a.e) / (b.e - a.e)));
+    function mc(x, y) { return x.clone().lerp(y, f); }
+    return { hor: mc(a.hor, b.hor), zen: mc(a.zen, b.zen), sun: mc(a.sun, b.sun), sunI: a.sunI + (b.sunI - a.sunI) * f, hemiSky: mc(a.hemiSky, b.hemiSky), hemiGnd: mc(a.hemiGnd, b.hemiGnd), hemiI: a.hemiI + (b.hemiI - a.hemiI) * f, cloudLit: mc(a.cloudLit, b.cloudLit), cloudShade: mc(a.cloudShade, b.cloudShade) };
+  }
+
+  // Tileable arvokohina (fbm) pilvitekstuuriksi: 4 oktaavia, 256 x 256, punainen kanava. Generoidaan koodilla, ei tiedostoja.
+  function makeCloudTexture() {
+    var N = 256, cv = document.createElement('canvas'); cv.width = N; cv.height = N;
+    var g = cv.getContext('2d'), id = g.createImageData(N, N), d = id.data, seed = 1337;
+    function rnd() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }
+    var layers = [], oct = [4, 8, 16, 32], amp = [0.50, 0.27, 0.15, 0.08], o, i, j;
+    for (o = 0; o < oct.length; o++) { var L = new Float32Array(oct[o] * oct[o]); for (i = 0; i < L.length; i++) L[i] = rnd(); layers.push(L); }
+    function sm(t) { return t * t * (3 - 2 * t); }
+    for (j = 0; j < N; j++) for (i = 0; i < N; i++) {
+      var v = 0;
+      for (o = 0; o < oct.length; o++) {
+        var n = oct[o], fx = i / N * n, fy = j / N * n, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = sm(fx - x0), ty = sm(fy - y0), x1 = (x0 + 1) % n, y1 = (y0 + 1) % n, Lq = layers[o];
+        x0 %= n; y0 %= n;
+        v += amp[o] * ((Lq[y0 * n + x0] * (1 - tx) + Lq[y0 * n + x1] * tx) * (1 - ty) + (Lq[y1 * n + x0] * (1 - tx) + Lq[y1 * n + x1] * tx) * ty);
+      }
+      var c = Math.max(0, Math.min(255, Math.round(v * 255 / 1.0))), q = (j * N + i) * 4; d[q] = c; d[q + 1] = c; d[q + 2] = c; d[q + 3] = 255;
+    }
+    g.putImageData(id, 0, 0);
+    var tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+    return tex;
+  }
+
+  // Taivas: liukuväri horisontista (vaalea, hieman kellertävä) lakeen, auringon kehä ja hohto sekä kevyet pilvet (tekstuurikohina, hidas liike). Kaikki näyttöavaruudessa.
   var GLSL_SKY = [
     'uniform vec3 uHorizon; uniform vec3 uZenith; uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uSunGlow;',
-    'vec3 skyCol(vec3 d){',
+    'uniform sampler2D uCloudTex; uniform float uCloud; uniform float uTime; uniform vec3 uCloudLit; uniform vec3 uCloudShade;',
+    'float cloudCov(vec2 uv, float t){',
+    '  float n1 = texture2D(uCloudTex, uv + vec2(t * 0.0042, t * 0.0016)).r;',
+    '  float n2 = texture2D(uCloudTex, uv * 2.7 + vec2(0.37 - t * 0.0025, 0.11 + t * 0.0012)).r;',
+    '  return n1 * 0.72 + n2 * 0.28;',
+    '}',
+    'vec3 skyBase(vec3 d){',
     '  float e = clamp(d.y, 0.0, 1.0);',
-    '  vec3 c = mix(uHorizon, uZenith, pow(e, 0.42));',
+    '  vec3 c = mix(uHorizon, uZenith, mix(sqrt(e), sqrt(sqrt(e)), 0.16));',
     '  float s = max(dot(d, uSunDir), 0.0);',
-    '  c += uSunColor * (pow(s, 5.0) * 0.20 * uSunGlow + pow(s, 60.0) * 0.30 * uSunGlow + pow(s, 3000.0) * 6.0 * uSunGlow);',
+    '  float s2 = s * s, s3 = s2 * s, s6 = s3 * s3, s12 = s6 * s6, s24 = s12 * s12, s48 = s24 * s24, s70 = s48 * s12 * s6 * s3 * s;',
+    '  float s140 = s70 * s70, s280 = s140 * s140, s700 = s280 * s280 * s140;',
+    '  c += uSunColor * (s6 * 0.16 + s70 * 0.26 + s700 * 0.30) * uSunGlow;',
+    '  c = mix(c, uSunColor * 1.7, smoothstep(0.99992, 0.99997, s) * uSunGlow);',
+    '  return c;',
+    '}',
+    // Kevyt versio vesiheijastukseen: yksi pilvitekstuurihaku, ei auringon puoleista valaistusta (aaltoilevassa pinnassa yksityiskohta ei näy)
+    'vec3 skyColW(vec3 d){',
+    '  vec3 c = skyBase(d);',
+    '  if (uCloud > 0.0 && d.y > 0.012) {',
+    '    vec2 uv = d.xz / (d.y + 0.20) * 0.62;',
+    '    float cv = texture2D(uCloudTex, uv + vec2(uTime * 0.0042, uTime * 0.0016)).r * 0.72 + 0.14;',
+    '    float thr = 0.60 - 0.22 * uCloud;',
+    '    float a = smoothstep(thr, thr + 0.16, cv) * smoothstep(0.012, 0.16, d.y) * 0.92;',
+    '    c = mix(c, mix(uCloudShade, uCloudLit, 0.62), a);',
+    '  }',
+    '  return c;',
+    '}',
+    'vec3 skyCol(vec3 d){',
+    '  vec3 c = skyBase(d);',
+    '  if (uCloud > 0.0 && d.y > 0.012) {',
+    '    vec2 uv = d.xz / (d.y + 0.20) * 0.62;',
+    '    float t = uTime, cv = cloudCov(uv, t);',
+    '    float thr = 0.60 - 0.22 * uCloud;',
+    '    float a = smoothstep(thr, thr + 0.16, cv) * smoothstep(0.012, 0.16, d.y) * 0.92;',
+    '    vec2 toSun = uSunDir.xz * 0.045;',
+    '    float lit = clamp(0.62 + (cv - cloudCov(uv + toSun, t)) * 4.5, 0.0, 1.0);',
+    '    vec3 cc = mix(uCloudShade, uCloudLit, lit);',
+    '    float s = max(dot(d, uSunDir), 0.0);',
+    '    float q2 = s * s, q4 = q2 * q2, q8 = q4 * q4, q20 = q8 * q8 * q4;',
+    '    cc += uSunColor * q20 * 0.25 * uSunGlow * (1.0 - a * 0.4);',
+    '    c = mix(c, cc, a);',
+    '  }',
     '  return c;',
     '}'
   ].join('\n');
 
   function skyMaterial(U) {
     return new THREE.ShaderMaterial({
-      uniforms: U, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+      uniforms: U, side: THREE.BackSide, depthWrite: false, depthTest: true, fog: false, toneMapped: false,
       vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }',
-      fragmentShader: GLSL_SKY + '\nvarying vec3 vDir; void main(){ gl_FragColor = vec4(skyCol(normalize(vDir)), 1.0); }'
+      fragmentShader: GLSL_SKY + '\nvarying vec3 vDir; void main(){ vec3 c = skyCol(normalize(vDir)); c += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0; gl_FragColor = vec4(c, 1.0); }'
     });
   }
-  function waterMaterial(U) {
+  // Aaltojen normaalikartta: tileable fbm-korkeuskenttä (256 x 256, aallonpituudet 0,4 ... 3 m kun kuvio toistuu 12 m:n välein), josta lasketaan kaltevuudet (R ja G, 0,5 = tasainen).
+  function makeWaveTexture() {
+    var N = 256, cv = document.createElement('canvas'); cv.width = N; cv.height = N;
+    var g = cv.getContext('2d'), id = g.createImageData(N, N), d = id.data, seed = 90210, h = new Float32Array(N * N), o, i, j;
+    function rnd() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }
+    var oct = [4, 8, 16, 32], amp = [1, 0.62, 0.38, 0.22], L = [];
+    for (o = 0; o < oct.length; o++) { var A = new Float32Array(oct[o] * oct[o]); for (i = 0; i < A.length; i++) A[i] = rnd(); L.push(A); }
+    function sm(t) { return t * t * (3 - 2 * t); }
+    for (j = 0; j < N; j++) for (i = 0; i < N; i++) {
+      var v = 0;
+      for (o = 0; o < oct.length; o++) {
+        var n = oct[o], fx = i / N * n, fy = j / N * n, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = sm(fx - x0), ty = sm(fy - y0), x1 = (x0 + 1) % n, y1 = (y0 + 1) % n, Q = L[o];
+        x0 %= n; y0 %= n;
+        var q = (Q[y0 * n + x0] * (1 - tx) + Q[y0 * n + x1] * tx) * (1 - ty) + (Q[y1 * n + x0] * (1 - tx) + Q[y1 * n + x1] * tx) * ty;
+        v += amp[o] * (o >= 2 ? 1 - Math.abs(2 * q - 1) : q);   // pienemmät aallot teräväharjaisia
+      }
+      h[j * N + i] = v;
+    }
+    var mx = 1e-6, sx = new Float32Array(N * N), sy = new Float32Array(N * N);
+    for (j = 0; j < N; j++) for (i = 0; i < N; i++) {
+      var ip = (i + 1) % N, im = (i + N - 1) % N, jp = (j + 1) % N, jm = (j + N - 1) % N;
+      var gx = (h[j * N + ip] - h[j * N + im]) * 0.5, gy = (h[jp * N + i] - h[jm * N + i]) * 0.5;
+      sx[j * N + i] = gx; sy[j * N + i] = gy; mx = Math.max(mx, Math.abs(gx), Math.abs(gy));
+    }
+    var k = 0.5 / (mx * 0.45);   // keskimääräinen kaltevuus noin 0,2 ja huiput saturoituvat
+    for (j = 0; j < N * N; j++) {
+      var q2 = j * 4; d[q2] = Math.max(0, Math.min(255, Math.round(128 + sx[j] * k * 127))); d[q2 + 1] = Math.max(0, Math.min(255, Math.round(128 + sy[j] * k * 127))); d[q2 + 2] = 128; d[q2 + 3] = 255;
+    }
+    g.putImageData(id, 0, 0);
+    var tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.anisotropy = 4;
+    return tex;
+  }
+
+  // Vesi: Fresnel-heijastus taivaasta (ja pilvistä), auringon kimallus, kahden eri suuntiin liikkuvan kohinakerroksen normaalikartta (tuulen suunta ja voima uniformeina)
+  // ja kaukana sileä pinta. full = true käyttää normaalikarttaa ja pilviheijastusta, false (kevyt grafiikka) kolmea analyyttistä aaltoa. Rantaviivan vaalea ja läpikuultava vyöhyke
+  // piirretään maastosolmujen mukana (maasto.js, rantavesi), koska vesitaso on yksi suuri taso.
+  function waterMaterial(U, full) {
     return new THREE.ShaderMaterial({
-      uniforms: U, fog: false,
+      uniforms: U, fog: false, toneMapped: false, defines: full ? { WATER_TEX: 1 } : {},
       vertexShader: 'varying vec3 vW; varying float vDepth; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vDepth = -mv.z; gl_Position = projectionMatrix * mv; }',
       fragmentShader: GLSL_SKY + [
-        'uniform float uTime; uniform vec3 uDeep; uniform vec3 uFogColor; uniform float uFogDensity; uniform float uDay;',
+        'uniform vec3 uDeep; uniform vec3 uFogColor; uniform float uFogDensity; uniform float uDay;',
+        'uniform sampler2D uWaveTex; uniform vec2 uWindDir; uniform float uWaveAmp;',
         'varying vec3 vW; varying float vDepth;',
         'void main(){',
         '  vec2 p = vW.xz; float t = uTime; float dist = length(cameraPosition - vW);',
         '  float fade = 1.0 / (1.0 + dist * 0.004);',
         '  vec2 g = vec2(0.0);',
-        '  g += vec2(0.80, 0.60) * 0.022 * cos(dot(vec2(0.80, 0.60), p) * 0.55 + t * 1.10);',
-        '  g += vec2(-0.55, 0.83) * 0.016 * cos(dot(vec2(-0.55, 0.83), p) * 1.30 + t * 1.55);',
-        '  g += (vec2(0.30, -0.95) * 0.011 * cos(dot(vec2(0.30, -0.95), p) * 3.10 + t * 2.20)) * (0.2 + 0.8 * fade);',
-        '  g += (vec2(-0.95, -0.30) * 0.007 * cos(dot(vec2(-0.95, -0.30), p) * 7.30 + t * 3.10)) * fade * fade;',
+        '  g += vec2(0.80, 0.60) * 0.020 * cos(dot(vec2(0.80, 0.60), p) * 0.55 + t * 1.10);',
+        '  g += vec2(-0.55, 0.83) * 0.014 * cos(dot(vec2(-0.55, 0.83), p) * 1.30 + t * 1.55);',
+        '#ifdef WATER_TEX',
+        '  vec2 w1 = vec2(uWindDir.x * 0.940 - uWindDir.y * 0.342, uWindDir.x * 0.342 + uWindDir.y * 0.940);',
+        '  vec2 w2 = vec2(uWindDir.x * 0.866 + uWindDir.y * 0.500, -uWindDir.x * 0.500 + uWindDir.y * 0.866);',
+        '  if (dist < 5500.0) {',
+        '    vec2 s1 = texture2D(uWaveTex, p * 0.0833 - w1 * (t * 0.125)).rg * 2.0 - 1.0;',
+        '    vec2 s2 = texture2D(uWaveTex, p * 0.2900 - w2 * (t * 0.215) + vec2(0.31, 0.57)).rg * 2.0 - 1.0;',
+        '    g += (s1 * 0.050 + s2 * 0.032 * (0.25 + 0.75 * fade)) * uWaveAmp * (0.15 + 0.85 * fade) * (1.0 - smoothstep(1500.0, 5500.0, dist));',
+        '  }',
+        '#else',
+        '  g += (vec2(0.30, -0.95) * 0.011 * cos(dot(vec2(0.30, -0.95), p) * 3.10 + t * 2.20)) * (0.2 + 0.8 * fade) * uWaveAmp;',
+        '  g += (vec2(-0.95, -0.30) * 0.007 * cos(dot(vec2(-0.95, -0.30), p) * 7.30 + t * 3.10)) * fade * fade * uWaveAmp;',
+        '#endif',
         '  vec3 n = normalize(vec3(-g.x, 1.0, -g.y));',
         '  vec3 v = normalize(cameraPosition - vW);',
         '  float nv = max(dot(n, v), 0.0);',
-        '  float fr = 0.03 + 0.97 * pow(1.0 - nv, 5.0);',
+        '  float om = 1.0 - nv, om2 = om * om;',
+        '  float fr = 0.02 + 0.98 * om2 * om2 * om;',
         '  vec3 r = reflect(-v, n); r.y = abs(r.y);',
-        '  vec3 refl = skyCol(r);',
+        '  vec3 refl = skyColW(r);',
         '  vec3 body = uDeep * (0.25 + 0.75 * uDay) + uZenith * 0.10 * uDay;',
-        '  vec3 c = mix(body, refl, clamp(fr * 0.95, 0.0, 1.0));',
-        '  float f = 1.0 - exp(-pow(vDepth * uFogDensity, 2.0));',
+        '  vec3 c = mix(body, refl, clamp(fr, 0.0, 1.0));',
+        '  vec3 h = normalize(uSunDir + v);',
+        '  float nh = max(dot(n, h), 0.0);',
+        '  float glit = 0.0;',
+        '  if (nh > 0.9) {',
+        '    float n2 = nh * nh, n4 = n2 * n2, n8 = n4 * n4, n16 = n8 * n8, n32 = n16 * n16, n64 = n32 * n32;',
+        '    float n90 = n64 * n16 * n8 * n2, n180 = n90 * n90, n360 = n180 * n180, n630 = n360 * n180 * n90, n650 = n630 * n16 * n4;',
+        '    glit = n650 * 2.2 + n90 * 0.18;',
+        '  }',
+        '  c += uSunColor * glit * uSunGlow * smoothstep(0.0, 0.08, uSunDir.y) * (0.35 + 0.65 * smoothstep(0.0, 0.5, fr * 4.0)) * (1.0 - smoothstep(2000.0, 6000.0, dist));',
+        '  float f = 1.0 - exp(-vDepth * uFogDensity);',
         '  c = mix(c, uFogColor, clamp(f, 0.0, 1.0));',
         '  gl_FragColor = vec4(c, 1.0);',
         '}'
@@ -104,6 +268,8 @@
     container.appendChild(veil);
     var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.preserve });
     renderer.setClearColor(0xcfdce8, 1);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = S.exposure;
     renderer.info.autoReset = false;
     var scene = new THREE.Scene();
     var camera = new THREE.PerspectiveCamera(60, 1, 0.25, 40000);
@@ -112,16 +278,36 @@
     // ---- valot, taivas, vesi ----
     var hemi = new THREE.HemisphereLight(0xdfeaf5, 0x6f7a5c, 0.62); scene.add(hemi);
     var sunL = new THREE.DirectionalLight(0xfff2d8, 0.62); scene.add(sunL); scene.add(sunL.target);
+    var cloudTex = makeCloudTexture();
     var U = {
       uHorizon: { value: new THREE.Color('#cfe0ee') }, uZenith: { value: new THREE.Color('#4a86c7') },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color('#fff2d8') }, uSunGlow: { value: 1 },
-      uTime: { value: 0 }, uDeep: { value: new THREE.Color('#1c4c66') }, uFogColor: { value: new THREE.Color('#cfe0ee') }, uFogDensity: { value: S.fogDensity }, uDay: { value: 1 }
+      uTime: { value: 0 }, uDeep: { value: new THREE.Color('#1c4c66') }, uFogColor: { value: new THREE.Color('#cfe0ee') }, uFogDensity: { value: S.fogDensity }, uDay: { value: 1 },
+      uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') }
     };
     var sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), skyMaterial(U));
-    sky.renderOrder = -10; sky.frustumCulled = false; scene.add(sky);
-    var water = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 1, 1), waterMaterial(U));
+    sky.renderOrder = 100; sky.frustumCulled = false; scene.add(sky);
+    var waterFull = waterMaterial(U, true), waterLight = waterMaterial(U, false);
+    var water = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 1, 1), waterFull);
     water.rotation.x = -Math.PI / 2; water.frustumCulled = false; water.renderOrder = -5; scene.add(water);
     scene.fog = new THREE.FogExp2(0xcfe0ee, S.fogDensity);
+    // tuuli: aallot etenevät myötätuuleen, amplitudi kasvaa tuulen voiman mukana (3 m/s = 1)
+    function setWind(fromDeg, speed) {
+      if (fromDeg != null) S.windFromDeg = fromDeg; if (speed != null) S.windSpeed = speed;
+      var gdir = P.trueToGrid(S.windFromDeg + 180, 0, 0) * RAD;
+      U.uWindDir.value.set(Math.sin(gdir), -Math.cos(gdir));
+      U.uWaveAmp.value = Math.min(3, Math.max(0.25, S.windSpeed / 3));
+    }
+    setWind();
+    // grafiikan laatu (vaihe 3j): 'full' tai 'light'. Kevyt: ei pilviä, vesi ilman normaalikarttaa
+    var quality = 'full';
+    function setQuality(q) {
+      quality = q === 'light' ? 'light' : 'full';
+      var full = quality === 'full';
+      water.material = full ? waterFull : waterLight;
+      U.uCloud.value = full ? S.cloudCover : 0;
+      if (terrain && terrain.setQuality) terrain.setQuality(quality);
+    }
 
     // ---- maasto ----
     var terrain = root.Maasto.create(scene, { buildings: opts.buildings });
@@ -140,6 +326,8 @@
         if (m.name) l.name = m.name; o.material = l; m.dispose();
       }
     });
+    // kankaalle piirretyt tekstuurit (rungon tekstit) ovat sRGB-arvoja
+    runko.boat.traverse(function (o) { if (o.isMesh && o.material && o.material.map && o.material.map.isCanvasTexture) { o.material.map.encoding = THREE.sRGBEncoding; o.material.map.needsUpdate = true; } });
     var rig = new THREE.Group(); rig.rotation.order = 'YZX'; scene.add(rig);
     runko.boat.position.set(-S.pivotX, -S.waterlineZ, 0); rig.add(runko.boat);
     // sisätilan täytevalo: ohjaamon punainen pinta saa hieman omaa kirkkautta, koska sisätilassa ei ole erillistä valaistusta
@@ -250,24 +438,21 @@
       simMs = ms;
       var s = sun = sunPosition(ms, 61.5, 23.77);
       var e = s.elevDeg;
-      var day = Math.min(1, Math.max(0, (e + 2) / 14));          // 0 yöllä ja 1 yli 12 asteen korkeudella
+      var day = smooth01((e + 3) / 14);          // 0 yöllä ja 1 yli 11 asteen korkeudella
       var gridAz = P.trueToGrid(s.azDeg, 0, 0);
       var a = gridAz * RAD, ce = Math.cos(Math.max(e, -5) * RAD);
       sunDirW.set(Math.sin(a) * ce, Math.sin(Math.max(e, -5) * RAD), -Math.cos(a) * ce).normalize();
       U.uSunDir.value.copy(sunDirW);
-      // värit auringon korkeuden mukaan (matalalla aurinko punertaa)
-      var warm = Math.max(0, 1 - e / 22);
-      var hor = new THREE.Color('#cfe0ee').lerp(new THREE.Color('#f0cfa5'), Math.min(1, warm * 0.8)).multiplyScalar(0.25 + 0.75 * day);
-      var zen = new THREE.Color('#3f78b8').lerp(new THREE.Color('#5d78a8'), Math.min(1, warm * 0.5)).multiplyScalar(0.18 + 0.82 * day);
-      U.uHorizon.value.copy(hor); U.uZenith.value.copy(zen); U.uFogColor.value.copy(hor);
-      U.uDay.value = day; U.uSunGlow.value = Math.min(1, Math.max(0, (e + 1.5) / 6));
-      var sc = new THREE.Color('#fff4de').lerp(new THREE.Color('#ffb070'), Math.min(1, warm));
-      U.uSunColor.value.copy(sc); sunL.color.copy(sc);
-      sunL.intensity = 0.15 + 0.55 * day * Math.min(1, Math.max(0, e / 12 + 0.3));
-      hemi.intensity = 0.28 + 0.38 * day;
-      hemi.color.copy(zen).lerp(new THREE.Color('#ffffff'), 0.65);
-      scene.fog.color.copy(hor);
-      renderer.setClearColor(hor, 1);
+      // taivas, sumu ja valot auringon korkeuden mukaan (keskipäivällä hieman lämmin valkoinen, aamulla ja illalla kullankeltainen, yöllä sininen hämärä)
+      var m = skyModel(e);
+      U.uHorizon.value.copy(m.hor); U.uZenith.value.copy(m.zen); U.uFogColor.value.copy(m.hor);
+      U.uDay.value = day; U.uSunGlow.value = smooth01((e + 1.5) / 6);
+      U.uSunColor.value.copy(m.sun); U.uCloudLit.value.copy(m.cloudLit); U.uCloudShade.value.copy(m.cloudShade);
+      sunL.color.copy(lin('#' + m.sun.getHexString()));
+      sunL.intensity = m.sunI * smooth01((e + 2) / 6);
+      hemi.color.copy(m.hemiSky); hemi.groundColor.copy(m.hemiGnd); hemi.intensity = m.hemiI;
+      scene.fog.color.copy(m.hor);
+      renderer.setClearColor(m.hor, 1);
     }
     function sunScreen() {
       // auringon paikka kuvassa ja katseen suunta: päivän sumennus vastavalossa
@@ -354,6 +539,7 @@
       rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; },
       setFree: setFree, clearFree: clearFree,
       setCameraPitch: function (d) { camPitchDeg = d; }, isSeated: function () { return seated; },
+      setWind: setWind, getWind: function () { return { fromDeg: S.windFromDeg, speed: S.windSpeed }; }, setQuality: setQuality, getQuality: function () { return quality; },
       setBinoculars: setBinoculars, isBino: function () { return bino.on; }, setBinoPitch: setBinoPitch, getBinoPitch: function () { return bino.pitch; },
       baseHfov: baseHfov, gazeSens: function () { return bino.on ? 1 / S.kiikariSuurennus : 1; }, binoState: function () { return { on: bino.on, gaze0: bino.gaze0, pitch: bino.pitch, shakeYaw: bino.shakeYaw, shakePitch: bino.shakePitch }; }
     };
