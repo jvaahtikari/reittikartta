@@ -1,5 +1,5 @@
 """Vaihe 3j: ennen- ja jälkeen-kuvat kolmesta katselupisteestä (A, B, C) samalla sivulla, yksi selain kerrallaan.
-Käyttö: python3 kuva3j_pw.py <sim-osoite> <tunniste: ennen|jalkeen|muu> <laite: deck|pixel> <pisteet esim. A,B,C> [aika=...] [pb=0.8] [ulos=hakemisto] [nimi=3j] [laatu=full|light] [vaihe=3|4|5|9]
+Käyttö: python3 kuva3j_pw.py <sim-osoite> <tunniste: ennen|jalkeen|muu> <laite: deck|pixel> <pisteet esim. A,B,C> [aika=...] [pb=0.8] [ulos=hakemisto] [nimi=3j] [laatu=full|light] [vaihe=3|4|5|9] [pre=3j_final_ suf=_aamu]
 Pisteet (TM35FIN, ruutusuunta lasketaan tosisuunnasta): A Naistenlahden satama (tosisuunta 112, käyttäjän kuva), B Mustalahden edusta kohti kaupunkia
 (Näsinneula ja Tampellan piippu näkyvissä), C Siilinkarin ohitus 150 m lännestä kohti itärantaa.
 Aika: ISO-aika UTC:nä (oletus 2026-07-15T09:00:00Z eli klo 12.00 Helsingin aikaa), aamu 2026-07-15T04:00:00Z (klo 7.00), ilta 2026-07-15T16:30:00Z (klo 19.30).
@@ -49,12 +49,14 @@ with sync_playwright() as pw:
         p.evaluate('__view.setSimTime(%d)' % int(__import__('datetime').datetime.fromisoformat(T0.replace('Z', '+00:00')).timestamp() * 1000))
         p.evaluate('__view.aids.sync(__sim.S.x, __sim.S.y, true)')
         p.wait_for_timeout(4000)
-        name = '%s_%s_%s%s' % (NIMI, k, tag, '_pixel7' if dev == 'pixel' else '')
+        if kw.get('pre'): name = '%s%s%s%s' % (kw['pre'], k, kw.get('suf', ''), '_pixel7' if dev == 'pixel' else '')   # 3j-2: nimi = pre + piste + suf (+ _pixel7)
+        else: name = '%s_%s_%s%s' % (NIMI, k, tag, '_pixel7' if dev == 'pixel' else '')
         p.screenshot(path=os.path.join(ULOS, name + '.png'), timeout=300000)
-        if dev != 'pixel':
-            el = p.query_selector('#v3')
-            if el: el.screenshot(path=os.path.join(ULOS, name + '_3d.png'), timeout=300000)
-        info = p.evaluate('JSON.stringify({r:__view.rendererStats(), levels:__view.terrain.levels(), t:__view.terrain.info().trees})')
+        el = p.query_selector('#v3')
+        if el:
+            try: el.screenshot(path=os.path.join(ULOS, name + '_3d.png'), timeout=300000)
+            except Exception as e_: print('3d-kuva ei onnistunut', str(e_)[:80])
+        info = p.evaluate('JSON.stringify({r:__view.rendererStats(), levels:__view.terrain.levels(), t:__view.terrain.info().trees, st:__view.terrain.info().stats})')
         print(name, info, flush=True)
     print('virheet', errs[:6])
     b.close()

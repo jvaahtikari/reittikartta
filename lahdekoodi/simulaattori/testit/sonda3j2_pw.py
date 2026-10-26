@@ -42,6 +42,35 @@ with sync_playwright() as pw:
       return JSON.stringify(out);
     }''', xy)
     for row in json.loads(r): print(json.dumps(row, ensure_ascii=False), flush=True)
+    if kw.get('dump'):
+        wx, wz, rr = [float(v) for v in kw['dump'].split(',')]
+        d = p.evaluate('''([wx, wz, rr]) => {
+          const out = {verts: [], recs: [], nodes: []};
+          __view.terrain.nodes.forEach(n => {
+            if (n.state !== 'built' || !n.mesh) return;
+            const m = n.mesh, pa = m.geometry.attributes.position, N1 = n.n1, CELLS = n.cells, sh = n.shell, sp = sh ? sh.geometry.attributes.position : null;
+            let hit = false;
+            for (let k = 0; k < N1 * N1; k++) {
+              const x = pa.getX(k) + m.position.x, z = pa.getZ(k) + m.position.z;
+              if (Math.hypot(x - wx, z - wz) > rr) continue; hit = true;
+              out.verts.push([n.z, n.x, n.y, k % N1, Math.floor(k / N1), Math.round(x), Math.round(z), +pa.getY(k).toFixed(2), sp ? +(sp.getY(k) - pa.getY(k)).toFixed(2) : null, n.ggrid ? +(n.ggrid[k] - 95.5).toFixed(2) : null]);
+            }
+            if (hit) {
+              out.nodes.push([n.z, n.x, n.y, n.fixStat ? JSON.stringify(n.fixStat) : '', n.recs ? n.recs.length / 10 : 0, n.mode]);
+              if (n.recs) for (let q = 0; q < n.recs.length; q += 10) {
+                const x = n.recs[q] + m.position.x, z = n.recs[q + 2] + m.position.z;
+                if (Math.hypot(x - wx, z - wz) < rr) out.recs.push([n.z, Math.round(x), Math.round(z), +n.recs[q + 1].toFixed(2), +n.recs[q + 3].toFixed(1), +n.recs[q + 4].toFixed(1), n.recs[q + 9]]);
+              }
+            }
+          });
+          return JSON.stringify(out);
+        }''', [wx, wz, rr])
+        o = json.loads(d)
+        print('solmut', o['nodes'])
+        print('kärjet [z,x,y,i,j,wx,wz,maaY,kuoriLisäY,DEM-LAKE]')
+        for v in sorted(o['verts'], key=lambda v: (v[6], v[5])): print(v)
+        print('puut [z,wx,wz,y,leveys,korkeus,laji]')
+        for r_ in o['recs']: print(r_)
     if kw.get('kuva'):
         el = p.query_selector('#v3'); el.screenshot(path=kw['kuva'], timeout=300000)
     print('virheet', errs[:4]); b.close()

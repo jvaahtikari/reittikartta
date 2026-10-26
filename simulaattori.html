@@ -6457,7 +6457,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   'use strict';
   var THREE = root.THREE;
   var P = root.Paikka, A = root.Aineisto;
-  var CELLS_Z = { 12: 24, 13: 24, 14: 24, 15: 24, 16: 32 }, TEXN = 256, CANTEX = 128;   // verkon ruutujen määrä sivulla solmun zoomin mukaan
+  var CELLS_Z = { 12: 40, 13: 32, 14: 28, 15: 28, 16: 32 }, TEXN = 256, CANTEX = 128;   // verkon ruutujen määrä sivulla solmun zoomin mukaan
   var Z_MIN = 12, Z_MAX = 16;
   var SPLIT = { 12: 4000, 13: 2000, 14: 900, 15: 380 };   // solmu jaetaan, jos sen lähin etäisyys alukseen on alle tämän (m)
   var MAX_DIST = 12000;                                     // kauempana olevia ruutuja ei piirretä (kaukomaasto näkyy siluettina sumussa)
@@ -6810,7 +6810,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var group = new THREE.Group(); group.name = 'maasto'; scene.add(group);
     var nodes = new Map(), roots = [], jobs = [], queue = [], shown = [];
     var boat = { x: 0, y: 0 }, gate = false, flatten = [], dirty = true, lastSel = { x: 1e9, y: 1e9 };
-    var stats = { built: 0, empty: 0, builds: 0, buildMs: 0, maxJobMs: 0, jobsDone: 0 };
+    var stats = { built: 0, empty: 0, builds: 0, buildMs: 0, maxJobMs: 0, jobsDone: 0, rejWater: 0, rejBuilt: 0, rejRoad: 0 };
     var wireframe = false;
     var useBuildings = opts.buildings !== false;
     var stage = typeof root.__maastoStage === 'number' ? root.__maastoStage : 9;   // kuvausvaiheet: 3 maasto ja latvuskuori, 4 puut, 5 rakennukset, 9 kaikki
@@ -6973,10 +6973,12 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
           else if (g[m0] <= WATERMAX && lvk) { fixN++; if (g[m0] < LAKE - 0.2 && fixS.length < 6) fixS.push([Math.round(E[m0]), Math.round(Nn[m0]), +g[m0].toFixed(2)]); g[m0] = LAKE + 0.4; }
         }
       }
-      if (bv) for (var zk = 0; zk < bv.length; zk++) if (bv[zk]) {   // latvus pois myös rakennetun rannan viereisiltä pisteiltä
+      var bz = null;   // rakennetun rannan vyöhyke (rakennetut pisteet ja niiden naapurit): ei puita eikä latvuskuorta
+      if (bv) { bz = new Uint8Array(N1 * N1); for (var zk = 0; zk < bv.length; zk++) if (bv[zk]) {   // latvus pois myös rakennetun rannan viereisiltä pisteiltä
         var zi = zk % N1, zj = (zk - zi) / N1;
-        for (var zb = -1; zb <= 1; zb++) for (var za = -1; za <= 1; za++) { var zi2 = zi + za, zj2 = zj + zb; if (zi2 >= 0 && zj2 >= 0 && zi2 < N1 && zj2 < N1) tht[zj2 * N1 + zi2] = 0; }
-      }
+        for (var zb = -1; zb <= 1; zb++) for (var za = -1; za <= 1; za++) { var zi2 = zi + za, zj2 = zj + zb; if (zi2 >= 0 && zj2 >= 0 && zi2 < N1 && zj2 < N1) { tht[zj2 * N1 + zi2] = 0; bz[zj2 * N1 + zi2] = 1; } }
+      } }
+      var roadPx = (z >= 14 && lyr) ? roadMask(n, lyr.tie) : null;
       n.fixStat = { land: fixN, built: builtN, landS: fixS, builtS: builtS };
       for (var m = 0; m < g.length; m++) {
         if (g[m] <= WATERMAX) { gm[m] = WATERFLOOR; tht[m] = 0; } else { gm[m] = g[m]; anyLand = true; }
@@ -7040,7 +7042,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       geo.computeBoundingSphere(); geo.computeBoundingBox();
       yield;
       // --- peiteteksturi ---
-      var cctx = { n: n, tree: tree, oxt: oxt, oyt: oyt, sct: sct, g: g, ny: NR.ny, isl: isl, CELLS: CELLS, N1: N1, cM: cM, built: builtPx, gm: gm };
+      var cctx = { land: landPx, built: builtPx, n: n, tree: tree, oxt: oxt, oyt: oyt, sct: sct, g: g, ny: NR.ny, isl: isl, CELLS: CELLS, N1: N1, cM: cM, built: builtPx, gm: gm };
       finishCover(cg, cctx);
       paintRoads(cg, lyr);
       var tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 2; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
@@ -7052,7 +7054,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       yield;
       // --- latvuskuori ---
       if (tree && z >= 13) {
-        var sh = buildShell(n, { pos: pos, uv: uv, shv: shv, tree: tree, oxt: oxt, oyt: oyt, sct: sct, CELLS: CELLS, N1: N1, gm: gm, E: E, Nn: Nn, g: g });
+        var sh = buildShell(n, { land: landPx, built: builtPx, pos: pos, uv: uv, shv: shv, tree: tree, oxt: oxt, oyt: oyt, sct: sct, CELLS: CELLS, N1: N1, gm: gm, E: E, Nn: Nn, g: g });
         if (sh) n.shell = sh;
       }
       yield;
@@ -7060,7 +7062,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       if (tree && z >= 14 && stage >= 4) {
         var lx = new Float32Array(N1 * N1), lz = new Float32Array(N1 * N1), capMask = new Uint8Array(N1 * N1);
         for (var kc = 0; kc < lx.length; kc++) { lx[kc] = E[kc] - n.e; lz[kc] = -(Nn[kc] - n.n); capMask[kc] = isl[kc] && !(isl[kc] & 4) ? 1 : 0; }
-        n.recs = placeTrees(n, { tree: tree, oxt: oxt, oyt: oyt, sct: sct, tht: tht, gm: gm, lx: lx, lz: lz, avoid: avoid, corr: corr, flat: flatHere, capMask: capMask, isl: isl, ny: NR.ny, park: parkCov });
+        n.recs = placeTrees(n, { land: landPx, built: builtPx, bz: bz, road: roadPx, tree: tree, oxt: oxt, oyt: oyt, sct: sct, tht: tht, gm: gm, lx: lx, lz: lz, avoid: avoid, corr: corr, flat: flatHere, capMask: capMask, isl: isl, ny: NR.ny, park: parkCov });
         n.tmeshes = makeTreeMeshes(n);
       }
       yield;
@@ -7188,10 +7190,31 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
             }
           }
           var longM = Math.hypot(maxx - minx + 1, maxy - miny + 1) * texM;
-          if (longM >= 50 && cnt * pm2 >= 300) for (var mi = 0; mi < members.length; mi++) { if (!built[members[mi]]) { built[members[mi]] = 1; nb++; } }
+          // Kaista, joka jatkuu naapuriruutuun (aallonmurtajan tai laiturin pätkä ruudun reunalla), voi olla ruudun sisällä lyhyt. Hyväksytään, kun se osuu ruudun reunaan korkeintaan
+          // yhden kaistan levyisenä (reunakosketus enintään 2 x avaussäde pikseliä), ettei suuren maa-alueen rantasiivu ruudun kulmassa tulkita rakennetuksi.
+          var edgeTouch = 0;
+          for (var em = 0; em < members.length; em++) { var ex = members[em] % W, ey = (members[em] - ex) / W; if (ex === 0 || ey === 0 || ex === W - 1 || ey === W - 1) edgeTouch++; }
+          var contEdge = edgeTouch > 0 && edgeTouch <= 2 * rr + 4 && cnt >= 3;
+          if ((longM >= 50 && cnt * pm2 >= 300) || contEdge) for (var mi = 0; mi < members.length; mi++) { if (!built[members[mi]]) { built[members[mi]] = 1; nb++; } }
         }
       }
       return nb ? built : null;
+    }
+    // Tiemaski (tien keskilinja 3 m molemmin puolin) puiden hylkäämiseen teiltä
+    function roadMask(n, tie) {
+      if (!tie || !tie.features || !tie.features.length) return null;
+      var s2 = TEXN / tie.extent, texM = n.size / TEXN, cv3 = document.createElement('canvas'); cv3.width = TEXN; cv3.height = TEXN;
+      var g3 = cv3.getContext('2d', { willReadFrequently: true }), any = false;
+      g3.strokeStyle = '#fff'; g3.lineCap = 'round'; g3.lineJoin = 'round'; g3.lineWidth = Math.max(1, 6 / texM); g3.beginPath();
+      for (var a = 0; a < tie.features.length; a++) {
+        var tf = tie.features[a]; if (tf.type !== 2) continue;
+        for (var p = 0; p < tf.parts.length; p++) { var ln = tf.parts[p]; g3.moveTo(ln[0] * s2, ln[1] * s2); for (var k = 2; k < ln.length; k += 2) g3.lineTo(ln[k] * s2, ln[k + 1] * s2); any = true; }
+      }
+      if (!any) return null;
+      g3.stroke();
+      var d3 = g3.getImageData(0, 0, TEXN, TEXN).data, m = new Uint8Array(TEXN * TEXN);
+      for (var i = 0; i < m.length; i++) if (d3[i * 4 + 3] > 100) m[i] = 1;
+      return m;
     }
     function paintRoads(g, lyr) {
       var tie = lyr && lyr.tie; if (!tie) return;
@@ -7398,7 +7421,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
           var uu = (tx + 0.5) / CANTEX, px = Math.min(tree.w - 1, Math.floor((c.oxt + uu) / c.sct * tree.w)), q = (py * tree.w + px) * 4;
           var fx = uu * CELLS, ii = Math.min(CELLS - 1, Math.floor(fx)), bx = fx - ii, kq = jj * N1 + ii;
           var sb = (shv[kq] * (1 - bx) + shv[kq + 1] * bx) * (1 - by) + (shv[kq + N1] * (1 - bx) + shv[kq + N1 + 1] * bx) * by;
-          var present = td[q + 3] > 0 && td[q + 2] >= CANOPY_MIN && sb >= 1.0, wx = (n.x + uu) * n.size;
+          var tpx = Math.min(TEXN - 1, Math.floor(vv * TEXN)) * TEXN + Math.min(TEXN - 1, Math.floor(uu * TEXN));
+          var present = td[q + 3] > 0 && td[q + 2] >= CANOPY_MIN && sb >= 1.0 && !(c.built && c.built[tpx]) && !(c.land && !c.land[tpx] && !NOFIX()), wx = (n.x + uu) * n.size;
           var col = crownColor(wx, wy, leafAt(td, q), vnoise(wx / 3, wy / 3, 53) * 0.6 + ihash(tx, ty, n.x + n.y * 7) * 0.4), o = ((CANTEX - 1 - ty) * CANTEX + tx) * 4;
           ct[o] = Math.min(255, col[0]); ct[o + 1] = Math.min(255, col[1]); ct[o + 2] = Math.min(255, col[2]); ct[o + 3] = present ? 255 : 0;
         }
@@ -7418,7 +7442,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     // Tulos: Float32Array, 10 lukua per puu: x, y, z (paikallinen), leveys, korkeus, kierto, väri r, g, b, laji (0 kuusi, 1 mänty, 2 koivu, 3 pensas).
     function placeTrees(n, c) {
       var z = n.z, step = STEP_M[z], M = Math.max(8, Math.floor(n.size / step)), CELLS = n.cells, N1 = n.n1, tree = c.tree, td = tree.data, gm = c.gm;
-      var rnd = rng(hash32(z, n.x, n.y) ^ 0x2545f491), out = [], bill = z < 16, avoid = c.avoid, corr = c.corr, flat = c.flat, i, j;
+      var rejW = 0, rejB = 0, rejR = 0, rnd = rng(hash32(z, n.x, n.y) ^ 0x2545f491), out = [], bill = z < 16, avoid = c.avoid, corr = c.corr, flat = c.flat, i, j;
       for (var jj = 0; jj < M; jj++) for (var ii = 0; ii < M; ii++) {
         var u = (ii + rnd()) / M, v = (jj + rnd()) / M, r1 = rnd(), r2 = rnd(), r3 = rnd(), r4 = rnd(), r5 = rnd(), r6 = rnd(), r7 = rnd();
         var px = Math.min(tree.w - 1, Math.floor((c.oxt + u) / c.sct * tree.w)), py = Math.min(tree.h - 1, Math.floor((c.oyt + v) / c.sct * tree.h)), q = (py * tree.w + px) * 4;
@@ -7433,7 +7457,13 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         var a = fi - i, b = fj - j, k00 = j * N1 + i, k10 = k00 + 1, k01 = k00 + N1, k11 = k01 + 1, gy;
         if (a + b <= 1) gy = gm[k00] + a * (gm[k10] - gm[k00]) + b * (gm[k01] - gm[k00]);
         else gy = gm[k11] + (1 - a) * (gm[k01] - gm[k11]) + (1 - b) * (gm[k10] - gm[k11]);
-        gy -= LAKE; if (gy < 0.3) continue;
+        gy -= LAKE;
+        var tpx = Math.min(TEXN - 1, Math.floor(v * TEXN)) * TEXN + Math.min(TEXN - 1, Math.floor(u * TEXN));
+        if (!NOFIX()) {   // hylkäystilasto: vesialue (matala ruudukon korkeus tai vesipikseli), rakennettu ranta (laituri, aallonmurtaja, kapea kaista) ja tie
+          if (gy < 0.3 || (c.land && !c.land[tpx])) { rejW++; continue; }
+          if ((c.built && c.built[tpx]) || (c.bz && (c.bz[k00] | c.bz[k10] | c.bz[k01] | c.bz[k11]))) { rejB++; continue; }
+          if (c.road && c.road[tpx]) { rejR++; continue; }
+        } else if (gy < 0.3) continue;
         var th = (c.tht[k00] * (1 - a) + c.tht[k10] * a) * (1 - b) + (c.tht[k01] * (1 - a) + c.tht[k11] * a) * b; if (th <= 0 && !park) continue;
         var lx = (c.lx[k00] * (1 - a) + c.lx[k10] * a) * (1 - b) + (c.lx[k01] * (1 - a) + c.lx[k11] * a) * b, lz = (c.lz[k00] * (1 - a) + c.lz[k10] * a) * (1 - b) + (c.lz[k01] * (1 - a) + c.lz[k11] * a) * b;
         var skip = false, hraw = park ? 6 + 8 * r2 : (td[q] * 256 + td[q + 1]) * 0.1, mk = c.isl[k00] | c.isl[k10] | c.isl[k01] | c.isl[k11], kq;
@@ -7459,6 +7489,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         var shade = 0.86 + 0.28 * r6, tone = 1 + 0.2 * (r7 - 0.5);
         out.push(lx, gy - 0.25, lz, w, h, rnd() * 6.283, shade * tone, shade, shade * (2 - tone), kind);
       }
+      n.rejStat = { water: rejW, built: rejB, road: rejR }; stats.rejWater += rejW; stats.rejBuilt += rejB; stats.rejRoad += rejR;
       return Float32Array.from(out);
     }
     // Tallennetuista puista meshit: z16-solmuilla yksittäiset puut (täysi laatu) tai billboardit (kevyt laatu ja z15/z14-solmut)
