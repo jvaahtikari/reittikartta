@@ -60,7 +60,7 @@ function nopeusKoe(kn, sek, alku) {
   }
   const alas = nopeusKoe(10, 90, 28);
   ehto('liu\'usta 28 kn nopeuskäsky 10 kn: asettuu uppoumanopeuteen', Math.abs(alas.s.v / KN - 10) < 1.2, (alas.s.v / KN).toFixed(1) + ' kn');
-  const peru = nopeusKoe(-4, 60); ehto('peruutus hidas: nopeus noin -4 kn', Math.abs(peru.s.v / KN + 4) < 0.8, (peru.s.v / KN).toFixed(1) + ' kn');
+  const peru = nopeusKoe(-4, 60); ehto('peruutus 4 kn: nopeus noin -4 kn', Math.abs(peru.s.v / KN + 4) < 0.3, (peru.s.v / KN).toFixed(2) + ' kn');
   // nopeuskäsky nollaan pysäyttää
   const st = nopeusKoe(0, 90, 20); ehto('nopeuskäsky 0 pysäyttää 90 s:ssa', st.s.v / KN < 0.3, (st.s.v / KN).toFixed(2) + ' kn');
 }
@@ -73,8 +73,9 @@ function nopeusKoe(kn, sek, alku) {
   L.stepHeadingOrder(u, 1); L.stepHeadingOrder(u, -1, true); check('suuntakäsky +5 ja -10 asteen askel', u.orderHdg, 118, 0);
   L.toggleGentle(u); L.orderHeading(u, 100); ehto('loiva-merkintä kuluu suuntakäskyyn', !u.gentleNext && u.cmdLog[u.cmdLog.length - 1].gentle === true);
   L.stepSpeedOrder(u, 1); L.stepSpeedOrder(u, 1); check('nopeuskäsky kaksi painallusta ylös', u.orderSpeedKn, 4, 0);
-  L.stepSpeedOrder(u, -1); L.stepSpeedOrder(u, -1); L.stepSpeedOrder(u, -1); check('nopeuskäsky ei mene alle nollan', u.orderSpeedKn, 0, 0);
-  ehto('tekstit', L.headingText(47) === 'Suunta 047' && L.headingText(5) === 'Suunta 005' && L.speedText(12) === 'Nopeus 12 kn' && L.speedText(-4) === 'Peruutus hidas', L.headingText(47) + ' / ' + L.speedText(12));
+  L.stepSpeedOrder(u, -1); L.stepSpeedOrder(u, -1); L.stepSpeedOrder(u, -1); check('nopeuskäsky kolme painallusta alas 4 kn:sta (vaihe 3k: askel toimii nollan alapuolella)', u.orderSpeedKn, -2, 0);
+  L.stepSpeedOrder(u, -1); L.stepSpeedOrder(u, -1); check('nopeuskäsky ei mene alle -4 kn', u.orderSpeedKn, -4, 0);
+  ehto('tekstit', L.headingText(47) === 'Suunta 047' && L.headingText(5) === 'Suunta 005' && L.speedText(12) === 'Nopeus 12 kn' && L.speedText(-4) === 'Peruutus 4 kn' && L.speedText(-2) === 'Peruutus 2 kn', L.headingText(47) + ' / ' + L.speedText(12) + ' / ' + L.speedText(-2));
   ehto('komentoloki aikaleimoin', u.cmdLog.every(c => typeof c.t === 'number' && c.kind), u.cmdLog.map(c => c.kind + '=' + c.value).join(' '));
 }
 // 5. Simuloitu ruorimies: suuntakäskyt

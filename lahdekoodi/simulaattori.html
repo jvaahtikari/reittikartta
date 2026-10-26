@@ -147,8 +147,11 @@
     </div>
     <button type="button" id="swapBtn" class="swap" aria-label="Vaihda näkymä" hidden></button>
     <div id="groundBanner" hidden>
-      <b>Pohjakosketus</b><span id="groundText"></span>
-      <button type="button" class="big primary" id="groundBtn">Purku</button>
+      <b id="groundTitle">Pohjakosketus</b><span id="groundText"></span>
+      <div class="gbtns">
+        <button type="button" class="big" id="groundGo" hidden>Jatka</button>
+        <button type="button" class="big primary" id="groundBtn">Purku</button>
+      </div>
     </div>
     <div id="toast" role="status" hidden></div>
   </div>
@@ -159,9 +162,9 @@
       <div class="now"><span class="k">Nyt</span> <b id="nowHdg">000°</b> <b id="nowSpd">0,0 kn</b></div>
     </div>
     <div class="row r3">
-      <button type="button" class="cb" id="bLeft" aria-label="Vasen"><span class="ar">◀</span> Vasen</button>
-      <button type="button" class="cb tgl" id="bGentle" aria-pressed="false">Loiva</button>
-      <button type="button" class="cb" id="bRight" aria-label="Oikea">Oikea <span class="ar">▶</span></button>
+      <button type="button" class="cb" id="bLeft" aria-label="Vasen"><span class="ar">◀</span> <span class="lbl">Vasen</span></button>
+      <button type="button" class="cb tgl" id="bGentle" aria-pressed="false"><span class="lbl">Loiva</span></button>
+      <button type="button" class="cb" id="bRight" aria-label="Oikea"><span class="lbl">Oikea</span> <span class="ar">▶</span></button>
     </div>
     <div class="row r6">
       <button type="button" class="cb" id="bSlower" aria-label="Nopeus alas">−2</button>
@@ -171,8 +174,9 @@
       <button type="button" class="cb sp" data-kn="28">28</button>
       <button type="button" class="cb" id="bFaster" aria-label="Nopeus ylös">+2</button>
     </div>
-    <div class="row r3">
-      <button type="button" class="cb" id="bReverse">Peruutus hidas</button>
+    <div class="row r4">
+      <button type="button" class="cb" id="bReverse">Peruutus 2</button>
+      <button type="button" class="cb" id="bReverse4">Peruutus 4</button>
       <button type="button" class="cb" id="bStop">Nopeus 0</button>
       <button type="button" class="cb crash" id="bCrash">Crash stop</button>
     </div>
@@ -192,7 +196,7 @@
     <button type="button" class="big" id="mTune">Tutkan viritys: hyvä</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus ja miinus, hiiren rulla ja kahden sormen nipistys zoomaavat (0,1 ... 12 mpk). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus ja miinus, hiiren rulla ja kahden sormen nipistys zoomaavat (0,1 ... 12 mpk). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
   </div>
 </div>
 
@@ -232,6 +236,7 @@
 <script src="simulaattori/js/nakyma.js"></script>
 <script src="simulaattori/js/plotteri.js"></script>
 <script src="simulaattori/js/pohja.js"></script>
+<script src="simulaattori/js/tormays.js"></script>
 <script src="simulaattori/js/harjoitus.js"></script>
 <script src="simulaattori/js/sim.js"></script>
 </body>

@@ -102,7 +102,7 @@ def check_cmd(tag, m, wide):
     if wide:
         rows = {}
         for b in c['btn']: rows.setdefault(round(b['t'] / 6), []).append(b['id'])
-        ok(len(rows) == 4, '%s: nappeja neljällä rivillä (%s)' % (tag, [len(v) for k, v in sorted(rows.items())]))
+        ok(len(rows) == 5, '%s: nappeja viidellä rivillä, vaihe 3k: erikoiskäskyt Peruutus 2, Peruutus 4, Nopeus 0 ja Crash stop 2 x 2 (%s)' % (tag, [len(v) for k, v in sorted(rows.items())]))
 
 with sync_playwright() as pw:
     for cfg in configs:

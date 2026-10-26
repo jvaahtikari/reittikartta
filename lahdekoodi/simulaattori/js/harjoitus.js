@@ -212,7 +212,7 @@
       route: route, origin: origin, startMs: null, endMs: null,
       t: [], e: [], n: [], hdgTrue: [], v: [], rudder: [], inFw: [],   // inFw: 1 sisällä, 0 ulkona, -1 ei tietoa
       dShore: [], dShoal: [],                                          // etäisyys rantaviivaan ja alle 2 m:n syvyysalueeseen (m) tai null, kun tietoa ei ole
-      aids: {}, groundings: [], plotter: [{ t: 0, on: true }], _acc: 1e9, _visAcc: 1e9, cmdLogStart: 0, finished: false, aborted: false
+      aids: {}, groundings: [], collisions: [], plotter: [{ t: 0, on: true }], _acc: 1e9, _visAcc: 1e9, cmdLogStart: 0, finished: false, aborted: false
     };
     R.sample = function (S, inFairway, near) {
       R._acc += 0; // ajastus kutsujalla
@@ -274,6 +274,10 @@
     out.minShore = minOf(R.dShore); out.minShoal = minOf(R.dShoal);
     out.startE = R.e[0]; out.startN = R.n[0]; out.endE = R.e[N - 1]; out.endN = R.n[N - 1];
     out.groundings = R.groundings.slice();
+    // törmäykset (nopeus 1,0 kn tai yli, ajo pysähtyi) ja kosketukset (alle 1,0 kn, ajo jatkui) esteisiin: laituri, aallonmurtaja, vesikivi, sillan pilari
+    out.collisions = (R.collisions || []).map(function (c) { return { t: c.t - (R.t0 || 0), type: c.type, kind: c.kind, kn: c.kn, e: c.e, n: c.n }; });
+    out.crashCount = out.collisions.filter(function (c) { return c.type === 'tormays'; }).length;
+    out.touchCount = out.collisions.filter(function (c) { return c.type === 'kosketus'; }).length;
     out.finished = R.finished; out.aborted = R.aborted;
     // 1. osuus ajasta väyläalueen sisällä
     var known = 0, inside = 0;
@@ -349,11 +353,19 @@
     return out;
   }
 
+  // Esteeseen osuminen tekstinä: kosketus (alle 1,0 kn) tai törmäys, kohde, nopeus. value = { kind, kn }
+  var ACC = { laituri: 'laituriin', aallonmurtaja: 'aallonmurtajaan', kivi: 'vesikiveen', pilari: 'sillan pilariin' };
+  function collisionText(type, v) {
+    return (type === 'kosketus' ? 'Kosketus ' : 'Törmäys ') + (ACC[v && v.kind] || 'esteeseen') + ' ' + (Math.round((v ? v.kn : 0) * 10) / 10).toFixed(1).replace('.', ',') + ' kn';
+  }
   // Komentorivi tekstinä
   function cmdText(c) {
     if (c.kind === 'heading') return Liike.headingText(c.value) + (c.gentle ? ' (loiva)' : '');
     if (c.kind === 'gentle') return c.value ? 'Loiva merkitty' : 'Loiva poistettu';
-    if (c.kind === 'speed') return c.value < 0 ? 'Peruutus hidas' : 'Nopeus ' + c.value + ' kn';
+    if (c.kind === 'speed') return Liike.speedText(c.value);
+    if (c.kind === 'stern') return c.value === 'vasen' ? 'Perä vasemmalle' : 'Perä oikealle';
+    if (c.kind === 'straight') return 'Suoraan';
+    if (c.kind === 'kosketus' || c.kind === 'tormays') return collisionText(c.kind, c.value);
     if (c.kind === 'crash') return 'Crash stop';
     if (c.kind === 'plotter') return c.value ? 'Plotteri päälle' : 'Plotteri pois';
     return c.kind;
@@ -361,7 +373,7 @@
 
   var api = {
     SETTINGS: SETTINGS, EXERCISES: EXERCISES, buildRoute: buildRoute, project: project, distToRoute: distToRoute, nextTurn: nextTurn,
-    createAuto: createAuto, createRecorder: createRecorder, analyze: analyze, cmdText: cmdText, mmss: mmss, fmt1: fmt1, wrap180: wrap180, norm360: norm360,
+    createAuto: createAuto, createRecorder: createRecorder, analyze: analyze, cmdText: cmdText, collisionText: collisionText, mmss: mmss, fmt1: fmt1, wrap180: wrap180, norm360: norm360,
     fromStored: fromStored, listStored: listStored, storedShow: storedShow, reversed: reversed, settleSpeed: settleSpeed, DEFAULT_START_KN: DEFAULT_START_KN, STORE_KEY: STORE_KEY
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Harjoitus = api;

@@ -15,6 +15,13 @@
  * nostaa, kunnes käsketty nopeus täyttyy, ja liukukynnyksen yli hän antaa hetkellisesti enemmän. Vipu on mallin sisäinen suure.
  * Suora ohjaus (helmsman = false, ruori ja vipu asetetaan suoraan) on asetus myöhempää parityötä varten.
  *
+ * Peruutus (vaihe 3k): peruutusnopeus on 0-4 kn (askel 2 kn), ja peruutuksessa navigoija antaa suunnan perän suuntana ("Perä vasen", "Perä oikea", "Suoraan").
+ * Perä vasemmalle tarkoittaa keulaa oikealle eli tosisuunta kasvaa, perä oikealle päinvastoin. Perän käsky pysyy voimassa, kunnes annetaan "Suoraan" tai uusi käsky.
+ * Ruorimies toteuttaa suuntakäskyn ohjaimen oikealla suunnalla: vesisuihkussa ohjausvoima ja kääntymisen suunta kääntyvät, kun alus liikkuu perä edellä
+ * (steerSign), joten sama suunnansäädin (P-säädin) pitää keulasuunnan myös peruutuksessa. Käsketty tosisuunta ei vaihdu peruutuksessa, eikä ruorimies yritä
+ * ajaa peruuttaen käskettyyn suuntaan. Kääntymisnopeus peruutuksessa on enintään reverseTurnFactor (60 %) eteenpäin ajon arvosta samalla nopeudella,
+ * ja paikallaan kääntyminen (turnStaticDegPerSec) säilyy. Lähde peruutuksen ohjaukselle on kuvattu RAPORTTI_vaihe3k.md:ssä.
+ *
  * Tila on erillään näkymistä: sijainti (x, y metriä maailmakoordinaatistossa, ks. paikka.js), suunta
  * (ruutusuunta asteina), nopeus (m/s), vipu, ruori, trimmi, kallistus, aika ja komentoloki.
  *
@@ -40,7 +47,11 @@
     helmsmanDelaySec: 0.8,                // simuloidun ruorimiehen viive käskylle (asetus)
     headingStepDeg: 5, headingStepLongDeg: 10,   // suuntakäskyn askel (pitkä painallus tai Shift: 10)
     speedStepKn: 2,                       // nopeuskäskyn askel
-    reverseSlowKn: -4,                    // "peruutus hidas" -nopeuskäsky (solmua, negatiivinen)
+    reverseMaxKn: 4,                      // suurin peruutusnopeus (kn): nopeuskäsky ei mene alle -4 kn, ja nopeus rajataan tähän täydelläkin peruutusvivulla
+    reverseTurnFactor: 0.6,               // kääntymisnopeus peruutuksessa enintään tämä osuus eteenpäin ajon arvosta samalla nopeudella
+    reverseTurnBlendKn: 0.5,              // paikallaan 100 % (10 °/s), tästä nopeudesta alkaen reverseTurnFactor
+    sternTurnDeg: 15,                     // perän käskyn ruorikulma (aste), sama kuin tavallisen käännöksen
+    sternStopLeadSec: 0.6,                // "Suoraan": tavoitesuunta = suunta + kääntymisnopeus * tämä (ruori ehtii vaimentaa kierron)
     rudderMaxDeg: 35,                     // ruorikulma 100 %:n kohdalla (vesisuihkun suutin)
     rudderNormalDeg: 15, rudderGentleDeg: 7,   // ruorimiehen tavallisen ja loivan käännöksen ruorikulma
     hdgKp: 1.2, hdgKd: 1.0,               // suunnan P-säätö: ruorikulma = Kp * virhe - Kd * kääntymisnopeus (aste, aste/s)
@@ -48,7 +59,6 @@
     leverKpPerKn: 0.04,                   // vivun lisäys nopeusvirhettä kohti (liukukynnyksen yli hän antaa enemmän)
     leverKiPerKnSec: 0.006,               // vivun hidas korjaus nopeusvirheen integraalista (ruorimies hakee oikean asennon)
     leverGuessPerKn: 1 / 35,              // ruorimiehen ensiarvaus vivun asennosta käsketyllä nopeudella (lineaarinen, 28 kn = 80 %)
-    leverGuessReverse: -0.25,             // ensiarvaus peruutuksessa
     leverRatePerSec: 0.3,                 // vivun liikuttamisnopeus (osuutta koko liikkeestä sekunnissa)
     speedSenseLagSec: 2.5,                // ruorimiehen nopeuden havainnon seuranta
     radiusLowKn: 5, radiusLowM: 12,       // kääntösäde 5 kn:ssa (oletus)
@@ -101,7 +111,9 @@
   }
   // Suurin kääntymisnopeus rad/s täydellä ruorilla
   function maxTurnRate(v) {
-    return Math.max(SETTINGS.turnStaticDegPerSec * RAD, Math.abs(v) / turnRadius(v));
+    var r = Math.max(SETTINGS.turnStaticDegPerSec * RAD, Math.abs(v) / turnRadius(v));
+    if (v < 0) r *= lerp(1, SETTINGS.reverseTurnFactor, clamp(Math.abs(v) / (SETTINGS.reverseTurnBlendKn * KN), 0, 1));   // peruutuksessa enintään 60 %, paikallaan 100 %
+    return r;
   }
   function trimTarget(v) {
     var S = SETTINGS, k = S.humpKn / 12, kn = Math.max(0, v) / KN / k, p = S.trimPoints;
@@ -130,8 +142,9 @@
       orderHdg: ht,                          // käsketty tosisuunta, aste
       orderSpeedKn: init.speedKn || 0,       // käsketty nopeus, solmua (negatiivinen = peruutus)
       gentleNext: false,                     // seuraava käännös merkitty loivaksi
+      sternTurn: null,                       // peruutuksessa annettu perän käsky: 'vasen', 'oikea' tai null (Suoraan)
       // ruorimiehen toteuttamat käskyt (viiveen jälkeen)
-      hmHdg: ht, hmSpeedKn: init.speedKn || 0, hmGentle: false,
+      hmHdg: ht, hmSpeedKn: init.speedKn || 0, hmGentle: false, hmStern: null,
       pending: [],                           // viiveessä olevat käskyt {at, kind, value, gentle}
       helmsman: init.helmsman !== false,     // false: ruori ja vipu asetetaan suoraan (rudderCmd, leverCmd)
       speedSense: init.v ? init.v / KN : 0,  // ruorimiehen havaitsema nopeus, kn
@@ -161,12 +174,18 @@
   }
   function apply(s, o) {
     if (o.kind === 'heading') { s.hmHdg = o.value; s.hmGentle = !!o.gentle; }
-    else if (o.kind === 'speed') { s.hmSpeedKn = o.value; s.leverTrim = o.value < 0 ? SETTINGS.leverGuessReverse : Math.max(0, o.value) * SETTINGS.leverGuessPerKn; }
+    else if (o.kind === 'speed') { s.hmSpeedKn = o.value; s.leverTrim = o.value < 0 ? leverForSpeed(o.value * KN) : Math.max(0, o.value) * SETTINGS.leverGuessPerKn; }
+    else if (o.kind === 'stern') { s.hmStern = o.value; }
+    else if (o.kind === 'straight') {                  // Suoraan: ruorimies pitää suunnan, jossa alus on (ruorin vaimennus huomioiden)
+      s.hmStern = null; s.hmGentle = false;
+      s.hmHdg = norm360(Math.round((trueHdg(s) + s.rate * SETTINGS.sternStopLeadSec) * 10) / 10);
+      s.orderHdg = norm360(Math.round(s.hmHdg));
+    }
   }
   // Suuntakäsky (tosisuunta, aste). Jos loiva on merkitty, käsky ja merkintä kirjataan yhdessä ja merkintä kuluu.
   function orderHeading(s, trueDeg) {
     var h = norm360(Math.round(trueDeg)), g = s.gentleNext;
-    s.orderHdg = h; s.gentleNext = false;
+    s.orderHdg = h; s.gentleNext = false; s.sternTurn = null;
     logCmd(s, 'heading', h, { gentle: g });
     queue(s, 'heading', h, g);
   }
@@ -180,15 +199,32 @@
     logCmd(s, 'gentle', s.gentleNext ? 1 : 0);
   }
   function orderSpeed(s, kn) {
-    kn = clamp(Math.round(kn), -12, 35);
+    kn = clamp(Math.round(kn), -SETTINGS.reverseMaxKn, 35);
+    if (kn >= 0 && s.sternTurn) orderStraight(s);      // perän käsky päättyy, kun peruutus päättyy: ruorimies pitää senhetkisen suunnan
     s.orderSpeedKn = kn; logCmd(s, 'speed', kn); queue(s, 'speed', kn, false);
   }
+  // Nopeuskäskyn askel (2 kn) toimii myös nollan alapuolella: 0 -> -2 -> -4 (ei alle -4) ja takaisin -2 -> 0 -> 2
   function stepSpeedOrder(s, dir) {
-    var cur = s.orderSpeedKn < 0 ? 0 : s.orderSpeedKn, n = clamp(cur + dir * SETTINGS.speedStepKn, 0, 35);
-    if (dir < 0 && s.orderSpeedKn <= 0) n = 0;
-    orderSpeed(s, n);
+    orderSpeed(s, clamp(s.orderSpeedKn + dir * SETTINGS.speedStepKn, -SETTINGS.reverseMaxKn, 35));
   }
-  function orderReverseSlow(s) { orderSpeed(s, SETTINGS.reverseSlowKn); }
+  function orderReverse(s, kn) { orderSpeed(s, -Math.abs(kn)); }
+  // Perän käsky peruutuksessa: dir 'vasen' (perä vasemmalle, keula oikealle, tosisuunta kasvaa) tai 'oikea'. Sama käsky uudestaan ei kirjaudu uudelleen.
+  function orderStern(s, dir) {
+    if (dir !== 'vasen' && dir !== 'oikea') return false;
+    if (s.sternTurn === dir) return false;
+    s.sternTurn = dir; s.gentleNext = false;
+    logCmd(s, 'stern', dir); queue(s, 'stern', dir, false);
+    return true;
+  }
+  // Nappien askel: dir -1 = vasen nappi (perä vasen), +1 = oikea nappi (perä oikea)
+  function stepSternOrder(s, dir) { return orderStern(s, dir < 0 ? 'vasen' : 'oikea'); }
+  // Suoraan: perän käsky päättyy ja nykyinen keulasuunta pidetään
+  function orderStraight(s) {
+    // käsketty suunta = suunta, johon alus asettuu (nykyinen suunta ja kierto ruorimiehen viiveen ja vaimennuksen ajan), joten käskyrivin suunta ei hypi, kun ruorimies toteuttaa käskyn
+    var d = s.helmsman ? SETTINGS.helmsmanDelaySec : 0;
+    s.sternTurn = null; s.orderHdg = norm360(Math.round(trueHdg(s) + s.rate * (d + SETTINGS.sternStopLeadSec)));
+    logCmd(s, 'straight', 1); queue(s, 'straight', null, false);
+  }
   // Crash stop: heti, ei viivettä. Täysi peruutusvipu, kunnes alus on pysähtynyt, ja nopeuskäsky nollataan.
   function crashStop(s) {
     if (s.v > SETTINGS.crashEndMs) {
@@ -197,16 +233,34 @@
     }
   }
 
+  // Pysäytys esteeseen osuttaessa (laituri, kivi, silta): nopeus, kierto ja vipu nollataan, nopeuskäsky nollataan eikä ruorimies yritä ajaa uudelleen esteeseen
+  // (käskyä ei kirjata komentolokiin, esteeseen osuminen kirjataan erikseen). Suunta pidetään siinä, mihin alus jäi, ja perän käsky päättyy.
+  function halt(s) {
+    s.v = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
+    s.crashCmd = false; s.crashActive = false;
+    s.pending = s.pending.filter(function (p) { return p.kind === 'gentle'; });
+    s.orderSpeedKn = 0; s.hmSpeedKn = 0; s.sternTurn = null; s.hmStern = null; s.gentleNext = false; s.hmGentle = false;
+    s.orderHdg = norm360(Math.round(trueHdg(s))); s.hmHdg = trueHdg(s);
+  }
+
   // Ruorimiehen suunnansäätö: ruorikulma -1..1
+  // Ohjausmerkki: kun alus liikkuu perä edellä, sama ruorin asento kääntää alusta toisin päin kuin eteenpäin ajossa (vesisuihkun ohjausvoima ja virtaus kääntyvät).
+  // Ruorimies kertoo säätimen tuloksen tällä merkillä, joten ruorin asennon seuraus keulasuuntaan on aina sama kuin käsketty (liike ja säädin käyttävät samaa funktiota).
+  function steerSign(s) { return s.v < -0.01 ? -1 : 1; }
   function helmRudder(s) {
-    var S = SETTINGS, e = wrap180(s.hmHdg - trueHdg(s)), lim = s.hmGentle ? S.rudderGentleDeg : S.rudderNormalDeg;
+    var S = SETTINGS, sg = steerSign(s);
+    if (s.hmStern) {                                  // pidetty perän käsky: perä vasemmalle = keula oikealle = tosisuunta kasvaa
+      var dir = s.hmStern === 'vasen' ? 1 : -1;
+      return clamp(sg * dir * S.sternTurnDeg / S.rudderMaxDeg, -1, 1);
+    }
+    var e = wrap180(s.hmHdg - trueHdg(s)), lim = s.hmGentle ? S.rudderGentleDeg : S.rudderNormalDeg;
     if (Math.abs(e) < S.hdgDeadDeg && Math.abs(s.rate) < 0.3) {
       if (s.hmGentle) s.hmGentle = false;           // käännös valmis, loiva-merkintä kuluu
       return 0;
     }
     if (Math.abs(e) < 1.0 && Math.abs(s.rate) < 0.6 && s.hmGentle) s.hmGentle = false;
     var rd = clamp(S.hdgKp * e - S.hdgKd * s.rate, -lim, lim);
-    return clamp(rd / S.rudderMaxDeg, -1, 1);
+    return clamp(sg * rd / S.rudderMaxDeg, -1, 1);
   }
   // Ruorimiehen nopeussäätö: vivun tavoite -1..1. Pito-ohjaus (vipu, joka pitää käsketyn nopeuden) ja virhe lisää vipua.
   function helmLever(s, dt) {
@@ -235,6 +289,7 @@
     s.lever = lv;
     var a = (thrust(lv, s.v) - resistance(s.v)) / S.massKg, v0 = s.v;
     s.v += a * dt;
+    if (s.v < -S.reverseMaxKn * KN) s.v = -S.reverseMaxKn * KN;   // peruutusnopeuden rajoitin: täydelläkään peruutusvivulla ei yli reverseMaxKn
     if (s.crashActive) {
       if (s.v <= S.crashEndMs) {            // pysähtynyt: vipu neutraaliksi
         s.v = 0; s.crashActive = false; s.crashCmd = false; s.leverCmd = 0; s.speedSense = 0;
@@ -243,7 +298,7 @@
     } else if (lv === 0 && Math.abs(s.v) < 0.02) s.v = 0;
     else if (lv === 0 && v0 * s.v < 0) s.v = 0;
     // suunta
-    var wTarget = s.rudder * maxTurnRate(s.v) * (s.v < -0.01 ? -1 : 1);   // rad/s
+    var wTarget = s.rudder * maxTurnRate(s.v) * steerSign(s);   // rad/s
     var w = s.rate * RAD;
     w += (wTarget - w) * (1 - Math.exp(-dt / S.yawLagSec));
     s.rate = w / RAD;
@@ -282,12 +337,19 @@
   }
   // Tekstit käyttöliittymälle
   function headingText(h) { var n = Math.round(norm360(h)); return 'Suunta ' + (n < 10 ? '00' : n < 100 ? '0' : '') + n; }
-  function speedText(kn) { return kn < 0 ? 'Peruutus hidas' : 'Nopeus ' + Math.round(kn) + ' kn'; }
+  function speedText(kn) { return kn < 0 ? 'Peruutus ' + Math.round(-kn) + ' kn' : 'Nopeus ' + Math.round(kn) + ' kn'; }
+  function sternText(dir) { return dir === 'vasen' ? 'Perä vasen' : dir === 'oikea' ? 'Perä oikea' : 'Suoraan'; }
+  // Käskyn suuntarivi: perän käsky (peruutuksessa) tai suunta
+  function orderHeadingText(s) { return s.sternTurn ? sternText(s.sternTurn) : headingText(s.orderHdg); }
+  // Kulku (COG) tosisuuntana ja ruutusuuntana: perä edellä liikkuessa 180 astetta keulasuunnan vastaisesti
+  function cogTrue(s) { return norm360(trueHdg(s) + (s.v < -0.01 ? 180 : 0)); }
+  function cogGrid(s) { return norm360(s.hdg + (s.v < -0.01 ? 180 : 0)); }
 
   var api = {
     KN: KN, SETTINGS: SETTINGS, create: create, stepOnce: stepOnce, advance: advance, stepFrame: stepFrame,
     orderHeading: orderHeading, stepHeadingOrder: stepHeadingOrder, toggleGentle: toggleGentle, orderSpeed: orderSpeed,
-    stepSpeedOrder: stepSpeedOrder, orderReverseSlow: orderReverseSlow, crashStop: crashStop, trueHdg: trueHdg, wrap180: wrap180,
+    stepSpeedOrder: stepSpeedOrder, orderReverse: orderReverse, orderStern: orderStern, stepSternOrder: stepSternOrder, orderStraight: orderStraight, crashStop: crashStop, halt: halt, trueHdg: trueHdg, wrap180: wrap180,
+    steerSign: steerSign, cogTrue: cogTrue, cogGrid: cogGrid, sternText: sternText, orderHeadingText: orderHeadingText,
     resistance: resistance, thrust: thrust, leverForSpeed: leverForSpeed, crashStopDistance: crashStopDistance,
     turnRadius: turnRadius, maxTurnRate: maxTurnRate, trimTarget: trimTarget, headingText: headingText, speedText: speedText
   };
