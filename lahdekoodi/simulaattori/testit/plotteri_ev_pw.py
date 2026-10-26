@@ -52,8 +52,9 @@ with sync_playwright() as pw:
         v1 = ev(p)['vrm']; ok(abs(v1 / v0 - 0.8) < 0.06, 'VRM oikealla kahden sormen kosketuksella (CDP): suhde %.2f, odotus 0,8' % (v1 / v0))
     ro = p.evaluate('[document.querySelector(".ro-ebl").textContent, document.querySelector(".ro-vrm").textContent, document.querySelector("#vecBtn").textContent]')
     ok(ro[0].startswith('EBL ') and ro[0].endswith('° T') and ro[1].startswith('VRM ') and ro[1].endswith(' mpk') and re.match(r'^VRM \d,\d\d mpk$', ro[1]) if (re := __import__('re')) else False, 'lukemat: %s' % ro)
-    log = p.evaluate('__sim.S.cmdLog.filter(c=>c.kind==="ebl"||c.kind==="vrm").map(c=>c.kind+":"+(+c.value).toFixed(2))')
-    ok(any(x.startswith('ebl') for x in log) and any(x.startswith('vrm') for x in log), 'komentolokiin kirjautui EBL ja VRM: %s' % log)
+    # vaihe 3f: veto ja napautus kirjautuvat yhtenä rivinä (evpiste), nipistys omana vrm-rivinään
+    log = p.evaluate('__sim.S.cmdLog.filter(c=>c.kind==="ebl"||c.kind==="vrm"||c.kind==="evpiste").map(c=>c.kind+":"+JSON.stringify(c.value))')
+    ok(any(x.startswith('evpiste') for x in log) and any(x.startswith('vrm') for x in log), 'komentolokiin kirjautui EBL/VRM-veto ja VRM-nipistys: %s' % log)
     # vektorin ajan vaihto napautuksella
     t0 = p.evaluate('__pl.vectorSec()'); p.tap('#vecBtn'); p.wait_for_timeout(300); t1 = p.evaluate('__pl.vectorSec()')
     ok(t0 == 60 and t1 == 180, 'vektorin aika vaihtuu napautuksella: %d s -> %d s' % (t0, t1)); p.tap('#vecBtn'); p.tap('#vecBtn'); p.tap('#vecBtn'); p.wait_for_timeout(200)

@@ -159,7 +159,13 @@ table.db td.n{text-align:right}
 .gz{position:absolute;top:50%;transform:translateY(-50%);z-index:22;min-width:56px;min-height:64px;padding:4px 8px;border:1px solid var(--line);font-weight:650;font-size:15px;opacity:.82}
 .gz-l{left:8px}.gz-r{right:8px}
 .gz:active{background:var(--accent);opacity:1}
-.pane.small .gz,.pane.small .v3compass{display:none}
+.pane.small .gz,.pane.small .v3compass,.pane.small .bino,.pane.small .v3bino{display:none}
+/* kiikari (vaihe 3g): nappi 3D-näkymän vasemmassa alareunassa, maski kompassinauhan alla, reunanapit piiloon kiikarin ajaksi */
+.bino{left:8px;bottom:8px;min-height:44px;min-width:44px;padding:4px 14px;border:1px solid var(--line);font-weight:650}
+.bino[aria-pressed=true]{background:#0f5f8a;border-color:#5fc0ea}
+.v3bino{position:absolute;left:0;top:0;width:100%;height:100%;z-index:18;pointer-events:none;display:block}
+#pane3d.binoon .gz{display:none}
+@media (max-width:700px){#game.binoon .pane.small{display:none}}   /* puhelimessa pieni karttaikkuna peittäisi kompassinauhan kiikarilukeman */
 .clockrow{display:flex;gap:8px;flex-wrap:wrap}
 input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:#fff}
 .start-night{color:#ffd9a0}

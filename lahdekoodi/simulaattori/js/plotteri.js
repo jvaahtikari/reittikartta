@@ -549,17 +549,24 @@
 
     if (interactive) {
       var ptrs = new Map(), gest = null;
-      var bearingOf = function (ev) {
+      // Kuvapiste -> EBL (tosisuuntima omasta aluksesta) ja VRM (etäisyys mpk). Veto tai napautus asettaa molemmat kerralla kuten kursori-EBL/VRM,
+      // ja risti piirtyy vedettyyn pisteeseen, koska risti on EBL-viivan ja VRM-renkaan leikkauspiste.
+      var pointOf = function (ev) {
         var rc = canvas.getBoundingClientRect(), x = ev.clientX - rc.left - view.sx, y = ev.clientY - rc.top - view.sy;
-        return norm360(Math.atan2(x, -y) / RAD + (headUp ? S.hdgTrue : 0));
+        return { ebl: norm360(Math.atan2(x, -y) / RAD + (headUp ? S.hdgTrue : 0)), vrm: Math.max(0.01, Math.min(6, Math.hypot(x, y) * view.mpp / NM)) };
+      };
+      var setPoint = function (ev) { var q = pointOf(ev); ebl = q.ebl; vrm = q.vrm; updateReadouts(); if (S.has) draw(); };
+      var endPoint = function () {   // vedon päätyttyä yksi rivi komentolokiin
+        if (onEV) onEV('evpiste', { ebl: Math.round(ebl) % 360, vrm: Math.round(vrm * 100) / 100 });
       };
       canvas.addEventListener('pointerdown', function (ev) {
         if (!evOn || (ev.button != null && ev.button > 0)) return;
         try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
         ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-        if (ptrs.size === 1) { gest = { mode: 'ebl', ebl0: ebl }; setEBL(bearingOf(ev)); }
+        if (ptrs.size === 1) { gest = { mode: 'ebl', ebl0: ebl, vrm0: vrm }; setPoint(ev); }
         else if (ptrs.size === 2) {
-          var ps = Array.from(ptrs.values()); setEBL(gest ? gest.ebl0 : ebl, true);
+          var ps = Array.from(ptrs.values()); if (gest) { ebl = gest.ebl0; vrm = gest.vrm0; }   // toinen sormi: ensimmäinen kosketus peruuntuu ja nipistys säätää VRM:ää
+          updateReadouts();
           gest = { mode: 'vrm', d0: Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y), vrm0: vrm, ebl0: ebl };
         }
         ev.preventDefault();
@@ -567,7 +574,7 @@
       canvas.addEventListener('pointermove', function (ev) {
         if (!ptrs.has(ev.pointerId)) return;
         ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-        if (gest && gest.mode === 'ebl' && ptrs.size === 1) setEBL(bearingOf(ev));
+        if (gest && gest.mode === 'ebl' && ptrs.size === 1) setPoint(ev);
         else if (gest && gest.mode === 'vrm' && ptrs.size >= 2) {
           var ps = Array.from(ptrs.values()), d = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y);
           if (gest.d0 > 8) setVRM(gest.vrm0 * d / gest.d0);
@@ -575,9 +582,13 @@
         ev.preventDefault();
       });
       var up = function (ev) {
+        if (!ptrs.has(ev.pointerId)) return;
         ptrs.delete(ev.pointerId);
         try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
-        if (ptrs.size === 0) gest = null; else if (ptrs.size === 1) gest = { mode: 'jaa', ebl0: ebl };
+        if (ptrs.size === 0) {
+          if (gest && gest.mode === 'ebl') { if (ev.type === 'pointerup') setPoint(ev); endPoint(); }
+          gest = null;
+        } else if (ptrs.size === 1) gest = { mode: 'jaa', ebl0: ebl };
       };
       canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
       canvas.addEventListener('wheel', function (ev) { if (!evOn) return; ev.preventDefault(); scaleVRM(ev.deltaY < 0 ? 1.06 : 1 / 1.06); }, { passive: false });

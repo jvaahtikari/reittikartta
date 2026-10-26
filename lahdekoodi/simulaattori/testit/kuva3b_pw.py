@@ -29,7 +29,7 @@ with sync_playwright() as pw:
     p.wait_for_timeout(500)
     for _ in range(60):
         p.wait_for_timeout(1000)
-        if p.evaluate('__view.terrain.idle()'): break
+        if p.evaluate('__view.terrain.idle() && (!__view.piers || __view.piers.idle())'): break
     p.evaluate('__view.aids.sync(__state.x, __state.y, true)')
     p.wait_for_timeout(2500)
     if kw.get('lisa'): p.evaluate(kw['lisa'])

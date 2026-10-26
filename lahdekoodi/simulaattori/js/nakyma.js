@@ -24,7 +24,10 @@
     maxDist: 8000,
     pixelBudgetMp: 0.55,      // piirtopuskurin pikselien enimmäismäärä (miljoonaa), tarkentuu kuvanopeuden mukaan
     pixelMinMp: 0.1, pixelMaxMp: 1.4,
-    bobPitchDeg: 0.35, bobRollDeg: 0.5, bobHeaveM: 0.04   // pieni aallokko nopeudessa
+    bobPitchDeg: 0.35, bobRollDeg: 0.5, bobHeaveM: 0.04,  // pieni aallokko nopeudessa
+    // kiikari (vaihe 3g): 7x50-kiikarin vaakakuvakulma 7 astetta ja suurennus 7 (näkyvyysrajat ja katseen herkkyys), käden tärinän amplitudi asteina
+    // (taajuus noin 1-2 Hz, kasvaa nopeuden ja aallokon mukana) sekä pystykatseen enimmäiskulmat (kiikari pitää vaakatason vakaana, pystykatsetta voi säätää vetämällä)
+    kiikariHfovDeg: 7, kiikariSuurennus: 7, kiikariTarinaDeg: 0.15, kiikariPitchMin: -8, kiikariPitchMax: 12
   };
 
   var GLSL_SKY = [
@@ -123,6 +126,8 @@
     // ---- maasto ----
     var terrain = root.Maasto.create(scene, { buildings: opts.buildings });
     var aids3d = root.Merkit3D.create(scene, { groundAt: function (x, y) { return terrain.heightAt(x, y, true); } }), landmarks = root.Maamerkit3D.create(scene);
+    // laiturit, aallonmurtajat ja vesikivet (aineiston kerros vesieste), alle 1 500 m:n päässä
+    var piers = root.Laiturit3D ? root.Laiturit3D.create(scene) : null;
     // ---- alus ----
     var runko = root.Runko.build(THREE, root.Runko.DATA, { interior: true, merge: true });
     // Suorituskyky: rungon PBR-materiaalit (MeshStandardMaterial) vaihdetaan Lambert-materiaaleiksi, koska ohjelmistopiirrossa ja heikoilla puhelimilla
@@ -183,6 +188,9 @@
     var sun = { elevDeg: 45, azDeg: 180 }, sunDirW = new THREE.Vector3(0, 1, 0), simMs = Date.now();
     var frames = [], lastT = 0, bobT = 0, camPitchDeg = 0;
     var extra = [];     // lisäobjektit, joilla on rebase()
+    // kiikari: tila (päällä, katseen ja pystykulman talteenotto) ja käden tärinä (kaksi vaimennettua värähtelijää, joita satunnaisliike ajaa)
+    var tmpDir = new THREE.Vector3();
+    var bino = { on: false, gaze0: 0, pitch: 0, sh: { p: [0, 0], v: [0, 0] }, shakeYaw: 0, shakePitch: 0 };
     var freeCam = false;
     // Vapaa kamera testikuviin ja purkuun (maailmakoordinaatit: x = E, y = ylös, z = -N)
     function setFree(pos, look, fov) {
@@ -206,8 +214,34 @@
     }
     function updateFov() {
       var asp = w / h, v;
-      if (asp >= 1) v = 2 * Math.atan(Math.tan((compact ? S.hfovCompactDeg : S.hfovDeg) * RAD / 2) / asp) / RAD; else v = S.portraitVfovDeg;
+      if (bino.on) v = 2 * Math.atan(Math.tan(S.kiikariHfovDeg * RAD / 2) / asp) / RAD;   // kiikarissa vaakakuvakulma on aina kiikariHfovDeg
+      else v = baseVfov(asp);
       camera.fov = v; camera.aspect = asp; camera.updateProjectionMatrix();
+    }
+    function baseVfov(asp) { return asp >= 1 ? 2 * Math.atan(Math.tan((compact ? S.hfovCompactDeg : S.hfovDeg) * RAD / 2) / asp) / RAD : S.portraitVfovDeg; }
+    // tavallinen (kiikaritta) vaakakuvakulma asteina, kompassikaista käyttää sitä myös kiikarin aikana
+    function baseHfov() { var asp = w / h; return 2 * Math.atan(Math.tan(baseVfov(asp) * RAD / 2) * asp) / RAD; }
+    // Kiikari päälle tai pois. Päälle: kuvakulma kiikariHfovDeg ja katseen suunta säilyy. Pois: kuvakulma ja katse palautuvat entisiin (gaze0).
+    function setBinoculars(on) {
+      on = !!on; if (on === bino.on) return;
+      if (on) { bino.gaze0 = gazeCmd; bino.pitch = 0; bino.sh.p = [0, 0]; bino.sh.v = [0, 0]; bino.shakeYaw = bino.shakePitch = 0; }
+      bino.on = on;
+      runko.boat.visible = !on;   // kiikaria pidetään ikkunan ulkopuolella, joten ohjaamon katto ja ikkunapuitteet eivät peitä kuvaa
+      if (!on) { gazeCmd = bino.gaze0; gaze = bino.gaze0; bino.pitch = 0; bino.shakeYaw = bino.shakePitch = 0; }
+      updateFov();
+      aids3d.setBino(on, S.kiikariSuurennus);
+      if (!freeCam) camera.rotation.set(0, -Math.PI / 2 - gaze * RAD, 0);
+    }
+    function setBinoPitch(d) { bino.pitch = Math.max(S.kiikariPitchMin, Math.min(S.kiikariPitchMax, d)); }
+    // satunnainen kaksiakselinen tärinä: vaimennettu värähtelijä (noin 1,5 Hz), jonka keskihajonta on amp astetta
+    function shakeStep(dt, amp) {
+      var w0 = 2 * Math.PI * 1.5, z = 0.35, q = amp * amp * 4 * z * w0 * w0 * w0, sh = bino.sh, n = Math.max(1, Math.ceil(dt / 0.016)), h2 = dt / n;
+      for (var k = 0; k < n; k++) for (var i = 0; i < 2; i++) {
+        var r = Math.sqrt(-2 * Math.log(Math.max(1e-9, Math.random()))) * Math.cos(2 * Math.PI * Math.random());
+        sh.v[i] += (-w0 * w0 * sh.p[i] - 2 * z * w0 * sh.v[i]) * h2 + Math.sqrt(q * h2) * r;
+        sh.p[i] += sh.v[i] * h2;
+      }
+      bino.shakeYaw = sh.p[0]; bino.shakePitch = sh.p[1];
     }
     function setPixelBudget(mp) { pixelMp = Math.max(S.pixelMinMp, Math.min(S.pixelMaxMp, mp)); applyPixelRatio(); }
     function getPixelBudget() { return pixelMp; }
@@ -262,14 +296,31 @@
       rig.rotation.set((st.roll + bobR) * RAD, yaw, (st.trim + bobP) * RAD);
       // katse
       gaze += (gazeCmd - gaze) * Math.min(1, dt * 8);
-      if (!freeCam) camera.rotation.set(camPitchDeg * RAD, -Math.PI / 2 - gaze * RAD, 0);
+      if (!freeCam) {
+        if (bino.on) {
+          rig.updateMatrixWorld(true);
+          // käden tärinä kasvaa nopeuden ja aallokon mukana (keskihajonta = puolet asetuksen amplitudista)
+          var waveK = Math.min(1, (Math.abs(bobP) + Math.abs(bobR)) / (S.bobPitchDeg + S.bobRollDeg));
+          shakeStep(dt, S.kiikariTarinaDeg * 0.5 * (1 + 1.5 * sp + waveK));
+          var yawC = -Math.PI / 2 - (gaze + bino.shakeYaw) * RAD, pit = bino.pitch + bino.shakePitch;
+          // kiikari pitää vaakatason: aluksen trimmi ja pystyaallokko poistetaan katsesuunnasta kahdella kierroksella
+          var corr = 0, dirv = tmpDir;
+          for (var it = 0; it < 2; it++) {
+            camera.rotation.set((pit + corr) * RAD, yawC, 0); camera.updateMatrixWorld(true);
+            camera.getWorldDirection(dirv);
+            corr -= Math.asin(Math.max(-1, Math.min(1, dirv.y))) / RAD - pit;
+          }
+          camera.rotation.set((pit + corr) * RAD, yawC, 0);
+        } else camera.rotation.set(camPitchDeg * RAD, -Math.PI / 2 - gaze * RAD, 0);
+      }
       rig.updateMatrixWorld(true);
       // vesi ja taivas seuraavat kameraa
       var cp = camera.getWorldPosition(new THREE.Vector3());
       water.position.set(cp.x, 0, cp.z); sky.position.copy(cp);
       U.uTime.value += dt;
-      terrain.setBoat(st.x, st.y); aids3d.sync(st.x, st.y);
-      aids3d.setPixel(2 * Math.tan(camera.fov * RAD / 2) / Math.max(1, renderer.domElement.height));
+      terrain.setBoat(st.x, st.y); aids3d.sync(st.x, st.y); if (piers) piers.sync(st.x, st.y);
+      var kpx = 2 * Math.tan(camera.fov * RAD / 2);   // kuvapikselin koko: laitepikselinä (css-korkeus x laitepikselisuhde) ja piirtopuskurin pikselinä
+      aids3d.setPixel(kpx / Math.max(1, h * (root.devicePixelRatio || 1)), kpx / Math.max(1, renderer.domElement.height));
       // vastavalon sumennus
       var ss = sunScreen();
       if (sun.elevDeg > -2) {
@@ -293,19 +344,74 @@
       return { median: s[Math.floor(s.length / 2)], p95: s[Math.floor(s.length * 0.95)], n: s.length };
     }
     function resetFrameStats() { frames = []; }
-    function rebase() { terrain.rebase(); aids3d.rebase(); landmarks.rebase(); extra.forEach(function (e) { if (e.rebase) e.rebase(); }); }
+    function rebase() { terrain.rebase(); aids3d.rebase(); landmarks.rebase(); if (piers) piers.rebase(); extra.forEach(function (e) { if (e.rebase) e.rebase(); }); }
     function addExtra(o) { extra.push(o); return o; }
 
     return {
-      scene: scene, camera: camera, renderer: renderer, rig: rig, boat: runko, terrain: terrain, aids: aids3d, landmarks: landmarks, canvas: canvas, settings: S, uniforms: U, veil: veil,
+      scene: scene, camera: camera, renderer: renderer, rig: rig, boat: runko, terrain: terrain, aids: aids3d, landmarks: landmarks, piers: piers, canvas: canvas, settings: S, uniforms: U, veil: veil,
       setSize: setSize, render: render, setSimTime: setSimTime, setGaze: setGaze, getGaze: getGaze, getGazeNow: function () { return gaze; }, hfov: function () { return 2 * Math.atan(Math.tan(camera.fov * RAD / 2) * camera.aspect) / RAD; }, setHfov: function (d) { S.hfovDeg = d; updateFov(); }, setSeat: setSeat, setEye: setEye,
       setPixelBudget: setPixelBudget, getPixelBudget: getPixelBudget, rendererStats: rendererStats, frameStats: frameStats, resetFrameStats: resetFrameStats,
       rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; },
       setFree: setFree, clearFree: clearFree,
-      setCameraPitch: function (d) { camPitchDeg = d; }, isSeated: function () { return seated; }
+      setCameraPitch: function (d) { camPitchDeg = d; }, isSeated: function () { return seated; },
+      setBinoculars: setBinoculars, isBino: function () { return bino.on; }, setBinoPitch: setBinoPitch, getBinoPitch: function () { return bino.pitch; },
+      baseHfov: baseHfov, gazeSens: function () { return bino.on ? 1 / S.kiikariSuurennus : 1; }, binoState: function () { return { on: bino.on, gaze0: bino.gaze0, pitch: bino.pitch, shakeYaw: bino.shakeYaw, shakePitch: bino.shakePitch }; }
     };
   }
 
-  var api = { create: create, SETTINGS: SETTINGS, sunPosition: sunPosition };
+  // Kompassinauhan käskymerkki: vihreä kolmio nauhan alareunassa komennetun tosisuunnan kohdalla (sama suunta kuin komentopalstan "Käsky Suunta").
+  // g = nauhan 2D-konteksti, w ja h nauhan koko (css-px), look = katseen tosisuunta (aste), hfovDeg = kameran vaakakuvakulma, cmd = käsketty tosisuunta (aste).
+  // Kun käsky ja katse ovat samassa suunnassa, merkki on keskellä katseen merkin alla. Kun käskysuunta on nauhan ulkopuolella, reunassa on nuoli ja suunnan lukema.
+  // Palauttaa { inBand, x, side, cmd, look } testejä ja käyttöliittymää varten.
+  function drawCommandMarker(g, w, h, look, hfovDeg, cmd) {
+    var hf = hfovDeg * RAD, k = (w / 2) / Math.tan(hf / 2), d = ((cmd - look) % 360 + 540) % 360 - 180, off = d * RAD;
+    var x = Math.abs(off) < 1.5 ? w / 2 + Math.tan(off) * k : (d < 0 ? -1e4 : 1e4);
+    var inBand = x >= 8 && x <= w - 8, c = '#3ddc6f', dark = '#0a3a1c';
+    g.save();
+    g.lineJoin = 'round';
+    if (inBand) {
+      g.strokeStyle = 'rgba(61,220,111,0.55)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h - 12); g.stroke();
+      g.fillStyle = c; g.strokeStyle = dark; g.lineWidth = 1.3;
+      g.beginPath(); g.moveTo(x - 8, h - 0.5); g.lineTo(x + 8, h - 0.5); g.lineTo(x, h - 14); g.closePath(); g.fill(); g.stroke();
+    } else {
+      var left = d < 0, ex = left ? 3 : w - 3, dir = left ? 1 : -1, y = h / 2;
+      g.fillStyle = c; g.strokeStyle = dark; g.lineWidth = 1.3;
+      g.beginPath(); g.moveTo(ex, y); g.lineTo(ex + dir * 13, y - 8); g.lineTo(ex + dir * 13, y + 8); g.closePath(); g.fill(); g.stroke();
+      var txt = (cmd < 10 ? '00' : cmd < 100 ? '0' : '') + Math.round(cmd), tw;
+      g.font = '700 12px ui-monospace,Menlo,Consolas,monospace'; g.textBaseline = 'middle'; tw = g.measureText(txt).width;
+      g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(left ? ex + 15 : ex - 15 - tw - 4, y - 8, tw + 4, 16);
+      g.fillStyle = c; g.textAlign = 'left'; g.fillText(txt, left ? ex + 17 : ex - 15 - tw - 2, y + 0.5);
+    }
+    g.restore();
+    return { inBand: inBand, x: inBand ? x : null, side: inBand ? 0 : (d < 0 ? -1 : 1), cmd: cmd, look: look, diff: d };
+  }
+
+  // Kiikarimaski (vaihe 3g): musta reunus ja pehmeä reuna. Leveällä kuvalla kaksi osittain päällekkäistä ympyrää, jotka ulottuvat lähes koko leveydelle ja jatkuvat kuvan ylä- ja alareunan yli,
+  // kapealla tai pystykuvalla (puhelin) yksi soikio. phone = true tekee reunuksesta pienemmän. Palauttaa kuvauksen testejä varten.
+  function drawBinoMask(cv, w, h, phone) {
+    var dpr = Math.min(2, root.devicePixelRatio || 1);
+    cv.width = Math.max(1, Math.round(w * dpr)); cv.height = Math.max(1, Math.round(h * dpr));
+    var g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, w, h);
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'destination-out';
+    var m = phone ? 0.012 : 0.03, info;
+    function disc(cx, cy, rx, ry) {   // pehmeä reunainen soikio: täysin läpinäkyvä sisäosa ja 4 % pehmeä reuna
+      g.save(); g.translate(cx, cy); g.scale(rx, ry);
+      var gr = g.createRadialGradient(0, 0, 0, 0, 0, 1); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.96, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 1, 0, 7); g.fill(); g.restore();
+    }
+    if (w >= 1.25 * h) {
+      var R = (0.5 - m) * w / 1.45, c = 0.45 * R;
+      disc(w / 2 - c, h / 2, R, R); disc(w / 2 + c, h / 2, R, R);
+      info = { muoto: 'kaksi ympyrää', r: R, keskiero: 2 * c, vasen: w / 2 - c - R, oikea: w / 2 + c + R };
+    } else {
+      var rx = (0.5 - m) * w, ry = (0.5 - m) * h; disc(w / 2, h / 2, rx, ry);
+      info = { muoto: 'soikio', rx: rx, ry: ry, vasen: w / 2 - rx, oikea: w / 2 + rx };
+    }
+    g.globalCompositeOperation = 'source-over';
+    return info;
+  }
+
+  var api = { create: create, SETTINGS: SETTINGS, sunPosition: sunPosition, drawCommandMarker: drawCommandMarker, drawBinoMask: drawBinoMask };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Nakyma = api;
 })(typeof window !== 'undefined' ? window : globalThis);

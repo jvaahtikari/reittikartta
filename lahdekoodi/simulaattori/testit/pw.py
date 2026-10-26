@@ -5,8 +5,8 @@ from playwright.sync_api import sync_playwright
 
 GL_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 PROXY = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
-SIM = os.environ.get('SIM', 'http://127.0.0.1:8150/')
-PAKETTI = 'http://127.0.0.1:8140/'
+SIM = os.environ.get('SIM', 'http://127.0.0.1:8154/')
+PAKETTI = os.environ.get('PAKETTI', 'http://127.0.0.1:8144/')
 
 
 def proxy_opts():

@@ -123,11 +123,13 @@
     <!-- kuljettajan näkymä -->
     <div id="pane3d" class="pane">
       <div id="v3" class="v3"></div>
+      <canvas id="v3bino" class="v3bino" aria-hidden="true" hidden></canvas>
       <canvas id="v3compass" class="v3compass" aria-label="Kompassinauha"></canvas>
       <div class="hud hud-hdg" id="v3hud">---° · 0,0 kn</div>
       <button type="button" class="hud gz gz-l" id="gazeL" aria-label="Katse vasemmalle 60 astetta">&#9664; 60°</button>
       <button type="button" class="hud gz gz-r" id="gazeR" aria-label="Katse oikealle 60 astetta">60° &#9654;</button>
       <button type="button" class="hud hud-gaze" id="gazeBtn" hidden>Katse suoraan</button>
+      <button type="button" class="hud bino" id="binoBtn" aria-pressed="false" aria-label="Kiikari (näppäin B)">Kiikari</button>
     </div>
     <!-- tutka -->
     <div id="paneR" class="pane" hidden>
@@ -184,7 +186,7 @@
     <button type="button" class="big" id="mTune">Tutkan viritys: hyvä</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. Tab: näkymän vaihto. Plotteri: veto asettaa EBL:n, rulla tai nipistys VRM:n, pilkku ja piste EBL:ää (Shift 10°), plus ja miinus VRM:ää, V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: yhden sormen veto asettaa EBL:n ja kahden sormen nipistys VRM:n.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto tai napautus asettaa EBL:n ja VRM:n yhdessä vedettyyn pisteeseen, rulla tai kahden sormen nipistys säätää VRM:ää, pilkku ja piste EBL:ää (Shift 10°), plus ja miinus VRM:ää, V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: yhden sormen veto asettaa EBL:n ja kahden sormen nipistys VRM:n.</div>
   </div>
 </div>
 
@@ -217,6 +219,7 @@
 <script src="simulaattori/js/merimerkit3d.js"></script>
 <script src="simulaattori/js/merkit3d.js"></script>
 <script src="simulaattori/js/maamerkit3d.js"></script>
+<script src="simulaattori/js/laiturit3d.js"></script>
 <script src="simulaattori/js/maasto.js"></script>
 <script src="simulaattori/js/nakyma.js"></script>
 <script src="simulaattori/js/plotteri.js"></script>

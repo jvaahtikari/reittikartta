@@ -202,12 +202,14 @@
     updateInstrButtons();
     $('turnBox').style.display = '';
     $('gazeBtn').hidden = !(wide || !instrMain) || Math.abs(G.view ? G.view.getGaze() : 0) < 1;
+    if (G.view && G.view.isBino() && !(wide || !instrMain)) setBino(false);   // kiikari vain, kun 3D on päänäkymä
   }
   function sizeViews() {
     if (!G.view) return;
     var p3 = $('pane3d'), r = p3.getBoundingClientRect();
     if (r.width > 4 && r.height > 4) G.view.setSize(Math.round(r.width), Math.round(r.height), !G.layout.wide && $('pane3d').classList.contains('small'));
     if (G.plotShown) { G.pl.resize(); if (G.trail) G.pl.setTrail(G.trail); }
+    if (G.view.isBino()) drawBinoMask();
     G.lastPlotT = 0;
   }
   function swapViews() {
@@ -258,7 +260,7 @@
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setSimTime(G.S.clockMs);
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
-    G.view.setGaze(0);
+    G.view.setGaze(0); if (G.view.isBino()) { G.view.setBinoculars(false); binoUi(false); }
     $('exName').textContent = G.route ? G.route.nimi + ': ' + G.route.kuvaus : 'Vapaa ajo, Mustalahti';
     $('turnBox').hidden = !G.route;
     // reitti plotterille
@@ -324,7 +326,8 @@
   function onEV(kind, value) {
     if (!(G.S && G.mode === 'run')) return;
     var last = null, lg = G.S.cmdLog; for (var i = lg.length - 1; i >= 0; i--) if (lg[i].kind === kind) { last = lg[i]; break; }
-    if (last && Math.abs(last.value - value) < 0.005) return;   // sama arvo kuin edellinen kirjaus (esim. EBL palautuu nipistyksen alussa)
+    if (kind === 'evpiste') { if (last && lg[lg.length - 1] === last && last.value.ebl === value.ebl && last.value.vrm === value.vrm) return; }   // veto tai napautus: EBL ja VRM yhtenä rivinä
+    else if (last && Math.abs(last.value - value) < 0.005) return;   // sama arvo kuin edellinen kirjaus (esim. EBL palautuu nipistyksen alussa)
     logCustom(kind, value);
   }
 
@@ -333,7 +336,7 @@
     var S = G.S; S.cmdLog.push({ t: S.t, clockMs: S.clockMs, kind: kind, value: value, x: S.x, y: S.y, hdg: S.hdg, hdgTrue: L.trueHdg(S), v: S.v });
   }
   function canCmd() { return G.mode === 'run' && !G.frozen; }
-  function cmdHeading(dir, long) { if (!canCmd()) return; L.stepHeadingOrder(G.S, dir, long); }
+  function cmdHeading(dir, long) { if (!canCmd()) return; L.stepHeadingOrder(G.S, dir, long); updateUi(); }   // käskymerkki ja käskyteksti päivittyvät heti
   function cmdSpeed(kn) { if (!canCmd()) return; L.orderSpeed(G.S, kn); }
   function bindHold(btn, dir) {
     var timer = null, longDone = false, repeat = null;
@@ -397,7 +400,8 @@
       G.rangeNm = Number(b.getAttribute('data-r')); G.pl.setRangeNm(G.rangeNm); G.lastPlotT = 0;
       Array.prototype.forEach.call($('rangeBox').querySelectorAll('button'), function (c) { c.classList.toggle('on', c === b); });
     });
-    $('gazeBtn').addEventListener('click', function () { G.view.setGaze(0); });
+    $('gazeBtn').addEventListener('click', function () { G.view.setGaze(0); G.view.setBinoPitch(0); });
+    $('binoBtn').addEventListener('click', function () { setBino(!G.view.isBino()); });
     $('menuBtn').addEventListener('click', function () { $('menu').hidden = false; });
     $('mClose').addEventListener('click', function () { $('menu').hidden = true; });
     $('mAbort').addEventListener('click', function () { $('menu').hidden = true; endRun('aborted'); });
@@ -415,18 +419,25 @@
     function gazeActive() { return G.layout.wide || G.main === '3d'; }
     v3.addEventListener('pointerdown', function (e) {
       if (!gazeActive()) return;
-      drag = { x: e.clientX, y: e.clientY, g: G.view.getGaze(), id: e.pointerId, t: performance.now(), moved: false, type: e.pointerType };
+      drag = { x: e.clientX, y: e.clientY, g: G.view.getGaze(), p: G.view.getBinoPitch(), id: e.pointerId, t: performance.now(), moved: false, type: e.pointerType };
       try { v3.setPointerCapture(e.pointerId); } catch (x) {}
     });
     v3.addEventListener('pointermove', function (e) {
       if (!drag) return;
       var dx = e.clientX - drag.x; if (Math.abs(dx) > 8 || Math.abs(e.clientY - drag.y) > 8) drag.moved = true;
-      if (drag.moved) G.view.setGaze(drag.g - dx * 0.25);
+      if (drag.moved) {
+        var sens = G.view.gazeSens();   // kiikarissa herkkyys on jaettu suurennuksella, ja pystyveto nostaa ja laskee katsetta
+        G.view.setGaze(drag.g - dx * 0.25 * sens);
+        if (G.view.isBino()) G.view.setBinoPitch(drag.p + (e.clientY - drag.y) * 0.25 * sens);
+      }
     });
     function dragEnd(e) {
       var d = drag; drag = null; if (!d || e.type === 'pointercancel') return;
       var now = performance.now();
-      if (!d.moved && now - d.t < 450) {
+      if (!d.moved && now - d.t < 450 && G.view.isBino()) {   // kiikarissa napautus keskelle poistaa kiikarin
+        var rc = v3.getBoundingClientRect();
+        if (Math.abs(e.clientX - (rc.left + rc.width / 2)) < rc.width * 0.25 && Math.abs(e.clientY - (rc.top + rc.height / 2)) < rc.height * 0.35) setBino(false);
+      } else if (!d.moved && now - d.t < 450) {
         if (d.type !== 'mouse') G.view.setGaze(0);
         else { if (now - G.lastTapT < 400) G.view.setGaze(0); G.lastTapT = now; }
       }
@@ -451,6 +462,7 @@
       else if (k === 'ArrowDown') { if (canCmd()) L.stepSpeedOrder(G.S, -1); }
       else if (k === ' ') crash();
       else if (k === 'l' || k === 'L') toggleGentle();
+      else if (k === 'b' || k === 'B') setBino(!G.view.isBino());
       else if (k === 'q' || k === 'Q') { if (!e.repeat) G.gazeT = performance.now(); G.gazeKey = -1; }
       else if (k === 'e' || k === 'E') { if (!e.repeat) G.gazeT = performance.now(); G.gazeKey = 1; }
       else if (k === ',') G.pl.stepEBL(e.shiftKey ? -10 : -1);
@@ -581,6 +593,24 @@
     var bud = rem >= 0 ? 'Budjetti ' + H.mmss(rem) : 'Budjetti ylitetty ' + H.mmss(-rem);
     setText($('turnTitle'), title); setText($('turnInfo'), info); setText($('progInfo'), prog); setText($('budgetInfo'), bud);
   }
+  // ---------- kiikari (vaihe 3g) ----------
+  function lookTrue() { return P_norm(L.trueHdg(G.S) + G.view.getGazeNow()); }
+  function loadAids(r) { root.Merkit.load(G.S.x, G.S.y, r).then(function () { if (G.view && G.mode === 'run') G.view.aids.sync(G.S.x, G.S.y, true); }, function () {}); }
+  function drawBinoMask() { var r = $('pane3d').getBoundingClientRect(); root.Nakyma.drawBinoMask($('v3bino'), Math.round(r.width), Math.round(r.height), r.width < 700); }
+  function binoUi(on) {
+    $('binoBtn').setAttribute('aria-pressed', on ? 'true' : 'false'); $('pane3d').classList.toggle('binoon', on); $('game').classList.toggle('binoon', on); $('v3bino').hidden = !on;
+    if (on) drawBinoMask();
+  }
+  // Kiikari päälle tai pois. Päälle: 3D tulee päänäkymäksi, kiikarin kuvakulma 7° ja kauempana olevat merkit ladataan. Pois: entinen katse ja kuvakulma palaavat. Molemmat kirjataan komentolokiin suuntineen.
+  function setBino(on) {
+    on = !!on; if (!G.view || G.view.isBino() === on || (on && G.mode !== 'run')) return;
+    if (on && !(G.layout.wide || G.main === '3d')) { G.main = '3d'; applyPanes(); sizeViews(); }
+    var look = lookTrue();
+    G.view.setBinoculars(on); binoUi(on);
+    if (on) loadAids(G.view.aids.settings.binoRadius + 500);
+    if (G.S && G.mode === 'run') logCustom('kiikari', { on: on, suunta: Math.round(look * 10) / 10 });
+    updateUi();
+  }
   // Kompassinauha 3D-näkymän yläreunassa: tosisuunta, johon katsotaan (aluksen tosisuunta + katseen kulma). Asteikko seuraa kameran vaakakuvakulmaa.
   function drawCompass() {
     var cv = $('v3compass'), pane = $('pane3d');
@@ -589,8 +619,12 @@
     var dpr = Math.min(2, root.devicePixelRatio || 1);
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     var g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-    var look = P_norm(L.trueHdg(G.S) + G.view.getGazeNow()), hf = G.view.hfov() * RAD, k = (w / 2) / Math.tan(hf / 2);
+    var bino = G.view.isBino(), look = P_norm(L.trueHdg(G.S) + G.view.getGazeNow()), hf = (bino ? G.view.baseHfov() : G.view.hfov()) * RAD, k = (w / 2) / Math.tan(hf / 2);   // kiikarin aikana asteikko pysyy tavallisena ja kiikarin sektori piirretään siihen
     g.fillStyle = 'rgba(14,28,40,0.74)'; g.fillRect(0, 0, w, h);
+    if (bino) {
+      var bh = G.view.settings.kiikariHfovDeg * RAD / 2, bx0 = w / 2 - Math.tan(bh) * k, bx1 = w / 2 + Math.tan(bh) * k;
+      g.fillStyle = 'rgba(255,212,0,0.22)'; g.fillRect(bx0, 0, bx1 - bx0, h); g.strokeStyle = 'rgba(255,212,0,0.85)'; g.lineWidth = 1; g.strokeRect(bx0 + 0.5, 0.5, bx1 - bx0 - 1, h - 1);
+    }
     g.font = '600 12px ui-monospace,Menlo,Consolas,monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
     var span = hf / RAD / 2 + 6, a0 = Math.floor((look - span) / 5) * 5;
     for (var b = a0; b <= look + span; b += 5) {
@@ -603,8 +637,9 @@
     }
     // keskimerkki ja lukema
     g.fillStyle = '#ffd400'; g.beginPath(); g.moveTo(w / 2 - 5, 0); g.lineTo(w / 2 + 5, 0); g.lineTo(w / 2, 7); g.closePath(); g.fill();
-    var txt = pad3(look) + '°'; g.font = '700 13px ui-monospace,Menlo,Consolas,monospace'; var tw = g.measureText(txt).width + 12;
+    var txt = bino ? 'Kiikari ' + (look < 100 ? '0' : '') + (look < 10 ? '0' : '') + fnum(look, 1) + '°' : pad3(look) + '°'; g.font = '700 13px ui-monospace,Menlo,Consolas,monospace'; var tw = g.measureText(txt).width + 12;
     g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(w / 2 - tw / 2, 8, tw, 18); g.fillStyle = '#ffd400'; g.fillText(txt, w / 2, 17.5);
+    G.compass = root.Nakyma.drawCommandMarker(g, w, h, look, hf / RAD, G.S.orderHdg);   // käskymerkki (komennettu tosisuunta)
   }
   function P_norm(b) { b = b % 360; return b < 0 ? b + 360 : b; }
   function updateUi() {
@@ -624,8 +659,7 @@
     var S = G.S;
     if (Math.hypot(S.x - G.lastMerkitLoad.x, S.y - G.lastMerkitLoad.y) > 400) {
       G.lastMerkitLoad = { x: S.x, y: S.y };
-      var ahead = { x: S.x + Math.sin(S.hdg * RAD) * 800, y: S.y + Math.cos(S.hdg * RAD) * 800 };
-      root.Merkit.load(ahead.x, ahead.y, 2000);
+      loadAids(G.view.aids.radius() + 500);
     }
   }
   function maybeRebase() {
@@ -649,7 +683,7 @@
       var prog = Math.min(0.95, 0.15 + 0.8 * Math.min(1, t / 12));
       if (G.radar && performance.now() - G.lastRadarT >= 100) { G.lastRadarT = performance.now(); feedRadar(); }
       if (G.plotShown && G.plotterOn) G.pl.update(S.x, S.y, S.hdg, cogOf(S), S.v);
-      var idle = v.terrain.idle() && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && t > 1.2 && G.radarReady && (!G.plotShown || G.pl.ready());
+      var idle = v.terrain.idle() && (!v.piers || v.piers.idle()) && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && t > 1.2 && G.radarReady && (!G.plotShown || G.pl.ready());
       setLoad(idle ? 1 : prog, 'Ladataan maastoa ' + (j.jobs + j.queued) + ' ruutua');
       v.render(S, dtReal);
       if (idle || t > 60) {
@@ -658,11 +692,12 @@
         if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.targetKn * KN)), 2600);
         if (G.rec) G.rec.sample(S, inFairwayNow(S));
         applyPanes(); sizeViews();
+        loadAids(v.aids.settings.loadRadius);   // loistojen ja linjataulujen näkyvyysrajat ovat kilometrejä, joten kauempana olevat laitteet luetaan taustalla
       }
       return;
     }
     if (G.mode === 'run') {
-      if (G.gazeKey) v.setGaze(v.getGaze() + G.gazeKey * 90 * dtReal);
+      if (G.gazeKey) v.setGaze(v.getGaze() + G.gazeKey * 90 * dtReal * v.gazeSens());
       stepSim(dtReal);
       maybeLoadAids(); maybeRebase();
     }
@@ -704,6 +739,7 @@
     if (G.mode === 'debrief') return;
     clearTimeout(G.endTimer);
     G.mode = 'debrief'; G.frozen = true;
+    if (G.view && G.view.isBino()) { G.view.setBinoculars(false); binoUi(false); }
     if (G.radar) G.radar.vapautaRuudut();     // tutkan ruudukko (enintään noin 39 Mt) vapautetaan, uusi ajo rakentaa sen uudelleen
     if (G.rec) { G.rec.aborted = why === 'aborted'; G.rec.endMs = G.S.clockMs; }
     $('groundBanner').hidden = true; $('toast').hidden = true; $('menu').hidden = true;
@@ -734,6 +770,8 @@
     if (c.kind === 'tutkaviritys') return c.value ? 'Tutkan viritys: hyvä' : 'Tutkan viritys: huono';
     if (c.kind === 'ebl') return 'Plotterin EBL ' + pad3(c.value) + '° T';
     if (c.kind === 'vrm') return 'Plotterin VRM ' + fnum(c.value, 2) + ' mpk';
+    if (c.kind === 'evpiste') return 'Plotterin EBL ' + pad3(c.value.ebl) + '° T ja VRM ' + fnum(c.value.vrm, 2) + ' mpk';
+    if (c.kind === 'kiikari') return c.value.on ? 'Kiikari päälle, suunta ' + pad3(c.value.suunta) + '°' : 'Kiikari pois, suunta ' + pad3(c.value.suunta) + '°';
     if (c.kind === 'eblvrm') return c.value ? 'Plotterin EBL ja VRM päälle' : 'Plotterin EBL ja VRM pois';
     return H.cmdText(c);
   }

@@ -7,14 +7,15 @@
  *  - Linjataulut piirretään Linjamerkki-turvalaitteista. Taulun etupinnan suunta tulee taululinjan päätepisteestä: suunta merkistä linjaa pitkin
  *    tulevaa katsojaa kohti.
  *  - Vesiliikennemerkeillä ei ole aineistossa suuntaa, joten kilpi käännetään kohti alusta, kun ryhmä uusitaan (oletus).
- *  - Pienin näkyvä leveys: moduulin verteksisäädin (asetaPikseli) pitää ohuet osat vähintään noin 3,5 kuvapisteen levyisinä.
+ *  - Pienin näkyvä leveys (vaihe 3g): moduulin verteksisäädin (asetaPikseli) pitää ohuet osat vähintään yhden laitepikselin levyisinä, ohuen osan peittävyys on todellinen leveys / piirretty leveys,
+ *    ja merkki häivytetään luokkansa näkyvyysrajalla (Merimerkit3D.ASETUKSET.nakyvyysRaja). Kiikarilla rajat kerrotaan suurennuksella (setBino).
  *  - Valolaitteiden (torni, valon korkeus, sektorit) tiedot kulkevat mukana funktiossa valot() vaihetta 4 (yönäkymä) varten.
  * Päivällä valot eivät pala. Tämän tiedoston Builder-luokkaa käyttää vain maamerkkimoduuli (maamerkit3d.js). */
 (function (root) {
   'use strict';
   var THREE = root.THREE, MM = root.Merimerkit3D;
   var EC = { r: [0.886, 0.129, 0.110], g: [0.075, 0.627, 0.290], y: [0.949, 0.765, 0.067], b: [0.07, 0.07, 0.07], w: [0.95, 0.95, 0.95], k: [0.9, 0.9, 0.88] };
-  var SETTINGS = { loadRadius: 4000, showRadius: 3500, resync: 400, minPx: 3.5, maanpintaRaja: 0.25, kummeliLahi: 150, kummeliHyst: 20 };
+  var SETTINGS = { loadRadius: 7000, showRadius: 6500, binoRadius: 9000, resync: 400, minPx: 1.0, maanpintaRaja: 0.25, kummeliLahi: 150, kummeliHyst: 20 };   // showRadius kattaa loistojen 6 000 m:n rajan, binoRadius kiikarin 8,4 km:n viittarajan
 
   function Builder() { this.pos = []; this.nor = []; this.col = []; this.wid = []; this.wide = false; }
   // sylinteri tai katkaistu kartio: (x, z) keskipiste, säteet r0 (alhaalla) ja r1 (ylhäällä), y0..y1, väri [r,g,b]
@@ -64,7 +65,8 @@
     var holder = new THREE.Group(); holder.name = 'turvalaitteet'; scene.add(holder);
     var last = { x: 1e9, y: 1e9, n: -1, unknown: 0, t: 0 }, count = 0, valotList = [], stats = { kohteita: 0, piirtokutsuja: 0, kolmioita: 0, varamalleja: 0 };
     var groundAt = opts.groundAt || function () { return null; };
-    MM.ASETUKSET.minPx = S.minPx;
+    MM.ASETUKSET.minPx = S.minPx; MM.asetaNakyvyys(1);
+    var bino = false;
 
     // Linjataulun suunta: lähin taululinjan päätepiste (enintään 800 m: linjan pää on ylemmän taulun kohdalla, alempi taulu on sen edessä), suunta päätepisteestä linjaa pitkin
     function boardFacing(a, boards) {
@@ -102,10 +104,10 @@
       var now = performance.now();
       var due = Math.hypot(x - last.x, y - last.y) >= S.resync || (last.unknown > 0 && now - last.t > 2500);
       if (!force && !due) return;
-      var list = M.near(x, y, S.showRadius);
+      var list = M.near(x, y, radius());
       if (!force && list.length === last.n && !(last.unknown > 0 && now - last.t > 2500) && Math.hypot(x - last.x, y - last.y) < 800) return;
       last.x = x; last.y = y; last.n = list.length; last.t = now;
-      var boards = M.nearBoards(x, y, S.showRadius), items = [], unknown = 0, lights = [], kumItems = [];
+      var boards = M.nearBoards(x, y, radius()), items = [], unknown = 0, lights = [], kumItems = [];
       list.forEach(function (a) {
         var fixed = a.tyyppi !== 'Viitta' && a.tyyppi !== 'Poiju';
         var gz = 0, t = a;
@@ -133,7 +135,7 @@
         }
       });
       last.unknown = unknown;
-      M.nearSigns(x, y, S.showRadius).forEach(function (sg) {
+      M.nearSigns(x, y, radius()).forEach(function (sg) {
         var ts = { tyyppi: 'Vesiliikennemerkki', lajityyppi: sg.laji, rajoitusarvo: sg.arvo, lisakilpi1: sg.kilpi, nimi: sg.nimi };
         items.push({ turvalaite: ts, x: sg.x, y: sg.y, z: Math.max(0, groundAt(sg.x, sg.y) || 0), suunta: bearing(x - sg.x, y - sg.y) });
       });
@@ -150,12 +152,17 @@
       }
       holder.add(g);
       stats = g.userData.tilasto;
-      if (kum.length) stats.kohteita -= kum.length;   // kummelit on listattu kahdesti (lähi- ja kaukomalli), mutta piirtyy kummastakin vain toinen valotList = lights; count = list.length;
+      if (kum.length) stats.kohteita -= kum.length;   // kummelit on listattu kahdesti (lähi- ja kaukomalli), mutta piirtyy kummastakin vain toinen
+      valotList = lights; count = list.length;   // (vaihe 3g: tämä rivi oli aiemmin kommentin jatkona, joten valot()-lista jäi tyhjäksi)
       holder.userData.valot = valotList; holder.userData.tilasto = stats;
     }
     function rebase() { last.n = -1; last.x = 1e9; }
-    function setPixel(worldPerPx) { MM.asetaPikseli(worldPerPx); }
-    return { group: holder, sync: sync, setPixel: setPixel, rebase: rebase, settings: S, count: function () { return count; }, valot: function () { return valotList; }, tilasto: function () { return stats; }, addAid: null, Builder: Builder };
+    function radius() { return bino ? S.binoRadius : S.showRadius; }
+    // kuvapikselin koko: maailmayksikköä per laitepikseli ja per piirtopuskurin pikseli 1 m etäisyydellä
+    function setPixel(worldPerDevPx, worldPerBufPx) { MM.asetaPikseli(worldPerDevPx, worldPerBufPx); }
+    // kiikari päälle tai pois: näkyvyysrajat kerrotaan suurennuksella (mult) ja näytettävien laitteiden säde kasvaa. Kutsuja huolehtii latauksesta (loadRadius).
+    function setBino(on, mult) { bino = !!on; MM.asetaNakyvyys(bino ? mult : 1); last.n = -1; last.x = 1e9; }
+    return { group: holder, sync: sync, setPixel: setPixel, setBino: setBino, radius: radius, rebase: rebase, settings: S, count: function () { return count; }, valot: function () { return valotList; }, tilasto: function () { return stats; }, addAid: null, Builder: Builder };
   }
 
   var api = { create: create, Builder: Builder, SETTINGS: SETTINGS, EC: EC };

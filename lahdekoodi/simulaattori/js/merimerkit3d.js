@@ -2,6 +2,9 @@
  *
  * Simulaattorin kopio (vaihe 3b, 25.10.2026) hakemiston /home/claude/merimerkit/ moduulista. Muutos: kummeli on epäsäännöllinen valkoiseksi maalattu
  * kivikasa heijastinlevyineen (malliKummeli ja Rak.kivi), muuten identtinen.
+ * Vaihe 3g (25.10.2026): pienin leveys on 1,0 laitepikseliä (ei 3,5), ohuempi merkki piirretään vähintään pikselin levyisenä mutta peittävyys on todellinen
+ * leveys jaettuna piirretyllä leveydellä (haalea viiva, ei täysi piste), ja merkki häivytetään ja jätetään piirtämättä luokkansa näkyvyysrajalla
+ * (viitat ja poijut 1 200 m, kummelit, reunamerkit ja kyltit 2 500 m, linjataulut 4 000 m, loistot ja majakat 6 000 m). Kiikari kertoo rajat suurennuksella.
  *
  * Käyttö:  var obj = Merimerkit3D.luoMerkki(turvalaite, asetukset);   // THREE.Object3D, metreinä
  *          var ryhma = Merimerkit3D.luoInstanssit([{ turvalaite: t, x: 10, y: 20, z: 0 }, ...], asetukset);
@@ -44,7 +47,7 @@
   // ---------- oletusasetukset ----------
   var ASETUKSET = {
     ylos: 'z',               // 'z' (oletus, tehtävänanto) tai 'y' (simulaattorin maailma)
-    minPx: 3.5,              // pienin näkyvä leveys CSS-pikseleinä (mitattu leveys jää vähintään 3 px:iin), kun asetaKamera on kutsuttu
+    minPx: 1.0,              // pienin näkyvä leveys laitepikseleinä (vaihe 3g). Ohuempi osa levennetään tähän, ja sen peittävyys on todellinen leveys / piirretty leveys
     maanpinta: 0,            // maanpinnan korkeus vedenpinnasta (m) kiinteille merkeille, vähennetään valon korkeudesta
     suunta: null,            // taulun etupinnan suunta asteina pohjoisesta myötäpäivään (linjataulut ja vesiliikennemerkit)
     kilpiKoko: 0.96,         // vesiliikennemerkin sivu (m), määräys 12.4.2017 5 §: havaitsemisetäisyys alle 300 m
@@ -52,7 +55,10 @@
     linjatauluVari: 'keltapunainen',   // 'keltapunainen' tai 'valkopunainen'
     kummeliTunnus: 'ei',     // 'ei' tai 'musta' (musta yläosa)
     kummeliKaukana: false,   // true: kummeli yksinkertaisena valkoisena kartiona (turvalaitteen kenttä kaukana = true vaikuttaa vain siihen merkkiin)
-    tulostaLoki: true        // kirjaa varamallit myös konsoliin
+    tulostaLoki: true,       // kirjaa varamallit myös konsoliin
+    // näkyvyysrajat metreinä luokittain (vaihe 3g). Merkki häivytetään välillä haivytysAlku ... 1 x raja ja jätetään piirtämättä rajan ulkopuolella.
+    nakyvyysRaja: { viitta: 1200, pieni: 2500, linjataulu: 4000, loisto: 6000 },
+    haivytysAlku: 0.7        // häivytys alkaa tällä osuudella rajasta (0,7 = 70 %)
   };
   function asetukset(a) { if (!a) return ASETUKSET; var o = {}; for (var k in ASETUKSET) o[k] = a[k] !== undefined ? a[k] : ASETUKSET[k]; return o; }
 
@@ -168,44 +174,80 @@
   }
 
   // ---------- jaettu materiaali ----------
-  var pikseli = { value: 0 };     // maailmayksikköä kuvapistettä kohti yhden metrin etäisyydellä (2 tan(fov/2) / korkeus)
+  // Pikselikoko: x = maailmayksikköä laitepikseliä kohti 1 m etäisyydellä (2 tan(fov/2) / (korkeus css-px x dpr)), y = piirtopuskurin pikseliä kohti.
+  // Piirretty minimileveys on vähintään yksi puskuripikseli, jotta ohut kappale ei katoa rasteroinnissa (antialias on pois päältä).
+  var pikseli = { value: new THREE.Vector2(0, 0) };
+  var rajat = { value: new THREE.Vector4(1200, 2500, 4000, 6000) };   // luokkien 0 ... 3 näkyvyysrajat (m), kerrotaan kertoimella
+  var kerroin = { value: 1 };       // kiikarin suurennus (paljain silmin 1)
+  var haivytys = { value: 0.7 };
   var materiaali = null;
   function annaMateriaali() {
     if (materiaali) return materiaali;
-    var m = new THREE.MeshLambertMaterial({ vertexColors: true, map: atlasAlusta(), side: THREE.FrontSide });
+    var m = new THREE.MeshLambertMaterial({ vertexColors: true, map: atlasAlusta(), side: THREE.FrontSide, transparent: true, depthWrite: true });
     m.onBeforeCompile = function (sh) {
-      sh.uniforms.uPix = pikseli;
+      sh.uniforms.uPix = pikseli; sh.uniforms.uRaja = rajat; sh.uniforms.uKerroin = kerroin; sh.uniforms.uHaivytys = haivytys;
       // simulaattorin muutos: päivänvalon hajavalo (varjopuolen kirkkaus), jotta valkoiseksi maalatut merkit näyttävät valkoisilta myös varjopuolella
-      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * 0.2;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('void main() {', 'varying float vNak;\nvoid main() {')
+        .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity * vNak );\n if (vNak <= 0.004) discard;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * 0.2;');
       sh.vertexShader = sh.vertexShader
-        .replace('void main() {', 'attribute vec4 laaj;\nattribute float heij;\nattribute float valo;\nuniform float uPix;\nvoid main() {')
+        .replace('void main() {', 'attribute vec4 laaj;\nattribute vec2 nak;\nattribute float heij;\nattribute float valo;\nuniform vec2 uPix;\nuniform vec4 uRaja;\nuniform float uKerroin;\nuniform float uHaivytys;\nvarying float vNak;\nvoid main() {')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\n' +
-          '#ifdef USE_INSTANCING\n vec4 mvp_ = modelViewMatrix * instanceMatrix * vec4(position, 1.0);\n#else\n vec4 mvp_ = modelViewMatrix * vec4(position, 1.0);\n#endif\n' +
-          ' float ex_ = min(max(0.0, 0.5 * laaj.w * uPix * length(mvp_.xyz) - laaj.z), 4.0) * step(0.001, laaj.w);\n' +
-          ' transformed.xy += laaj.xy * ex_;');
+          '#ifdef USE_INSTANCING\n mat4 mm_ = modelViewMatrix * instanceMatrix;\n#else\n mat4 mm_ = modelViewMatrix;\n#endif\n' +
+          ' vec4 mvp_ = mm_ * vec4(position, 1.0);\n' +
+          ' float dv_ = length(mvp_.xyz);\n' +
+          ' float dob_ = length(mm_[3].xyz);\n' +
+          ' float raja_ = (nak.x < 0.5 ? uRaja.x : (nak.x < 1.5 ? uRaja.y : (nak.x < 2.5 ? uRaja.z : uRaja.w))) * uKerroin;\n' +
+          ' float on_ = step(0.001, laaj.w);\n' +
+          ' float mh_ = 0.5 * max(laaj.w * uPix.x, on_ * uPix.y);\n' +      // piirretyn minimipuoliskon leveys metriä kohti
+          ' float ex_ = min(max(0.0, mh_ * dv_ - laaj.z), 12.0) * on_;\n' +
+          ' transformed.xy += laaj.xy * ex_;\n' +
+          ' float dh_ = max(nak.y, mh_ * dob_);\n' +
+          ' float fade_ = clamp((raja_ - dob_) / (raja_ * max(0.02, 1.0 - uHaivytys)), 0.0, 1.0);\n' +
+          ' vNak = (nak.y > 0.0 ? nak.y / dh_ : 1.0) * fade_;')
+        .replace('#include <fog_vertex>', '#include <fog_vertex>\n if (fade_ <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
     };
-    m.customProgramCacheKey = function () { return 'merimerkit3d-v1-sim'; };
+    m.customProgramCacheKey = function () { return 'merimerkit3d-v2-3g'; };
     m.name = 'merimerkit';
     materiaali = m; return m;
   }
-  // Kameran asetus: kutsu kerran kuvassa tai kun kameran FOV tai ikkunan korkeus muuttuu. korkeusPx = piirtoalueen korkeus CSS-pikseleinä.
-  function asetaKamera(kamera, korkeusPx) { pikseli.value = 2 * Math.tan((kamera.fov * Math.PI / 180) / 2) / korkeusPx; return pikseli.value; }
-  function asetaPikseli(maailmaaPerPx) { pikseli.value = maailmaaPerPx; }
+  // Kameran asetus: korkeusPx = piirtoalueen korkeus css-pikseleinä, dpr = laitepikselisuhde, puskuriKorkeusPx = piirtopuskurin korkeus (oletus korkeusPx x dpr).
+  function asetaKamera(kamera, korkeusPx, dpr, puskuriKorkeusPx) {
+    var k = 2 * Math.tan((kamera.fov * Math.PI / 180) / 2); dpr = dpr || 1;
+    asetaPikseli(k / (korkeusPx * dpr), k / (puskuriKorkeusPx || korkeusPx * dpr));
+    return pikseli.value.x;
+  }
+  // maailmaaPerLaitePx = maailmayksikköä per laitepikseli 1 m etäisyydellä, maailmaaPerPuskuriPx samoin piirtopuskurin pikselille (oletus sama)
+  function asetaPikseli(maailmaaPerLaitePx, maailmaaPerPuskuriPx) {
+    pikseli.value.set(maailmaaPerLaitePx, maailmaaPerPuskuriPx === undefined ? maailmaaPerLaitePx : maailmaaPerPuskuriPx);
+  }
+  // Näkyvyysrajat luetaan asetuksista (luokat: viitta, pieni, linjataulu, loisto). suurennus kertoo rajat (kiikari), häivytysAlku asetuksista.
+  function asetaNakyvyys(suurennus, as) {
+    var a = as || ASETUKSET, r = a.nakyvyysRaja || ASETUKSET.nakyvyysRaja;
+    rajat.value.set(r.viitta, r.pieni, r.linjataulu, r.loisto);
+    kerroin.value = suurennus > 0 ? suurennus : 1;
+    haivytys.value = a.haivytysAlku !== undefined ? a.haivytysAlku : 0.7;
+  }
+  // Luokka 0 = kelluvat viitat ja poijut, 1 = pienet kiinteät merkit (kummeli, reunamerkki, vesiliikennemerkki), 2 = linjataulu, 3 = loistot ja majakat (torni)
+  var LUOKKA = { viitta: 0, poiju: 0, linjamerkki: 2, apuloisto: 3, sektoriloisto: 3, suuntaloisto: 3, majakka: 3, tunnusmajakka: 3 };
+  function luokka(avain) { return LUOKKA[avain] !== undefined ? LUOKKA[avain] : 1; }
 
   // ---------- geometrian rakentaja ----------
-  function Rak() { this.p = []; this.n = []; this.c = []; this.uv = []; this.l = []; this.h = []; this.v = []; this.minPx = 0; this.heij = 0; this.valo = 0; this.tri_ = 0; }
+  function Rak() { this.p = []; this.n = []; this.c = []; this.uv = []; this.l = []; this.h = []; this.v = []; this.k = []; this.minPx = 0; this.heij = 0; this.valo = 0; this.fw = 0; this.tri_ = 0; }
   Rak.prototype.vert = function (d) {
     this.p.push(d.p[0], d.p[1], d.p[2]); this.n.push(d.n[0], d.n[1], d.n[2]); this.c.push(d.c[0], d.c[1], d.c[2]);
     var uv = d.uv || UV_VALKOINEN; this.uv.push(uv[0], uv[1]);
     var lx = d.lx || 0, ly = d.ly || 0;
     this.l.push(lx, ly, d.r0 || 0, (lx || ly) ? this.minPx : 0);
-    this.h.push(this.heij); this.v.push(this.valo);
+    this.h.push(this.heij); this.v.push(this.valo); this.k.push(this.minPx > 0 ? this.fw : 0);
   };
   Rak.prototype.tri = function (a, b, c) { this.vert(a); this.vert(b); this.vert(c); this.tri_++; };
   Rak.prototype.nelio = function (a, b, c, d) { this.tri(a, b, c); this.tri(a, c, d); };
   // pyörähdyskappale (sylinteri tai katkaistu kartio); vari = väri tai fn(i) → väri (esim. pystyraidat)
   Rak.prototype.rengas = function (o) {
     var seg = o.seg || 12, cx = o.cx || 0, cy = o.cy || 0, dz = o.z1 - o.z0, dr = o.r1 - o.r0, len = Math.hypot(dz, dr) || 1, nr = dz / len, nz = -dr / len;
+    var fw0 = this.fw; this.fw = Math.max(o.r0, o.r1);   // kohteen puolileveys peittävyyttä varten (vaihe 3g)
     for (var i = 0; i < seg; i++) {
       var a0 = i / seg * Math.PI * 2, a1 = (i + 1) / seg * Math.PI * 2, col = typeof o.vari === 'function' ? o.vari(i) : o.vari;
       var P = function (a, z, r) { var ca = Math.cos(a), sa = Math.sin(a), k = r > 1e-6 ? 1 : 0; return { p: [cx + ca * r, cy + sa * r, z], n: [ca * nr, sa * nr, nz], c: col, lx: ca * k, ly: sa * k, r0: r }; };
@@ -222,6 +264,7 @@
         this.tri(D, e1, e0);
       }
     }
+    this.fw = fw0;
   };
   Rak.prototype.pallo = function (cx, cy, cz, r, col, seg, stk) {
     seg = seg || 8; stk = stk || 5;
@@ -258,7 +301,7 @@
   };
   // nelisivuinen katkaistu pyramidi (torni): pohjaleveys w0, yläleveys w1, kierto rot
   Rak.prototype.prisma = function (cx, cy, z0, z1, w0, w1, rot, vari) {
-    var c = Math.cos(rot || 0), s = Math.sin(rot || 0), self = this;
+    var c = Math.cos(rot || 0), s = Math.sin(rot || 0), self = this, fw0 = this.fw; this.fw = Math.max(w0, w1) / 2;
     function K(i, z, w) { var sx = (i === 0 || i === 3) ? -1 : 1, sy = (i < 2) ? -1 : 1, x = sx * w / 2, y = sy * w / 2, px = cx + c * x - s * y, py = cy + s * x + c * y, r = Math.hypot(px - cx, py - cy) || 1; return { p: [px, py, z], lx: (px - cx) / r, ly: (py - cy) / r, r0: r }; }
     for (var i = 0; i < 4; i++) {
       var j = (i + 1) % 4, a = K(i, z0, w0), b = K(j, z0, w0), t = K(j, z1, w1), u = K(i, z1, w1);
@@ -268,6 +311,7 @@
       if (n[0] * (a.p[0] - cx) + n[1] * (a.p[1] - cy) < 0) { n = [-n[0], -n[1], -n[2]]; [a, b, t, u].forEach(function (v) { v.n = n; }); self.nelio(a, u, t, b); }
       else self.nelio(a, b, t, u);
     }
+    this.fw = fw0;
   };
   Rak.prototype.pyramidi = function (cx, cy, z0, w, h, rot, col) {
     var c = Math.cos(rot || 0), s = Math.sin(rot || 0), apex = [cx, cy, z0 + h];
@@ -294,7 +338,7 @@
   // Pienin näkyvä leveys levittää taulua koko leveydeltään tasaisesti (vaakasuunnassa).
   Rak.prototype.taulu = function (o) {
     var th = (o.suunta || 0) * Math.PI / 180, nx = Math.sin(th), ny = Math.cos(th), lx = Math.cos(th), ly = -Math.sin(th);   // (lx, ly) = katsojan vasen
-    var off = o.paksuus === undefined ? 0.02 : o.paksuus, w = o.w, h = o.h, s0 = w / 2, self = this, z0 = o.z0, z1 = o.z0 + h, uv = o.uv;
+    var off = o.paksuus === undefined ? 0.02 : o.paksuus, w = o.w, h = o.h, s0 = w / 2, self = this, z0 = o.z0, z1 = o.z0 + h, uv = o.uv, fw0 = this.fw; this.fw = s0;
     function V(s, z, sivu, n, c, uvp) { return { p: [o.cx + lx * s + nx * sivu, o.cy + ly * s + ny * sivu, z], n: n, c: c, uv: uvp, lx: lx * s / s0, ly: ly * s / s0, r0: s0 }; }
     var pal = Array.isArray(o.vari) ? o.vari : [[1, o.vari]], nf = [nx, ny, 0], nb = [-nx, -ny, 0], cur = s0;
     pal.forEach(function (st) {
@@ -305,10 +349,14 @@
     });
     var bc = o.takaVari || V_.harmaa;
     this.nelio(V(-s0, z0, -off, nb, bc), V(s0, z0, -off, nb, bc), V(s0, z1, -off, nb, bc), V(-s0, z1, -off, nb, bc));
+    this.fw = fw0;
   };
 
-  Rak.prototype.geometria = function (suojaSade) {
-    var g = new THREE.BufferGeometry();
+  // luokka = näkyvyysluokka (0 ... 3), fwMalli = mallin puolileveys (m): kohteille, joilla ei ole omaa puolileveyttä, käytetään mallin leveyttä
+  Rak.prototype.geometria = function (luokkaNro, fwMalli) {
+    var g = new THREE.BufferGeometry(), nk = new Float32Array(this.k.length * 2);
+    for (var q = 0; q < this.k.length; q++) { nk[2 * q] = luokkaNro || 0; nk[2 * q + 1] = this.k[q] > 0 ? this.k[q] : (fwMalli || 0); }
+    g.setAttribute('nak', new THREE.BufferAttribute(nk, 2));
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
@@ -317,8 +365,8 @@
     g.setAttribute('heij', new THREE.Float32BufferAttribute(this.h, 1));
     g.setAttribute('valo', new THREE.Float32BufferAttribute(this.v, 1));
     g.computeBoundingBox(); g.computeBoundingSphere();
-    // pienin näkyvä leveys levittää pintoja enintään 4 m, joten rajapallo kasvatetaan
-    g.boundingSphere.radius += 4.5;
+    // pienin näkyvä leveys levittää pintoja enintään 12 m, joten rajapallo kasvatetaan
+    g.boundingSphere.radius += 12.5;
     return g;
   };
 
@@ -563,9 +611,9 @@
     uv = slotUV(kilpiSlotti(k));
     var w = side, h = side;
     if (kk.cat === 'taulu') { h = 0.6; w = 1.5; zA = 1.9; }
-    B.minPx = 2;
+    B.minPx = a.minPx;
     B.rengas({ z0: 0, z1: zA + h, r0: 0.05, r1: 0.05, seg: 6, vari: V.tummaHarmaa, ylakansi: true });
-    B.minPx = 2;
+    B.minPx = a.minPx;
     B.taulu({ cx: 0, cy: 0.09, z0: zA, w: w, h: h, suunta: 0, vari: [[1, V.w]], uv: uv, takaVari: V.harmaa, paksuus: 0.02 });
     B.minPx = 0;
     return { malli: 'vesiliikennemerkki_' + kk.laji + (kk.arvo != null ? '_' + kk.arvo : ''), korkeus: zA + h, halkaisija: w, huippumerkki: false, valoZ: null, osat: ['tolppa', 'kilpi: ' + kk.nimi + (kk.arvo != null ? ' ' + fmtLuku(kk.arvo) : '')] };
@@ -653,7 +701,8 @@
     if (!m) {
       var B = new Rak(), meta;
       meta = v.vara ? malliVara(B, p, a) : v.lj.rak(B, p, a);
-      var g = B.geometria();
+      var g = B.geometria(luokka(v.vara ? 'vara' : v.avain), (meta.halkaisija || 0) / 2);
+      meta.nakyvyysluokka = luokka(v.vara ? 'vara' : v.avain);
       meta.pienin_nakyva_px = a.minPx; meta.kolmiot = B.tri_; meta.varamalli = !!v.vara; meta.tyyppi = v.vara ? 'varamalli' : p.tyyppi;
       meta.navigointilaji = p.nl; meta.avain = avain; meta.laji = v.vara ? 'vara' : v.avain;
       m = mallit[avain] = { geom: g, meta: meta, v: v };
@@ -744,7 +793,7 @@
   }
 
   var api = {
-    VERSIO: VERSIO, luoMerkki: luoMerkki, luoInstanssit: luoInstanssit, asetaKamera: asetaKamera, asetaPikseli: asetaPikseli,
+    VERSIO: VERSIO, luoMerkki: luoMerkki, luoInstanssit: luoInstanssit, asetaKamera: asetaKamera, asetaPikseli: asetaPikseli, asetaNakyvyys: asetaNakyvyys,
     esimerkit: esimerkit, ASETUKSET: ASETUKSET, VARI_HEX: VARI_HEX, VARI: V, RAIDAT: RAIDAT, HEIJASTIN: HEIJASTIN, NL_NIMI: NL_NIMI, VALO_RGB: VALO_RGB,
     loki: loki, tyhjennaLoki: function () { loki.length = 0; lokiAvaimet = {}; },
     materiaali: annaMateriaali, atlas: function () { return atlas; }, KILPI: KILPI,
