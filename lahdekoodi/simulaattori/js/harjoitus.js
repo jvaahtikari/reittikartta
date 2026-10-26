@@ -48,9 +48,73 @@
         { e: 334658, n: 6827038 },
         { e: 334769, n: 6827049, nimi: 'Aitolahti' }
       ],
-      suggestKn: [10, 30]
+      suggestKn: [10, 30],
+      startKn: 0,                // sisäänrakennettu harjoitus alkaa levosta kuten ennen vaihetta 3h
+      builtin: true
     }
   };
+
+  // ---------- Reitti Reittikartasta (vaihe 3h) ----------
+  // Reittikartta tallentaa reitit selaimen localStorage-avaimeen reittikartta.v1 (routes[], kentät id, name, from, via, to, status, points[{lat, lng}], speed).
+  // Tallennettu reitti muunnetaan samaan muotoon kuin Harjoitus 1 (route: [{e, n, nimi}]), joten reitin geometria, automaattiohjaus ja purku käyttävät yhtä koodipolkua.
+  var STORE_KEY = 'reittikartta.v1', DEFAULT_START_KN = 12;
+  function storedName(r) {
+    var nm = String(r.name || '').trim();
+    if (nm) return nm;
+    var parts = [r.from, r.via, r.to].map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    return parts.length ? parts.join(' – ') : 'Nimetön reitti';
+  }
+  function fromStored(r) {
+    if (!r || !Array.isArray(r.points)) return null;
+    var pts = r.points.filter(function (p) { return p && isFinite(Number(p.lat)) && isFinite(Number(p.lng)); });
+    if (pts.length < 2) return null;
+    var route = pts.map(function (p) { var en = Paikka.lonlatToEN(Number(p.lng), Number(p.lat)); return { e: en.e, n: en.n, nimi: '' }; });
+    if (r.from && String(r.from).trim()) route[0].nimi = String(r.from).trim();
+    if (r.to && String(r.to).trim()) route[route.length - 1].nimi = String(r.to).trim();
+    var total = 0;
+    for (var i = 1; i < route.length; i++) total += Math.hypot(route[i].e - route[i - 1].e, route[i].n - route[i - 1].n);
+    var sp = Number(r.speed);
+    return {
+      id: 'rk:' + r.id, rkId: r.id, nimi: storedName(r), kuvaus: '', route: route, builtin: false,
+      status: r.status === 'approved' ? 'approved' : 'draft', pisteita: route.length, lengthM: total,
+      startKn: sp > 0 && isFinite(sp) ? sp : DEFAULT_START_KN, speedFromRoute: sp > 0 && isFinite(sp)
+    };
+  }
+  // Lukee Reittikartan reitit annetusta tallennuksesta (oletus window.localStorage). Virheellinen tai puuttuva tieto antaa tyhjän listan.
+  function listStored(storage) {
+    try {
+      storage = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+      var txt = storage && storage.getItem(STORE_KEY); if (!txt) return [];
+      var st = JSON.parse(txt), rs = st && Array.isArray(st.routes) ? st.routes : [], out = [];
+      rs.forEach(function (r) { var ex = fromStored(r); if (ex) out.push(ex); });
+      return out;
+    } catch (e) { return []; }
+  }
+  // Reittikartan asetukset, jotka vaikuttavat reittimerkintöihin plotterilla (legin suunta ja matka, käännösmerkit)
+  function storedShow(storage) {
+    var o = { legBrg: true, turnTicks: true };
+    try {
+      storage = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+      var st = JSON.parse(storage.getItem(STORE_KEY) || '{}'), sh = st && st.settings && st.settings.show;
+      if (sh) { if (sh.legBrg === false) o.legBrg = false; if (sh.turnTicks === false) o.turnTicks = false; }
+    } catch (e) {}
+    return o;
+  }
+  // Käänteinen reitti: viimeisestä pisteestä ensimmäiseen
+  function reversed(ex) {
+    var c = {}; Object.keys(ex).forEach(function (k) { c[k] = ex[k]; });
+    c.route = ex.route.slice().reverse().map(function (p) { return { e: p.e, n: p.n, nimi: p.nimi || '' }; });
+    c.reverse = true;
+    return c;
+  }
+  // Lähtönopeus: tallennetun hetken tasapainotila. Alus voi aloittaa kulussa, jolloin simuloidaan irrallisessa kopiossa tasainen kulku ja siirretään sen nopeus ja vivun tila oikeaan tilaan.
+  function settleSpeed(S, kn) {
+    if (!(kn > 0)) return;
+    var T = Liike.create({ x: 0, y: 0, hdg: S.hdg, conv: S.conv, clockMs: S.clockMs, v: kn * KN, speedKn: kn });
+    for (var i = 0; i < 2400; i++) Liike.advance(T, 0.1);
+    ['v', 'speedSense', 'leverTrim', 'leverCmd', 'lever', 'trim', 'rate', 'roll', 'rudder', 'rudderCmd'].forEach(function (k) { if (T[k] != null) S[k] = T[k]; });
+    S.orderSpeedKn = kn; S.hmSpeedKn = kn; S.v = T.v;
+  }
 
   function wrap180(d) { return ((d + 180) % 360 + 360) % 360 - 180; }
   function norm360(d) { return ((d % 360) + 360) % 360; }
@@ -78,7 +142,7 @@
     }
     pts[0].cum = 0; pts[pts.length - 1].cum = cum;
     turns.forEach(function (t, k) { t.no = k + 1; });
-    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus, pts: pts, legs: legs, turns: turns, total: cum };
+    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus || '', pts: pts, legs: legs, turns: turns, total: cum, startKn: ex.startKn || 0, builtin: !!ex.builtin, reverse: !!ex.reverse, status: ex.status || 'approved' };
   }
 
   // Pisteen (e, n) projektio reitille. Palauttaa lähimmän jakson, matkan reitillä (cum), sivupoikkeaman (xte, positiivinen = reitin oikealla puolella) ja etäisyyden.
@@ -112,7 +176,8 @@
     var A = { route: route, targetKn: targetKn, started: false, lastCmdT: -1e9, leg: 0, done: false, origin: origin };
     A.step = function (S) {
       if (A.done) return;
-      if (!A.started) { Liike.orderSpeed(S, A.targetKn); A.started = true; }
+      if (!A.started) { if (S.orderSpeedKn !== A.targetKn) Liike.orderSpeed(S, A.targetKn); A.started = true; }   // kulussa aloittava alus on jo tavoitenopeudessa: samaa käskyä ei anneta uudelleen, koska käsky aiheuttaisi nopeuden notkahduksen
+      if (!route) { A.done = true; return; }          // vapaa ajo: automaattiohjaus antaa vain nopeuskäskyn, suunnasta huolehtii käyttäjä
       var e = S.x + A.origin.e, n = S.y + A.origin.n;
       var pr = project(route, e, n, A.leg);
       if (pr.leg > A.leg) A.leg = pr.leg;
@@ -146,12 +211,14 @@
     var R = {
       route: route, origin: origin, startMs: null, endMs: null,
       t: [], e: [], n: [], hdgTrue: [], v: [], rudder: [], inFw: [],   // inFw: 1 sisällä, 0 ulkona, -1 ei tietoa
+      dShore: [], dShoal: [],                                          // etäisyys rantaviivaan ja alle 2 m:n syvyysalueeseen (m) tai null, kun tietoa ei ole
       aids: {}, groundings: [], plotter: [{ t: 0, on: true }], _acc: 1e9, _visAcc: 1e9, cmdLogStart: 0, finished: false, aborted: false
     };
-    R.sample = function (S, inFairway) {
+    R.sample = function (S, inFairway, near) {
       R._acc += 0; // ajastus kutsujalla
       R.t.push(S.t); R.e.push(S.x + origin.e); R.n.push(S.y + origin.n); R.hdgTrue.push(Liike.trueHdg(S));
       R.v.push(S.v); R.rudder.push(S.rudder); R.inFw.push(inFairway == null ? -1 : (inFairway ? 1 : 0));
+      R.dShore.push(near && near.shore != null ? near.shore : null); R.dShoal.push(near && near.shoal != null ? near.shoal : null);
     };
     // Viitan näkyvyyden seuranta: aid = {numero, nimi, e, n, tyyppi}, vis = boolean. Kutsutaan ajastetusti (visSampleSec).
     R.sampleAid = function (S, aid, vis, dt) {
@@ -179,17 +246,33 @@
   }
 
   // ---------- Purku ----------
-  // fairway: funktio (e, n) -> true/false/null (null = ei tietoa); käytetään tallenteen inFw-kenttää, jos se on jo täytetty
+  // Reitti (R.route) on valinnainen: vapaassa ajossa se on null, ja reittiin sidotut osat (poikkeama, käännökset, viittojen reittikohta) jäävät pois.
+  // Väyläalueen käyttö: käytetään tallenteen inFw-kenttää (1 sisällä, 0 ulkona, -1 ei tietoa).
   function analyze(R, S) {
-    var route = R.route, out = { ok: R.t.length > 2 }, i, N = R.t.length;
+    var route = R.route, out = { ok: R.t.length > 2, hasRoute: !!route }, i, N = R.t.length;
     if (!out.ok) return out;
     var dur = R.t[N - 1] - R.t[0];
     // 5. kokonaisaika, keskinopeus, kuljettu matka
-    var distTravelled = 0;
+    var distTravelled = 0, maxV = 0;
     for (i = 1; i < N; i++) distTravelled += Math.hypot(R.e[i] - R.e[i - 1], R.n[i] - R.n[i - 1]);
-    var last = project(route, R.e[N - 1], R.n[N - 1], null);
-    out.timeSec = dur; out.distM = distTravelled; out.avgKn = dur > 0 ? distTravelled / dur / KN : 0;
-    out.routeProgressM = last.cum; out.routeTotalM = route.total;
+    for (i = 0; i < N; i++) if (R.v[i] > maxV) maxV = R.v[i];
+    out.timeSec = dur; out.distM = distTravelled; out.avgKn = dur > 0 ? distTravelled / dur / KN : 0; out.maxKn = maxV / KN;
+    if (route) { var last = project(route, R.e[N - 1], R.n[N - 1], null); out.routeProgressM = last.cum; out.routeTotalM = route.total; }
+    // matka väyläalueen ulkopuolella (näytevälin pituus lasketaan väylätiedon kuntoon, kun loppupään näyte on tiedossa)
+    var knownM = 0, outM = 0;
+    for (i = 1; i < N; i++) {
+      if (R.inFw[i] < 0) continue;
+      var seg = Math.hypot(R.e[i] - R.e[i - 1], R.n[i] - R.n[i - 1]); knownM += seg; if (R.inFw[i] === 0) outM += seg;
+    }
+    out.outsideM = outM; out.fairwayKnownM = knownM; out.outsidePct = knownM > 0 ? outM / knownM * 100 : null;
+    // lähin rantaviiva ja lähin alle 2 m:n syvyysalue
+    function minOf(arr) {
+      var bi = -1, bd = 1e12; if (!arr) return null;
+      for (var k = 0; k < arr.length; k++) if (arr[k] != null && arr[k] < bd) { bd = arr[k]; bi = k; }
+      return bi < 0 ? null : { m: bd, e: R.e[bi], n: R.n[bi], t: R.t[bi] };
+    }
+    out.minShore = minOf(R.dShore); out.minShoal = minOf(R.dShoal);
+    out.startE = R.e[0]; out.startN = R.n[0]; out.endE = R.e[N - 1]; out.endN = R.n[N - 1];
     out.groundings = R.groundings.slice();
     out.finished = R.finished; out.aborted = R.aborted;
     // 1. osuus ajasta väyläalueen sisällä
@@ -198,16 +281,17 @@
     out.fairwayPct = known ? inside / known * 100 : null;
     out.fairwayKnownPct = known / N * 100;
     // 2. suurin poikkeama navigointilinjasta
-    var maxD = 0, maxI = 0, hint = 0;
-    for (i = 0; i < N; i++) {
-      var p = project(route, R.e[i], R.n[i], null);
-      if (p.dist > maxD) { maxD = p.dist; maxI = i; }
+    var maxD = 0, maxI = 0, hint = 0, cums = [];
+    if (route) {
+      for (i = 0; i < N; i++) {
+        var p = project(route, R.e[i], R.n[i], null);
+        if (p.dist > maxD) { maxD = p.dist; maxI = i; }
+      }
+      out.maxDev = { m: maxD, e: R.e[maxI], n: R.n[maxI], t: R.t[maxI], cum: project(route, R.e[maxI], R.n[maxI], null).cum };
+      // 3. käännökset
+      for (i = 0; i < N; i++) cums.push(project(route, R.e[i], R.n[i], i ? hintOf(cums[i - 1]) : null));
     }
-    out.maxDev = { m: maxD, e: R.e[maxI], n: R.n[maxI], t: R.t[maxI], cum: project(route, R.e[maxI], R.n[maxI], null).cum };
-    // 3. käännökset
-    var cums = [];
-    for (i = 0; i < N; i++) cums.push(project(route, R.e[i], R.n[i], i ? hintOf(cums[i - 1]) : null));
-    out.turns = route.turns.map(function (T) {
+    out.turns = (route ? route.turns : []).map(function (T) {
       var res = { no: T.no, nimi: T.nimi, delta: T.delta, startOffsetM: null, cutM: null };
       // lähin hetki käännöspisteeseen
       var bi = -1, bd = 1e12;
@@ -239,7 +323,7 @@
     Object.keys(R.aids).forEach(function (k) {
       var a = R.aids[k];
       if (a.minD > SETTINGS.passedAidMaxM) return;
-      aidsOut.push({ numero: a.numero, nimi: a.nimi, tyyppi: a.tyyppi, nl: a.nl, minD: a.minD, tPass: a.tMin, seenSec: a.seen, firstSeenD: a.firstSeenD, side: a.side, e: a.e, n: a.n, cum: project(route, a.e, a.n, null).cum });
+      aidsOut.push({ numero: a.numero, nimi: a.nimi, tyyppi: a.tyyppi, nl: a.nl, minD: a.minD, tPass: a.tMin, seenSec: a.seen, firstSeenD: a.firstSeenD, side: a.side, e: a.e, n: a.n, cum: route ? project(route, a.e, a.n, null).cum : null });
     });
     aidsOut.sort(function (a, b) { return a.tPass - b.tPass; });
     out.aids = aidsOut;
@@ -254,9 +338,12 @@
     (S.cmdLog || []).forEach(function (c) {
       if (c.kind === 'lever0') return;
       var e = c.e != null ? c.e : (c.x + R.origin.e), n = c.n != null ? c.n : (c.y + R.origin.n);
-      var pr = project(route, e, n, null), nt = null, best = 1e12;
-      route.turns.forEach(function (T) { var d = pr.cum - T.cum; if (Math.abs(d) < best) { best = Math.abs(d); nt = { no: T.no, nimi: T.nimi, offsetM: d }; } });
-      log.push({ t: c.t - (R.t0 || 0), kind: c.kind, value: c.value, gentle: !!c.gentle, offsetM: nt ? nt.offsetM : null, turnNo: nt ? nt.no : null, turnName: nt ? nt.nimi : '' });
+      var nt = null, best = 1e12;
+      if (route) {
+        var pr = project(route, e, n, null);
+        route.turns.forEach(function (T) { var d = pr.cum - T.cum; if (Math.abs(d) < best) { best = Math.abs(d); nt = { no: T.no, nimi: T.nimi, offsetM: d }; } });
+      }
+      log.push({ t: c.t - (R.t0 || 0), kind: c.kind, value: c.value, gentle: !!c.gentle, e: e, n: n, hdgTrue: c.hdgTrue, vKn: c.v != null ? c.v / KN : null, offsetM: nt ? nt.offsetM : null, turnNo: nt ? nt.no : null, turnName: nt ? nt.nimi : '' });
     });
     out.cmdLog = log;
     return out;
@@ -274,7 +361,8 @@
 
   var api = {
     SETTINGS: SETTINGS, EXERCISES: EXERCISES, buildRoute: buildRoute, project: project, distToRoute: distToRoute, nextTurn: nextTurn,
-    createAuto: createAuto, createRecorder: createRecorder, analyze: analyze, cmdText: cmdText, mmss: mmss, fmt1: fmt1, wrap180: wrap180, norm360: norm360
+    createAuto: createAuto, createRecorder: createRecorder, analyze: analyze, cmdText: cmdText, mmss: mmss, fmt1: fmt1, wrap180: wrap180, norm360: norm360,
+    fromStored: fromStored, listStored: listStored, storedShow: storedShow, reversed: reversed, settleSpeed: settleSpeed, DEFAULT_START_KN: DEFAULT_START_KN, STORE_KEY: STORE_KEY
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Harjoitus = api;
 })(typeof window !== 'undefined' ? window : globalThis);

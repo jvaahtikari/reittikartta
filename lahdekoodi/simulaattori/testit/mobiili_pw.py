@@ -83,13 +83,14 @@ with sync_playwright() as pw:
         ok(p.evaluate('__sim.main') == 'plot', 'toinen napautus palauttaa plotterin')
     # plotterin sammutus
     n0 = p.evaluate('__sim.S.cmdLog.length')
-    p.tap('#plotOffBtn'); p.wait_for_timeout(300)
+    p.tap('#menuBtn'); p.wait_for_timeout(200); p.tap('#mPlotOff'); p.wait_for_timeout(300)   # 3h: Plotteri pois siirtyi päävalikkoon
     ok(p.is_visible('#plotOff'), 'plotterin sammutus näyttää peitteen')
     ok(p.evaluate('__sim.S.cmdLog.some(c => c.kind==="plotter" && c.value===0)'), 'plotterin sammutus kirjattu lokiin')
     p.tap('#plotOnBtn'); ok(not p.is_visible('#plotOff'), 'plotteri takaisin päälle')
     # mittakaava
-    p.tap('#rangeBox button[data-r="0.5"]'); ok(p.evaluate('__pl.getRangeNm()') == 0.5, 'mittakaava 0,5 mpk')
-    p.tap('#rangeBox button[data-r="1"]')
+    r0 = p.evaluate('__pl.getRangeNm()'); p.tap('#zIn'); r1 = p.evaluate('__pl.getRangeNm()'); ok(abs(r0 / r1 - 1.25) < 0.01, 'zoom + (vaihe 3h): %.3f -> %.3f mpk' % (r0, r1))
+    p.tap('#zOut'); ok(abs(p.evaluate('__pl.getRangeNm()') - r0) < 0.01, 'zoom − palauttaa mittakaavan')
+    p.tap('#zCtr'); ok(p.evaluate('__pl.isFollow()'), 'Keskitä-nappi napautettavissa (seuranta päällä)')
     # crash stop
     p.tap('#bCrash'); p.wait_for_timeout(300)
     ok(p.evaluate('__sim.S.cmdLog.some(c => c.kind==="crash")') or p.evaluate('__sim.S.v') < 0.2, 'Crash stop kirjautuu (tai alus seisoo)')

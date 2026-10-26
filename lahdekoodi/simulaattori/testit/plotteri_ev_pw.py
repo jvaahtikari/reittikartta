@@ -23,38 +23,29 @@ with sync_playwright() as pw:
     def screen_pt(ang_screen, f):
         a = math.radians(ang_screen); r = min(g['w'], g['h']) * 0.35 * f
         return g['x'] + math.sin(a) * r, g['y'] - math.cos(a) * r
-    # EBL pyyhkäisyllä: näytön kulma 60 -> tosisuunta = keulasuunta + 60
-    x1, y1 = screen_pt(30, 1); x2, y2 = screen_pt(60, 1)
-    for (i, t, x, y) in [(1, 'pointerdown', x1, y1), (1, 'pointermove', (x1 + x2) / 2, (y1 + y2) / 2), (1, 'pointermove', x2, y2), (1, 'pointerup', x2, y2)]:
-        p.evaluate(SYNT, [i, t, x, y])
-    p.wait_for_timeout(700)
+    # vaihe 3h: veto panoroi, joten EBL ja VRM asetetaan napautuksella (ei pyyhkäisyllä eikä nipistyksellä)
+    x2, y2 = screen_pt(60, 1)
+    p.evaluate(SYNT, [1, 'pointerdown', x2, y2]); p.evaluate(SYNT, [1, 'pointerup', x2, y2]); p.wait_for_timeout(700)
     e = ev(p); exp = (g['hdg'] + 60) % 360
-    ok(abs(((e['ebl'] - exp + 180) % 360) - 180) < 1.0, 'EBL pyyhkäisyllä: odotus %.1f° T, tulos %.1f° T' % (exp, e['ebl']))
+    ok(abs(((e['ebl'] - exp + 180) % 360) - 180) < 1.0, 'EBL napautuksella: odotus %.1f° T, tulos %.1f° T' % (exp, e['ebl']))
     if dev == 'chromium':
         cdp = c.new_cdp_session(p)
         def tp(typ, pts): cdp.send('Input.dispatchTouchEvent', {'type': typ, 'touchPoints': [{'x': q[0], 'y': q[1], 'id': k} for k, q in enumerate(pts)]})
         xa, ya = screen_pt(-40, 1); tp('touchStart', [(xa, ya)]); tp('touchEnd', []); p.wait_for_timeout(700)
         e = ev(p); exp = (g['hdg'] - 40) % 360
         ok(abs(((e['ebl'] - exp + 180) % 360) - 180) < 1.0, 'EBL oikealla kosketuksella (CDP): odotus %.1f, tulos %.1f' % (exp, e['ebl']))
-    # VRM nipistyksellä
-    v0 = ev(p)['vrm']; e0 = ev(p)['ebl']
-    ax, ay = g['x'] - 50, g['y'] - g['h'] * 0.2; bx, by = g['x'] + 50, ay
-    p.evaluate(SYNT, [1, 'pointerdown', ax, ay]); p.evaluate(SYNT, [2, 'pointerdown', bx, by])
-    for f in (1.15, 1.3, 1.45, 1.6):
-        p.evaluate(SYNT, [1, 'pointermove', g['x'] - 50 * f, ay]); p.evaluate(SYNT, [2, 'pointermove', g['x'] + 50 * f, by])
-    p.evaluate(SYNT, [1, 'pointerup', g['x'] - 80, ay]); p.evaluate(SYNT, [2, 'pointerup', g['x'] + 80, by]); p.wait_for_timeout(700)
-    s = ev(p); ok(abs(s['vrm'] / v0 - 1.6) < 0.06 and abs(s['ebl'] - e0) < 0.01, 'VRM nipistyksellä: %.3f -> %.3f mpk (suhde %.2f), EBL ennallaan' % (v0, s['vrm'], s['vrm'] / v0))
-    if dev == 'chromium':
-        v0 = ev(p)['vrm']
-        tp('touchStart', [(g['x'] - 40, ay), (g['x'] + 40, ay)])
-        for f in (1.2, 1.5, 0.8): tp('touchMove', [(g['x'] - 40 * f, ay), (g['x'] + 40 * f, ay)])
-        tp('touchEnd', []); p.wait_for_timeout(700)
-        v1 = ev(p)['vrm']; ok(abs(v1 / v0 - 0.8) < 0.06, 'VRM oikealla kahden sormen kosketuksella (CDP): suhde %.2f, odotus 0,8' % (v1 / v0))
+    # VRM hakasulkunäppäimillä (rulla ja nipistys zoomaavat karttaa)
+    v0 = ev(p)['vrm']; e0 = ev(p)['ebl']; r0 = p.evaluate('__pl.getRangeNm()')
+    for _ in range(4): p.keyboard.press(']')
+    p.wait_for_timeout(700); s = ev(p)
+    ok(abs(s['vrm'] / v0 - 1.05 ** 4) < 0.01 and abs(s['ebl'] - e0) < 0.01 and abs(p.evaluate('__pl.getRangeNm()') - r0) < 1e-9, 'VRM ]-näppäimellä: %.3f -> %.3f mpk (suhde %.3f), EBL ja mittakaava ennallaan' % (v0, s['vrm'], s['vrm'] / v0))
+    for _ in range(4): p.keyboard.press('[')
+    p.wait_for_timeout(700); ok(abs(ev(p)['vrm'] - v0) < 0.001, 'VRM [-näppäimellä takaisin: %.3f' % ev(p)['vrm'])
     ro = p.evaluate('[document.querySelector(".ro-ebl").textContent, document.querySelector(".ro-vrm").textContent, document.querySelector("#vecBtn").textContent]')
     ok(ro[0].startswith('EBL ') and ro[0].endswith('° T') and ro[1].startswith('VRM ') and ro[1].endswith(' mpk') and re.match(r'^VRM \d,\d\d mpk$', ro[1]) if (re := __import__('re')) else False, 'lukemat: %s' % ro)
     # vaihe 3f: veto ja napautus kirjautuvat yhtenä rivinä (evpiste), nipistys omana vrm-rivinään
     log = p.evaluate('__sim.S.cmdLog.filter(c=>c.kind==="ebl"||c.kind==="vrm"||c.kind==="evpiste").map(c=>c.kind+":"+JSON.stringify(c.value))')
-    ok(any(x.startswith('evpiste') for x in log) and any(x.startswith('vrm') for x in log), 'komentolokiin kirjautui EBL/VRM-veto ja VRM-nipistys: %s' % log)
+    ok(any(x.startswith('evpiste') for x in log) and any(x.startswith('vrm') for x in log), 'komentolokiin kirjautui EBL/VRM-napautus ja VRM-säätö: %s' % log)
     # vektorin ajan vaihto napautuksella
     t0 = p.evaluate('__pl.vectorSec()'); p.tap('#vecBtn'); p.wait_for_timeout(300); t1 = p.evaluate('__pl.vectorSec()')
     ok(t0 == 60 and t1 == 180, 'vektorin aika vaihtuu napautuksella: %d s -> %d s' % (t0, t1)); p.tap('#vecBtn'); p.tap('#vecBtn'); p.tap('#vecBtn'); p.wait_for_timeout(200)

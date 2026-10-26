@@ -1,4 +1,4 @@
-"""Vaihe 3f, kriteeri 2: plotterin EBL ja VRM yhdellä vedolla. Playwright vetää plotterilla pisteeseen, jonka tosisuuntima ja etäisyys tunnetaan,
+"""Vaihe 3f, kriteeri 2 (päivitetty vaiheessa 3h: veto panoroi, joten EBL ja VRM asetetaan napautuksella): plotterin EBL ja VRM yhdellä napautuksella. Playwright vetää plotterilla pisteeseen, jonka tosisuuntima ja etäisyys tunnetaan,
 ja lukemat täsmäävät 1° ja 0,02 mpk tarkkuudella. Risti on vedetyssä pisteessä, kartta ei liiku vedon aikana ja komentolokiin tulee yksi rivi per veto.
 Käyttö: python3 plotteri_ev3f_pw.py chromium|webkit|desktop  (Pixel 7, iPhone 14, hiiri 1440 x 900)"""
 import sys, os, json, math, re
@@ -35,20 +35,11 @@ with sync_playwright() as pw:
     cdp = c.new_cdp_session(p) if dev == 'chromium' else None
     def tp(typ, pts): cdp.send('Input.dispatchTouchEvent', {'type': typ, 'touchPoints': [{'x': q[0], 'y': q[1], 'id': k} for k, q in enumerate(pts)]})
     def drag(start, mid, end):
-        """veto start -> mid -> end; palauttaa kartan pisteen ruutupaikan kesken vedon"""
-        p.evaluate('document.getElementById("plot")') if False else None
-        if dev == 'desktop':
-            p.mouse.move(*start); p.mouse.down(); p.mouse.move(*mid, steps=4)
-            mid_scr = p.evaluate('__pl.toScreen(__sim.S.x + 300, __sim.S.y + 200)')
-            p.mouse.move(*end, steps=4); p.mouse.up()
-        elif dev == 'chromium':
-            tp('touchStart', [start]); tp('touchMove', [mid]); mid_scr = p.evaluate('__pl.toScreen(__sim.S.x + 300, __sim.S.y + 200)')
-            tp('touchMove', [end]); tp('touchEnd', [])
-        else:
-            p.evaluate(SYNT, [1, 'pointerdown', start[0], start[1]]); p.evaluate(SYNT, [1, 'pointermove', mid[0], mid[1]])
-            mid_scr = p.evaluate('__pl.toScreen(__sim.S.x + 300, __sim.S.y + 200)')
-            p.evaluate(SYNT, [1, 'pointermove', end[0], end[1]]); p.evaluate(SYNT, [1, 'pointerup', end[0], end[1]])
-        return mid_scr
+        """vaihe 3h: napautus kohtaan end (start ja mid ohitetaan); palauttaa kiintopisteen ruutupaikan napautuksen jälkeen"""
+        if dev == 'desktop': p.mouse.click(*end)
+        elif dev == 'chromium': tp('touchStart', [end]); tp('touchEnd', [])
+        else: p.evaluate(SYNT, [1, 'pointerdown', end[0], end[1]]); p.evaluate(SYNT, [1, 'pointerup', end[0], end[1]])
+        return p.evaluate('__pl.toScreen(__sim.S.x + 300, __sim.S.y + 200)')
     # tunnetut pisteet: tosisuuntima (tarkistetaan 1°) ja etäisyys mpk (tarkistetaan 0,02)
     tests = [(g['hdg'] + 52, 0.30), (g['hdg'] - 38, 0.22), (g['hdg'] + 10, 0.41)]
     nlog0 = len(p.evaluate(LOG)); nd = 0
@@ -68,7 +59,7 @@ with sync_playwright() as pw:
         ok(err < 2.5, '%s: risti vedetyssä pisteessä (poikkeama %.2f px)' % (dev, err))
         # kartta ei liiku vedon aikana (alus levossa): kiinteän pisteen ruutupaikka ennallaan
         mv = math.hypot(mid_scr[0] - before['ship'][0], mid_scr[1] - before['ship'][1])
-        ok(mv < 0.5, '%s: kartta ei panoroidu vedon aikana (kiintopisteen siirtymä %.2f px)' % (dev, mv))
+        ok(mv < 0.5, '%s: kartta ei panoroidu napautuksessa (kiintopisteen siirtymä %.2f px)' % (dev, mv))
         ro = p.evaluate('[document.querySelector(".ro-ebl").textContent, document.querySelector(".ro-vrm").textContent]')
         ok(ro[0] == 'EBL %03d° T' % (round(e['ebl']) % 360) and ro[1] == 'VRM %.2f mpk' % round(e['vrm'] + 1e-9, 2) if False else (ro[0] == 'EBL %03d° T' % (round(e['ebl']) % 360) and ro[1] == ('VRM %.2f mpk' % e['vrm']).replace('.', ',')), '%s: lukemat %s' % (dev, ro))
     # napautus ilman vetoa tekee saman
@@ -88,23 +79,10 @@ with sync_playwright() as pw:
     if dev == 'desktop':
         e0 = p.evaluate('__pl.getEV()'); p.keyboard.press('.'); p.keyboard.press('.'); p.wait_for_timeout(900)
         e1 = p.evaluate('__pl.getEV()'); ok(abs(angdiff(e1['ebl'], e0['ebl']) - 2) < 0.01 and abs(e1['vrm'] - e0['vrm']) < 1e-9, 'desktop: näppäin piste siirtää EBL:ää 2° (%.1f -> %.1f), VRM ennallaan' % (e0['ebl'], e1['ebl']))
-        p.mouse.move(g['x'] + 60, g['y'] - 60); p.mouse.wheel(0, -100); p.wait_for_timeout(900)
-        e2 = p.evaluate('__pl.getEV()'); ok(e2['vrm'] > e1['vrm'] * 1.04 and abs(e2['ebl'] - e1['ebl']) < 1e-9, 'desktop: rulla säätää VRM:ää (%.3f -> %.3f), EBL ennallaan' % (e1['vrm'], e2['vrm']))
+        p.keyboard.press(']'); p.wait_for_timeout(900)
+        e2 = p.evaluate('__pl.getEV()'); ok(abs(e2['vrm'] / e1['vrm'] - 1.05) < 0.002 and abs(e2['ebl'] - e1['ebl']) < 1e-9, 'desktop: ]-näppäin säätää VRM:ää (%.3f -> %.3f), EBL ennallaan' % (e1['vrm'], e2['vrm']))
         log2 = p.evaluate(LOG)[nlog0 + len(log):]
         ok(any(x.startswith('ebl') for x in log2) and any(x.startswith('vrm') for x in log2), 'desktop: hienosäätö kirjautuu omina riveinään %s' % log2)
-    # nipistys ja kahden sormen eleet
-    if dev != 'desktop':
-        v0 = p.evaluate('__pl.getEV()'); ax, ay = g['x'] - 50, g['y'] - g['h'] * 0.25; bx = g['x'] + 50
-        if dev == 'chromium':
-            tp('touchStart', [(ax, ay), (bx, ay)])
-            for f in (1.2, 1.5, 1.8): tp('touchMove', [(g['x'] - 50 * f, ay), (g['x'] + 50 * f, ay)])
-            tp('touchEnd', [])
-        else:
-            p.evaluate(SYNT, [1, 'pointerdown', ax, ay]); p.evaluate(SYNT, [2, 'pointerdown', bx, ay])
-            for f in (1.2, 1.5, 1.8): p.evaluate(SYNT, [1, 'pointermove', g['x'] - 50 * f, ay]); p.evaluate(SYNT, [2, 'pointermove', g['x'] + 50 * f, ay])
-            p.evaluate(SYNT, [1, 'pointerup', g['x'] - 90, ay]); p.evaluate(SYNT, [2, 'pointerup', g['x'] + 90, ay])
-        p.wait_for_timeout(900); v1 = p.evaluate('__pl.getEV()')
-        ok(abs(v1['vrm'] / v0['vrm'] - 1.8) < 0.08 and abs(angdiff(v1['ebl'], v0['ebl'])) < 0.01, '%s: nipistys säätää VRM:ää (%.3f -> %.3f, suhde %.2f) ja jättää EBL:n (%.1f)' % (dev, v0['vrm'], v1['vrm'], v1['vrm'] / v0['vrm'], v1['ebl']))
     # kuva: viimeinen veto, EBL ja VRM sekä risti
     B, D = (g['hdg'] + 45) % 360, 0.33
     tx, ty = pt_for(g, B, D)
@@ -112,7 +90,7 @@ with sync_playwright() as pw:
     elif dev == 'chromium': tp('touchStart', [(tx, ty)]); tp('touchEnd', [])
     else: p.evaluate(SYNT, [1, 'pointerdown', tx, ty]); p.evaluate(SYNT, [1, 'pointerup', tx, ty])
     p.wait_for_timeout(900)
-    p.screenshot(path=os.path.join(out, '3f_ebl_vrm_veto_%s.png' % dev))
+    p.screenshot(path=os.path.join(out, '_3h_ebl_vrm_napautus_%s.png' % dev))
     ok(not errs, '%s: ei konsolivirheitä (%s)' % (dev, errs[:3]))
     b.close()
 bad = [m for okk, m in checks if not okk]

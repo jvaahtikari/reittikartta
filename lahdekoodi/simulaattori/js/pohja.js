@@ -29,13 +29,15 @@
     var k = tx + '/' + ty;
     if (tiles.has(k) || pending.has(k)) return;
     pending.add(k);
-    root.Aineisto.layers(Z, tx, ty, ['syvyysalue', 'vaylaalue']).then(function (l) {
-      var polys = [], fw = [];
+    root.Aineisto.layers(Z, tx, ty, ['syvyysalue', 'vaylaalue', 'rantaviiva']).then(function (l) {
+      var polys = [], fw = [], shore = [];
+      if (l && l.rantaviiva) l.rantaviiva.features.forEach(function (f) { if (f.parts) f.parts.forEach(function (pt) { shore.push(pt); }); });
       if (l && l.vaylaalue) l.vaylaalue.features.forEach(function (f) { if (f.type === 3) fw.push(f.parts); });
       if (l && l.syvyysalue) l.syvyysalue.features.forEach(function (f) {
         if (f.type === 3 && f.props.ylin != null) polys.push({ ylin: Number(f.props.ylin), alin: Number(f.props.alin), parts: f.parts });
       });
-      tiles.set(k, { polys: polys, fw: fw, extent: l && l.syvyysalue ? l.syvyysalue.extent : 4096, ok: !!l });
+      var cn = root.Paikka.tileLonLat(Z, tx, ty, 0.5, 0.5);
+      tiles.set(k, { polys: polys, fw: fw, shore: shore, extent: l && l.syvyysalue ? l.syvyysalue.extent : 4096, ok: !!l, tw: 40075016.686 * Math.cos(cn.lat * Math.PI / 180) / Math.pow(2, Z) });
       pending.delete(k);
       if (tiles.size > MAX_TILES) tiles.delete(tiles.keys().next().value);
     }, function () { pending.delete(k); });
@@ -55,6 +57,39 @@
       if (inPoly(p.parts, px, py) && (best == null || p.ylin < best)) best = p.ylin;
     }
     return { known: true, ylin: best };
+  }
+  // Etäisyys pisteestä (px, py) murtoviivaan tai renkaaseen (ruutuyksiköinä)
+  function distToPart(part, px, py, closed, ext) {
+    var n = part.length / 2, best = 1e18, i, j;
+    for (i = 0; i < n; i++) {
+      j = i + 1; if (j >= n) { if (!closed) break; j = 0; }
+      var ax = part[2 * i], ay = part[2 * i + 1], bx = part[2 * j], by = part[2 * j + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      if (ext && ((ax === bx && (ax <= 0 || ax >= ext)) || (ay === by && (ay <= 0 || ay >= ext)))) continue;   // ruudun reunalla (tai puskurissa) oleva leikkausreuna ei ole todellinen reuna
+      var t = L2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0, ex = ax + t * dx - px, ey = ay + t * dy - py, d2 = ex * ex + ey * ey;
+      if (d2 < best) best = d2;
+    }
+    return best;
+  }
+  // Lähin rantaviiva ja lähin alle 2 m:n syvyysalue (syvyysalue, jonka suurin syvyys on pienempi kuin shoalM) metreinä pisteestä (x, y).
+  // Haku kattaa pisteen ruudun ja sen kahdeksan naapuria (ruutu on noin 290 m), joten yli 290 m:n etäisyys on epävarma ja palautetaan arvona null.
+  // Pisteen ollessa syvyysalueen sisällä etäisyys on 0.
+  function near(x, y, shoalM) {
+    shoalM = shoalM == null ? 2 : shoalM;
+    var c = tileOf(x, y), bs = 1e18, bh = 1e18, scaleS = 0, any = false, dx, dy;
+    for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) {
+      var T = tiles.get((c.tx + dx) + '/' + (c.ty + dy)); if (!T || !T.ok) continue;
+      any = true;
+      var px = (c.u - dx) * T.extent, py = (c.v - dy) * T.extent, k = T.tw / T.extent, i;
+      for (i = 0; i < T.shore.length; i++) { var d = distToPart(T.shore[i], px, py, false, 0) * k * k; if (d < bs) bs = d; }
+      for (i = 0; i < T.polys.length; i++) {
+        var pl = T.polys[i]; if (!(pl.ylin < shoalM)) continue;
+        if (dx === 0 && dy === 0 && inPoly(pl.parts, px, py)) { bh = 0; continue; }
+        for (var q = 0; q < pl.parts.length; q++) { var d2 = distToPart(pl.parts[q], px, py, true, T.extent) * k * k; if (d2 < bh) bh = d2; }
+      }
+    }
+    if (!any) return { shore: null, shoal: null };
+    var rs = Math.sqrt(bs), rh = Math.sqrt(bh), lim = 290;
+    return { shore: rs < lim ? rs : null, shoal: rh < lim ? rh : null };
   }
   // Väyläalueen sisällä: true, false tai null (ruutu ei vielä ladattu)
   function inFairway(x, y) {
@@ -80,6 +115,6 @@
   }
   function clear() { tiles.clear(); pending.clear(); }
   function ready(x, y) { var c = tileOf(x, y); return tiles.has(c.tx + '/' + c.ty); }
-  var api = { preload: preload, depthAt: depthAt, inFairway: inFairway, check: check, clear: clear, ready: ready, inPoly: inPoly, LAND_M: LAND_M };
+  var api = { preload: preload, depthAt: depthAt, near: near, inFairway: inFairway, check: check, clear: clear, ready: ready, inPoly: inPoly, LAND_M: LAND_M };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pohja = api;
 })(typeof window !== 'undefined' ? window : globalThis);

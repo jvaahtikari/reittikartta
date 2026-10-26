@@ -24,13 +24,14 @@ with sync_playwright() as pw:
             vis = p.evaluate('''() => ['paneP','paneR','pane3d'].filter(id => { const r = document.getElementById(id).getBoundingClientRect(); return r.width > 0 && r.height > 0; }).map(id => { const r = document.getElementById(id).getBoundingClientRect(); return id + ':' + Math.round(r.left) + ',' + Math.round(r.width) + 'x' + Math.round(r.height); })''')
             sm = p.evaluate(SMALL)
             ov = p.evaluate('''() => { const a = document.getElementById("pane3d"); if (!a.classList.contains("small")) return 0; const q = a.getBoundingClientRect(); let n = 0;
-               document.querySelectorAll(".tutka-ui button, #rInstrBtn, #rOffBtn").forEach(e => { const cs = getComputedStyle(e); if (cs.display === "none") return; const r = e.getBoundingClientRect(); if (r.width && r.right > q.left && r.left < q.right && r.bottom > q.top && r.top < q.bottom) n++; }); return n; }''')
-            states.append({'instr': p.evaluate('__sim.instr'), 'ruudut': vis, 'alle44': sm, 'paallekkain': ov})
+               document.querySelectorAll(".tutka-ui button, #instrBtn").forEach(e => { const cs = getComputedStyle(e); if (cs.display === "none") return; const r = e.getBoundingClientRect(); if (r.width && r.right > q.left && r.left < q.right && r.bottom > q.top && r.top < q.bottom) n++; }); return n; }''')
+            # vaihe 3h: PPI:n halkaisija suhteessa tutkaruudun lyhyempään sivuun, kun tutka on iso (ei pieni ikkuna)
+            pp = p.evaluate('''() => { const r = document.getElementById("paneR"), q = r.getBoundingClientRect(); if (q.width < 10 || r.classList.contains("small") || !__radar) return null;
+               const g = __radar.testi.geom(); return { halk: 2 * g.r, sivu: Math.min(q.width, q.height), osuus: 2 * g.r / Math.min(q.width, q.height) }; }''')
+            states.append({'instr': p.evaluate('__sim.instr'), 'ruudut': vis, 'alle44': sm, 'paallekkain': ov, 'ppi': pp})
+            if pp and pp['osuus'] < 0.98: bad += 1   # 3h toinen kierros: vähintään 98 %
             p.screenshot(path=os.path.join(os.path.dirname(__file__), '..', 'shots', '_3c_asettelu_%s_%d.png' % (sz, k)))
-            if p.evaluate('document.getElementById("pInstrBtn").hidden === false && getComputedStyle(document.getElementById("pInstrBtn")).display !== "none" && document.getElementById("paneP").getBoundingClientRect().width > 0'):
-                p.evaluate('document.getElementById("pInstrBtn").click()')
-            else:
-                p.evaluate('document.getElementById("rInstrBtn").click()')
+            p.evaluate('document.getElementById("instrBtn").click()')   # 3h: yksi vaihtonappi yläpalkissa (piilossa leveässä asettelussa, click toimii silti)
             p.wait_for_timeout(900)
         res['tilat'] = states; res['virheet'] = errs[:3]
         for s_ in states:

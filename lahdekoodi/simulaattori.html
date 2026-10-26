@@ -29,10 +29,19 @@
     <p class="sub">Pv417 Repa Näsijärvellä, päivänavigointi. Roolina navigoija.</p>
 
     <div class="field" role="group" aria-labelledby="lblEx">
-      <div class="lbl" id="lblEx">Harjoitus</div>
-      <div class="seg" id="segEx">
-        <button type="button" data-v="h1" class="on">Harjoitus 1<small>Mustalahti – Siilinkari – Aitolahti</small></button>
+      <div class="lbl" id="lblEx">Reitti</div>
+      <div class="seg list" id="segEx">
+        <button type="button" data-v="h1" class="on">Harjoitus 1: Mustalahti – Siilinkari – Aitolahti<small>Sisäänrakennettu reitti, alkaa levosta</small></button>
         <button type="button" data-v="free">Vapaa ajo<small>Mustalahdesta, ei reittiä</small></button>
+      </div>
+      <div class="hint" id="exInfo"></div>
+      <div class="hint" id="routeHint"></div>
+    </div>
+    <div class="field" id="fldDir" role="group" aria-labelledby="lblDir">
+      <div class="lbl" id="lblDir">Lähtöpaikka</div>
+      <div class="seg" id="segDir">
+        <button type="button" data-v="fwd" class="on">Ensimmäinen piste<small>reitin suuntaan</small></button>
+        <button type="button" data-v="rev">Viimeinen piste<small>käänteiseen suuntaan</small></button>
       </div>
     </div>
     <div class="field" id="fldSpeed" role="group" aria-labelledby="lblSp">
@@ -90,6 +99,7 @@
     </button>
     <div id="clock" aria-label="Kello">--:--:--</div>
     <div id="exName" class="ex-name"></div>
+    <button type="button" class="ib txt" id="instrBtn" aria-label="Vaihda mittari" hidden>Tutka</button>
     <button type="button" class="ib txt" id="speedBtn" aria-label="Aikakerroin">1×</button>
     <button type="button" class="ib" id="pauseBtn" aria-label="Tauko">
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" id="pauseIco"><path d="M7 5v14M17 5v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
@@ -103,22 +113,18 @@
         <svg class="plot-own" viewBox="-12 -16 24 32" width="26" height="34"><path d="M0 -14L9 12L0 7L-9 12Z" fill="#1f4e9c" stroke="#fff" stroke-width="2"/></svg>
       </div>
       <div class="plot-info" id="plotInfo">
-        <button type="button" class="hud pbtn ro-tgl" id="evBtn" aria-pressed="true">EBL / VRM</button>
+        <button type="button" class="hud pbtn ro-tgl" id="evBtn" aria-pressed="true" aria-label="EBL ja VRM päälle tai pois">EBL VRM</button>
         <div class="hud ro ro-ebl">EBL 000° T</div>
         <div class="hud ro ro-vrm">VRM 0,50 mpk</div>
-        <button type="button" class="hud pbtn ro-vec" id="vecBtn">Vektori 1 min</button>
+        <div class="hud ro ro-vec" id="vecBtn" role="button" tabindex="0" aria-label="Vaihda vektorin aika">Vektori 1 min</div>
       </div>
       <div id="plotOff" hidden>Plotteri pois<button type="button" id="plotOnBtn" class="big">Päälle</button></div>
-      <div class="hud hud-range" id="rangeBox" role="group" aria-label="Mittakaava">
-        <button type="button" data-r="0.25">0,25</button><button type="button" data-r="0.5">0,5</button><button type="button" data-r="1" class="on">1</button><button type="button" data-r="2">2</button>
-        <span class="u">mpk</span>
+      <div class="hud hud-zoom" id="zoomBox" role="group" aria-label="Zoomaus ja keskitys">
+        <button type="button" class="zm zm-in" id="zIn" aria-label="Lähennä (näppäin +)">+</button>
+        <button type="button" class="zm zm-out" id="zOut" aria-label="Loitonna (näppäin −)">&minus;</button>
+        <button type="button" class="zm zm-ctr" id="zCtr" aria-pressed="true" aria-label="Keskitä alukseen (näppäin C)">Keskitä</button>
       </div>
-      <button type="button" class="hud hud-off" id="plotOffBtn">Plotteri pois</button>
-      <button type="button" class="hud hud-instr instr-btn" id="pInstrBtn" hidden>Tutka</button>
-      <div class="hud hud-turn" id="turnBox" hidden>
-        <div class="tb-row"><b id="turnTitle">Käännös</b><span id="turnInfo"></span></div>
-        <div class="tb-row sm"><span id="progInfo"></span><span id="budgetInfo"></span></div>
-      </div>
+      <div class="hud hud-scale" id="scaleBox" aria-label="Mittakaava"><div class="sb-line"><i class="sb-bar"></i><span class="sb-lab"></span></div><span class="sb-h"></span></div>
     </div>
     <!-- kuljettajan näkymä -->
     <div id="pane3d" class="pane">
@@ -133,12 +139,11 @@
     </div>
     <!-- tutka -->
     <div id="paneR" class="pane" hidden>
-      <div class="radar-head" id="radarHead">
-        <button type="button" class="rbtn instr-btn" id="rInstrBtn" hidden>Plotteri</button>
-        <button type="button" class="rbtn" id="rOffBtn">Tutka pois</button>
+      <div class="radar-head" id="radarHead" hidden>
+        <button type="button" class="rbtn" id="rOffBtn" aria-label="Tutka pois (STBY)">STBY</button>
       </div>
       <div class="radar-box" id="radarBox"><canvas id="radar" aria-label="Tutkakuva"></canvas></div>
-      <div id="radarOff" hidden>Tutka pois<button type="button" id="radarOnBtn" class="big">Päälle</button></div>
+      <div id="radarOff" hidden>RADAR OFF<button type="button" id="radarOnBtn" class="big">RADAR ON</button></div>
     </div>
     <button type="button" id="swapBtn" class="swap" aria-label="Vaihda näkymä" hidden></button>
     <div id="groundBanner" hidden>
@@ -178,6 +183,7 @@
 <div id="menu" class="sheet" hidden>
   <div class="sheet-box" role="dialog" aria-label="Valikko">
     <button type="button" class="big" id="mAbort">Keskeytä ja näytä purku</button>
+    <button type="button" class="big" id="mPlotOff">Plotteri pois</button>
     <button type="button" class="big" id="mSeat">Istuen / seisten</button>
     <button type="button" class="big" id="mEye">Silmäpiste: navigoija</button>
     <button type="button" class="big" id="mOrient">Plotteri: suunta ylös</button>
@@ -186,7 +192,7 @@
     <button type="button" class="big" id="mTune">Tutkan viritys: hyvä</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto tai napautus asettaa EBL:n ja VRM:n yhdessä vedettyyn pisteeseen, rulla tai kahden sormen nipistys säätää VRM:ää, pilkku ja piste EBL:ää (Shift 10°), plus ja miinus VRM:ää, V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: yhden sormen veto asettaa EBL:n ja kahden sormen nipistys VRM:n.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°). Ylös ja alas: nopeus 2 kn. L: loiva. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus ja miinus, hiiren rulla ja kahden sormen nipistys zoomaavat (0,1 ... 12 mpk). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
   </div>
 </div>
 
@@ -209,6 +215,7 @@
 <script src="simulaattori/lib/three.min.js"></script>
 <script src="js/symbols.js"></script>
 <script src="js/signs.js"></script>
+<script src="js/geo.js"></script>
 <script src="simulaattori/js/paikka.js"></script>
 <script src="simulaattori/js/liike.js"></script>
 <script src="simulaattori/js/mvt.js"></script>

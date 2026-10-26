@@ -18,6 +18,7 @@
   var LAKE_Z = 95.5;                         // järven pinta, m N2000 (sama kuin simulaattorissa)
   var ALUEET = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 6];   // mpk
   var JALJET = [0, 15, 30, 60, 180];         // jäljen kesto, s (0 = pois)
+  var OFFSET_K = 1.7, OFFSET_OSUUS = 0.7;    // offset (siirretty keskipiste): oma alus 70 % säteestä keskipisteen alapuolella, eteenpäin näkyy 1,7 × alue
 
   // Kaikumallin vakiot (perustelut TUTKA.md:ssä)
   var M = {
@@ -31,6 +32,11 @@
     ikkunaM: 12,             // rinteen jyrkkyys lasketaan tämän pituiselta matkalta (pulssin pituus)
     nakyvyysM: 1.5,          // korkeus varjorajan yläpuolella, jolla kaiku on täysi
     latvusKerroin: 0.5,      // puuston keskipituudesta esteenä (X-kaistan säde läpäisee lehvästöä osittain)
+    // Vesirakenteet ja sillat (vaihe 3h): maskin lippu 4 = laituri, 5 = aallonmurtaja, 6 = vesikivi, 7 = silta, 8 = rautatiesilta (vain veden päällä).
+    // rakenneH = korkeus vedenpinnasta (m), rakenneE = kaiun voimakkuus hyvässä virityksessä (huonossa kerrotaan rakenneHuono:lla), rakenneL = leveys (m)
+    rakenneH: { 4: 0.8, 5: 2.0, 6: 0.5, 7: 6, 8: 8 }, rakenneE: { 4: 0.8, 5: 1.0, 6: 0.5, 7: 1.0, 8: 1.0 }, rakenneHuono: 0.6,
+    rakenneL: { laituri_kapea: 2, laituri_leveä: 5, aallonmurtaja: 4, vesikivi: 1.5 },
+    sillanLeveys: { valtatie: 12, autotie: 8, kevyt: 5, rata: 5 },
     minKorkeusM: 1.2,        // maa-alueen vähimmäiskorkeus (kivet, ruovikko, laiturit, rantapenkka), ei näy paljaassa korkeusmallissa
     latvusPeitto: 30,        // latvuspeitto (%), jolla puusto lasketaan esteeksi
     rakennusKrs: { '3+': 12, '1-2': 6, none: 5 },
@@ -379,10 +385,11 @@
     var NB = M.nb;
     var lukija = opt.lukija || luoLukija(opt.aineistoUrl, opt.aineisto);
     var onMuutos = typeof opt.onMuutos === 'function' ? opt.onMuutos : null;
+    var kirjaa = typeof opt.onKirjaus === 'function' ? opt.onKirjaus : null;     // (laji, arvo): evpiste {ebl, vrm}, ebl, vrm, offset, suunta, ev
 
     // ---------- tila ----------
     var C = {
-      alueIdx: 5, suuntaYlos: opt.suuntaYlos !== false, ebl: 0, vrm: 0.5, sade: 0, sadeSuodatin: 0, jalkiIdx: 0, vahvistus: 1,
+      alueIdx: 5, suuntaYlos: opt.suuntaYlos !== false, ebl: 0, vrm: 0.5, sade: 0, sadeSuodatin: 0, jalkiIdx: 0, vahvistus: 1, ev: opt.eblVrm !== false, offset: false,
       hairio: { kohina: 0, suuntavirhe: 0, heikko: 0, pois: false }, antenniM: opt.antenniM || M.antenniM,
       viritys: opt.viritys === 'huono' ? 'huono' : 'hyva'
     };
@@ -447,7 +454,7 @@
       });
       var mxMin = Math.min(cs[0].x, cs[1].x, cs[2].x, cs[3].x), mxMax = Math.max(cs[0].x, cs[1].x, cs[2].x, cs[3].x);
       var myMin = Math.min(cs[0].y, cs[1].y, cs[2].y, cs[3].y), myMax = Math.max(cs[0].y, cs[1].y, cs[2].y, cs[3].y);
-      var names = ['maastokuvio'].concat(L.zv >= 13 ? ['rakennus'] : []);
+      var names = ['maastokuvio', 'vesieste', 'tie'].concat(L.zv >= 13 ? ['rakennus'] : []);
       var pad = 1 / Math.pow(2, 20);
       return Promise.all([
         kuvaHaku(function (z, x, y) { return lukija.vektori(z, x, y, names); }, L.zv, mxMin, myMin, mxMax, myMax),
@@ -569,10 +576,73 @@
           });
         });
       }
+      // 4b) vesirakenteet (laiturit, aallonmurtajat, vesikivet) ja sillat esteinä veden päällä. Ohut viiva rasteroidaan vähintään noin yhden solun levyiseksi
+      // (keskipisteen etäisyys viivaan enintään 0,75 solua), jotta se ei katoa suurilla solukooilla eikä säde mene sen väliin.
+      var st = null, RANK = { 6: 1, 4: 2, 5: 3, 7: 4, 8: 5 }, tmpA = null;
+      function asetaSolu(ci, cj, code) {
+        if (ci < 0 || cj < 0 || ci >= TS || cj >= TS) return;
+        var q = cj * TS + ci, old = st[q];
+        if (!old || RANK[code] >= RANK[old]) st[q] = code;
+      }
+      function rastViiva(cp, hw, code) {   // cp: litteä [x0, y0, x1, y1, ...] soluavaruudessa
+        var np = cp.length / 2;
+        for (var si = 0; si < Math.max(1, np - 1); si++) {
+          var ax0 = cp[2 * si], ay0 = cp[2 * si + 1], bx0 = np > 1 ? cp[2 * si + 2] : ax0, by0 = np > 1 ? cp[2 * si + 3] : ay0;
+          var ddx = bx0 - ax0, ddy = by0 - ay0, ll = ddx * ddx + ddy * ddy;
+          var ci0 = Math.max(0, Math.floor(Math.min(ax0, bx0) - hw)), ci1 = Math.min(TS - 1, Math.ceil(Math.max(ax0, bx0) + hw));
+          var cj0 = Math.max(0, Math.floor(Math.min(ay0, by0) - hw)), cj1 = Math.min(TS - 1, Math.ceil(Math.max(ay0, by0) + hw));
+          for (var cj = cj0; cj <= cj1; cj++) for (var ci = ci0; ci <= ci1; ci++) {
+            var px = ci + 0.5 - ax0, py = cj + 0.5 - ay0, u = ll > 0 ? (px * ddx + py * ddy) / ll : 0;
+            if (u < 0) u = 0; else if (u > 1) u = 1;
+            var ex = px - u * ddx, ey = py - u * ddy;
+            if (ex * ex + ey * ey <= hw * hw) asetaSolu(ci, cj, code);
+          }
+        }
+      }
+      function rastAla(rings, code) {
+        if (!tmpA) tmpA = new Uint8Array(N); else tmpA.fill(0);
+        var cnt = taytaMonikulmio(rings, tmpA, code, TS);
+        if (cnt === 0) { rings.forEach(function (r) { rastViiva(r, 0.75, code); }); return; }
+        for (var q = 0; q < N; q++) if (tmpA[q]) { if (!st[q] || RANK[code] >= RANK[st[q]]) st[q] = code; }
+      }
+      function hwSolua(leveysM) { return Math.max(leveysM / (2 * c), 0.75); }
+      vecTiles.forEach(function (vt) {
+        var vs = vt.d.vesieste, te = vt.d.tie, o;
+        if (vs && vs.features && vs.features.length) {
+          o = kerroin(vt, vs.extent);
+          vs.features.forEach(function (f) {
+            var laji = String((f.props && f.props.laji) || ''), code = 0, lev = 0;
+            if (laji === 'laituri_kapea') { code = 4; lev = M.rakenneL.laituri_kapea; }
+            else if (/^laituri/.test(laji)) { code = 4; lev = M.rakenneL.laituri_leveä; }
+            else if (/aallonmurt/.test(laji)) { code = 5; lev = M.rakenneL.aallonmurtaja; }
+            else if (/^vesikivi_pinnassa|^vesikivi_pinnan_yl/.test(laji)) { code = 6; lev = M.rakenneL.vesikivi; }
+            if (!code) return;
+            if (!st) st = new Uint8Array(N);
+            if (f.type === 1) { for (var pi = 0; pi < f.parts.length; pi++) rastViiva(muunna(f.parts[pi], o, new Float64Array(f.parts[pi].length)), hwSolua(lev), code); }
+            else if (f.type === 2) { f.parts.forEach(function (p) { rastViiva(muunna(p, o, new Float64Array(p.length)), hwSolua(lev), code); }); }
+            else if (f.type === 3) { rastAla(f.parts.map(function (p) { return muunna(p, o, new Float64Array(p.length)); }), code); }
+          });
+        }
+        if (te && te.features && te.features.length) {
+          o = kerroin(vt, te.extent);
+          te.features.forEach(function (f) {
+            if (f.type !== 2 || !f.props || !(f.props.taso > 0)) return;     // silta: tasosijainti suurempi kuin 0
+            var lk = f.props.luokka, tn = f.props.tienumero, rata = lk >= 14000 && lk < 15000, lev, code = rata ? 8 : 7;
+            if (rata) lev = M.sillanLeveys.rata;
+            else if (lk === 12111 || lk === 12112 || (tn > 0 && tn < 100 && lk < 12300)) lev = M.sillanLeveys.valtatie;
+            else if (lk < 12300) lev = M.sillanLeveys.autotie;
+            else lev = M.sillanLeveys.kevyt;
+            if (!st) st = new Uint8Array(N);
+            f.parts.forEach(function (p) { rastViiva(muunna(p, o, new Float64Array(p.length)), hwSolua(lev), code); });
+          });
+        }
+      });
+      if (st) for (k = 0; k < N; k++) if (st[k] && flag[k] === 0) flag[k] = st[k];     // vain veden päällä
       // 5) korkeus järven pinnasta, desimetreinä
       var hdm = new Int16Array(N);
       for (k = 0; k < N; k++) {
         if (!flag[k]) continue;
+        if (flag[k] >= 4) { hdm[k] = Math.round(M.rakenneH[flag[k]] * 10); continue; }
         var g0 = gr[k] > 0 ? gr[k] : 0, H;
         if (flag[k] === 2) { var bk = bh && bh[k] ? bh[k] : M.rakennusKrs.none; H = g0 + bk; qa[k] |= Math.min(127, Math.round(2 * M.rakennusLapaisy * bk)); }
         else { H = g0 + treeH[k] * M.latvusKerroin; if (treeH[k] > 0) { flag[k] = 3; qa[k] |= Math.min(127, Math.round(treeH[k] * 2 * (1 - M.latvusKerroin))); } }
@@ -714,7 +784,7 @@
       var gb = (th - S.conv) * RAD, dx = Math.sin(gb), dy = Math.cos(gb);
       var oe = S.e, on = S.n, i, s, j;
       var ti = 0, tj = 0, tile = null, ce0 = 0, cn0 = 0, tf = null, th2 = null, tq = NOLLA;
-      var firstLand = -1;
+      var firstLand = -1, firstAny = -1;     // firstLand: ensimmäinen todellinen maa (rantaviivan mittaukset), firstAny: myös vesirakenteet ja sillat (kaiun pulssi)
       var amax = -1e9, jW = Math.max(1, Math.round(M.ikkunaM / step)), g = C.vahvistus * (1 - 0.5 * C.hairio.heikko);
       var ensiEndAuki = true; ensiEnd = -1;
       Eb.fill(0);
@@ -757,7 +827,7 @@
               var hh = th2[id] * 0.1, sh = hh, qv = tq[id];
               if (qv) { if (f === 3) hh += (qv & 127) * 0.5; else if (f === 2) sh = hh - (qv & 127) * 0.5; }   // hyvä viritys: latvuston yläpinta kaikuu (varjo vanhalla korkeudella), rakennuksen varjo huokoinen
               Hb[j] = hh; Sb[j] = sh; Tb[j] = qv >> 7;
-              if (firstLand < 0 && s >= M.minEtaisyysM) firstLand = j;
+              if (s >= M.minEtaisyysM) { if (firstAny < 0) firstAny = j; if (firstLand < 0 && f < 4) firstLand = j; }
             } else Hb[j] = 0;
           }
         }
@@ -779,7 +849,8 @@
             var vis = dh >= P.nakyvyysM ? 1 : dh > 0 ? P.nakyvyysPohja + (1 - P.nakyvyysPohja) * dh / P.nakyvyysM : P.varjoE * (1 - (amax - al) / tol) * (1 - (i - iEdge) / nPen);
             if (hyvaM) {
               // Hyvä viritys: tasainen näkyvä maa pohjatasolla, rinne, ranta ja rakennukset kirkkaammin, metsä (latvusto) aina vähintään pohjaMetsa
-              if (fl === 2) E = P.rakennusE;
+              if (fl >= 4) E = M.rakenneE[fl];
+              else if (fl === 2) E = P.rakennusE;
               else {
                 var B = fl === 3 ? P.pohjaMetsa : P.pohjaMaa;
                 if (Tb[i] && B < P.taajamaE) B = P.taajamaE;
@@ -792,7 +863,8 @@
                 }
               }
             } else {
-              if (fl === 2) E = 0.9 + 0.1 * Math.min(1, H / 14);
+              if (fl >= 4) E = M.rakenneE[fl] * M.rakenneHuono;
+              else if (fl === 2) E = 0.9 + 0.1 * Math.min(1, H / 14);
               else {
                 var Hp2 = i - jW >= 0 ? Hb[i - jW] : 0;
                 var sg2 = (H - Hp2) / (jW * step);
@@ -824,8 +896,8 @@
       var tail = Math.min(3, Math.round(M.pulssiM / step));
       if (P === M.hyva) {
         // Hyvä viritys: kaiku jatkuu pulssin pituudelta kaikilla alueilla (voimakas kaiku pidempään kuin heikko): q = max(E, q - askel / (1,25 pulssia))
-        if (firstLand >= 0) { var dec = step / (1.25 * M.pulssiM), qd = 0; for (i = firstLand; i < NB; i++) { qd -= dec; if (Eb[i] > qd) qd = Eb[i]; else Eb[i] = qd > 0 ? qd : 0; if (qd < 0) qd = 0; } }
-      } else if (tail > 0 && firstLand >= 0) for (i = NB - 1; i > firstLand; i--) {
+        if (firstAny >= 0) { var dec = step / (1.25 * M.pulssiM), qd = 0; for (i = firstAny; i < NB; i++) { qd -= dec; if (Eb[i] > qd) qd = Eb[i]; else Eb[i] = qd > 0 ? qd : 0; if (qd < 0) qd = 0; } }
+      } else if (tail > 0 && firstAny >= 0) for (i = NB - 1; i > firstAny; i--) {
         var q = 0.62 * Eb[i - 1]; if (tail > 1 && i > 1) q = Math.max(q, 0.35 * Eb[i - 2]); if (tail > 2 && i > 2) q = Math.max(q, 0.18 * Eb[i - 3]);
         if (q > Eb[i]) Eb[i] = q;
       }
@@ -835,7 +907,7 @@
       var e = oe + s * dx, n = on + s * dy, ti = Math.floor(e * invTSm), tj = Math.floor(n * invTSm), t = haeRuutu(ti, tj);
       if (!t) return 0;
       var ci = ((e - ti * TSm) * invC) | 0, cj = ((n - tj * TSm) * invC) | 0;
-      return t.f[cj * TS + ci];
+      var fv = t.f[cj * TS + ci]; return fv >= 4 ? 0 : fv;
     }
     function refineHit(oe, on, dx, dy, i) {   // puolitushaku edellisen askeleen (vesi) ja tämän askeleen (maa) välillä
       var hi = (i + 1) * step, lo = i * step;
@@ -845,7 +917,7 @@
         var e = oe + s * dx, n = on + s * dy, ti = Math.floor(e * invTSm), tj = Math.floor(n * invTSm);
         if (ti !== ti1 || tj !== tj1) return landAt(oe, on, dx, dy, s);
         if (!tf1) return 0;
-        return tf1[(((n - tj * TSm) * invC) | 0) * TS + (((e - ti * TSm) * invC) | 0)];
+        var fq = tf1[(((n - tj * TSm) * invC) | 0) * TS + (((e - ti * TSm) * invC) | 0)]; return fq >= 4 ? 0 : fq;
       }
       if (i === 0 || maa(lo)) return hi;
       for (var it = 0; it < 7; it++) {
@@ -961,7 +1033,7 @@
 
     // ---------- alue ja puskurit ----------
     function alustaPuskurit() {
-      var mpk = ALUEET[C.alueIdx];
+      var mpk = ALUEET[C.alueIdx] * (C.offset ? OFFSET_K : 1);     // offset-tilassa säteet marssitaan 1,7-kertaiselle matkalle, jotta kuvan yläreuna täyttyy
       rangeM = mpk * NM; step = rangeM / NB;
       for (var q = 0; q < NB; q++) { var sq = (q + 1) * step; alW[q] = -C.antenniM / sq - sq * K2; invS[q] = 1 / sq; attG[q] = 1 / (1 + sq * sq / (M.hyva.rangeR0 * M.hyva.rangeR0)); attB[q] = 1 / (1 + sq * sq / (M.huono.rangeR0 * M.huono.rangeR0)); }
       NR = mpk <= 0.75 ? 720 : C.viritys === 'huono' ? 360 : mpk <= 3.2 ? M.hyva.sateita3 : 360;   // 720 sädettä pienillä alueilla, hyvässä virityksessä tihennetty (sateita3) aina 3 mpk:iin asti, huonossa vaiheen 3c tapaan
@@ -1031,11 +1103,10 @@
       var cw = canvas.clientWidth || canvas.width || 300, ch = canvas.clientHeight || canvas.height || 300;
       var dpr = Math.min(2, root.devicePixelRatio || 1);
       if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
-      var showUi = opt.ui !== false, landscape = cw - ch >= 120, strip = showUi && !landscape ? 56 : 0, col = showUi && landscape ? 64 : 0;
-      var availW = cw - col - 8, availH = ch - strip - 8;
-      var r = Math.max(40, Math.min(availW, availH) / 2);
-      geom = { w: cw, h: ch, dpr: dpr, cx: (cw - col) / 2, cy: (ch - strip) / 2, r: r, landscape: landscape, strip: strip, col: col };
-      var ep = Math.max(160, Math.min(opt.kaikuPx || 440, Math.round(2 * r * Math.min(dpr, 1.4))));
+      // PPI täyttää ruutunsa: halkaisija on pienempi sivu miinus 4 px. Napit ja numerolukemat ovat kuvan päällä reunoilla ja kulmissa.
+      var r = Math.max(40, Math.min(cw, ch) / 2 - 2), k = C.offset ? OFFSET_K : 1;
+      geom = { w: cw, h: ch, dpr: dpr, cx: cw / 2, cy: ch / 2, r: r, sx: cw / 2, sy: ch / 2, k: k, by: ch - 8, uiSig: '' };
+      var ep = Math.max(160, Math.min(Math.round((opt.kaikuPx || 440) * (C.offset ? 1.5 : 1)), Math.round(2 * r * k * Math.min(dpr, 1.4))));
       if (ep !== EP) {
         EP = ep;
         ec = document.createElement('canvas'); ec.width = EP; ec.height = EP; ectx = ec.getContext('2d');
@@ -1167,6 +1238,7 @@
     function pistePolku(rad, a) { return [geom.cx + Math.sin(a) * rad, geom.cy - Math.cos(a) * rad]; }
     function tekstiHalolla(t, x, y, align) {
       ctx.textAlign = align || 'left';
+      if (geom.luk) { var tw = ctx.measureText(t).width, fm = /([0-9.]+)px/.exec(ctx.font), fz = fm ? parseFloat(fm[1]) : 11, x0 = align === 'right' ? x - tw : align === 'center' ? x - tw / 2 : x; geom.luk.push({ t: t, x0: x0, y0: y - fz, x1: x0 + tw, y1: y + 2 }); }   // lukemien suorakulmiot (testikäyttö: lukemat eivät saa peittää nappeja)
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(2,12,6,0.85)'; ctx.strokeText(t, x, y);
       ctx.fillStyle = '#cfe9cf'; ctx.fillText(t, x, y);
     }
@@ -1176,136 +1248,209 @@
       if (!raw) return;
       if (canvas.clientWidth !== geom.w || canvas.clientHeight !== geom.h) asettelu();
       var nytMs = S.t, d = geom.dpr, r = geom.r, cx = geom.cx, cy = geom.cy;
+      var mpk = ALUEET[C.alueIdx], hdgOff = C.suuntaYlos ? S.hdg + C.hairio.suuntavirhe : 0;
+      var ha = (S.hdg - hdgOff) * RAD, k = C.offset ? OFFSET_K : 1, sx = cx, sy = cy;
+      geom.haDeg = norm360(S.hdg - hdgOff); geom.eaDeg = norm360(C.ebl - hdgOff);   // keulaviivan ja EBL:n suunta kuvassa (testikäyttö)
+      // offset: oma alus siirtyy keulasuunnan vastaiseen suuntaan 70 % säteestä (suunta ylös -tilassa suoraan alas, pohjoinen ylös -tilassa keulan vastaiseen suuntaan)
+      if (C.offset) { sx = cx - Math.sin(ha) * OFFSET_OSUUS * r; sy = cy + Math.cos(ha) * OFFSET_OSUUS * r; }
+      geom.sx = sx; geom.sy = sy; geom.k = k;
+      if (ui) asetteleUi();
       ctx.setTransform(d, 0, 0, d, 0, 0);
       ctx.fillStyle = '#020a06'; ctx.fillRect(0, 0, geom.w, geom.h);
       kuvaKaiut(nytMs);
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(ec, cx - r, cy - r, 2 * r, 2 * r);
-      var mpk = ALUEET[C.alueIdx], hdgOff = C.suuntaYlos ? S.hdg + C.hairio.suuntavirhe : 0;
-      // etäisyysrenkaat
+      ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.clip();
+      ctx.drawImage(ec, sx - r * k, sy - r * k, 2 * r * k, 2 * r * k);
+      // etäisyysrenkaat oman aluksen ympärillä
       ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(120,205,130,0.42)';
-      for (var i = 1; i <= 4; i++) { ctx.beginPath(); ctx.arc(cx, cy, r * i / 4, 0, 2 * Math.PI); ctx.stroke(); }
-      ctx.strokeStyle = 'rgba(120,205,130,0.75)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
+      for (var i = 1; i <= Math.floor(4 * k + 1e-6); i++) { ctx.beginPath(); ctx.arc(sx, sy, r * i / 4, 0, 2 * Math.PI); ctx.stroke(); }
       // keulaviiva
-      var ha = (S.hdg - hdgOff) * RAD, hp = pistePolku(r, ha);
-      ctx.strokeStyle = '#f2f2b0'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hp[0], hp[1]); ctx.stroke();
+      var hp = [sx + Math.sin(ha) * r * 3, sy - Math.cos(ha) * r * 3];
+      ctx.strokeStyle = '#f2f2b0'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hp[0], hp[1]); ctx.stroke();
       // oma alus
-      ctx.fillStyle = '#f2f2b0'; ctx.beginPath(); ctx.arc(cx, cy, 2.2, 0, 2 * Math.PI); ctx.fill();
-      // EBL
-      var naytaEV = opt.eblVrm !== false;
+      ctx.fillStyle = '#f2f2b0'; ctx.beginPath(); ctx.arc(sx, sy, 2.2, 0, 2 * Math.PI); ctx.fill();
+      // EBL ja VRM omasta aluksesta
+      var naytaEV = opt.eblVrm !== false && C.ev;
       if (naytaEV) {
-        var ea = (C.ebl - hdgOff) * RAD, ep = pistePolku(r, ea);
-        ctx.strokeStyle = '#5ad1ff'; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ep[0], ep[1]); ctx.stroke();
+        var ea = (C.ebl - hdgOff) * RAD;
+        ctx.strokeStyle = '#5ad1ff'; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.sin(ea) * r * 3, sy - Math.cos(ea) * r * 3); ctx.stroke();
+        if (C.vrm <= mpk * k) {
+          ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+          ctx.beginPath(); ctx.arc(sx, sy, r * C.vrm / mpk, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+          // risti EBL-viivan ja VRM-renkaan leikkauspisteeseen
+          var xr = sx + Math.sin(ea) * r * C.vrm / mpk, yr = sy - Math.cos(ea) * r * C.vrm / mpk;
+          ctx.strokeStyle = '#d98bff'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(xr - 5, yr - 5); ctx.lineTo(xr + 5, yr + 5); ctx.moveTo(xr - 5, yr + 5); ctx.lineTo(xr + 5, yr - 5); ctx.stroke();
+        }
       }
-      // VRM
-      if (naytaEV && C.vrm <= mpk) {
-        ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
-        ctx.beginPath(); ctx.arc(cx, cy, r * C.vrm / mpk, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
-      }
+      ctx.restore();
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(120,205,130,0.75)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
       // pohjoisen merkki
       var na = (0 - hdgOff) * RAD, np = pistePolku(r + 9, na);
-      var fs = Math.max(9, Math.min(13, geom.w / 30));
+      var fs = geom.w < 500 ? 11 : 12;
       ctx.font = '600 ' + Math.max(8, fs - 2) + 'px ui-monospace,Menlo,Consolas,monospace'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#cfe9cf'; ctx.textAlign = 'center'; ctx.fillText('N', np[0], np[1]);
-      // numerot kulmissa
+      ctx.fillStyle = '#cfe9cf'; ctx.textAlign = 'center'; ctx.fillText('N', Math.max(6, Math.min(geom.w - 6, np[0])), Math.max(6, Math.min(geom.h - 6, np[1])));
+      // numerolukemat kulmissa, englanninkieliset laitetermit ja desimaalipiste: vasen yläkulma RANGE ja RR, oikea yläkulma HDG ja SOG tiloineen, alakulmat EBL ja VRM.
+      // Napit ovat kulmissa lukemien vieressä (≡ oikeassa yläkulmassa, RANGE + ja − vasemmassa ja EBL/VRM ja OFFSET oikeassa alakulmassa), joten lukemat jäävät niiden sisäpuolelle.
       ctx.font = '600 ' + fs + 'px ui-monospace,Menlo,Consolas,monospace'; ctx.textBaseline = 'alphabetic';
-      var lh = fs + 3, lx = 6, rx = geom.w - geom.col - 6, ty = fs + 5, by = geom.h - geom.strip - 8;
-      var kapea = geom.w < 300;
-      tekstiHalolla(kapea ? 'ALUE ' + nmTxt(mpk) : 'ALUE ' + nmTxt(mpk) + ' mpk', lx, ty, 'left');
-      tekstiHalolla(kapea ? 'REN ' + nmTxt(mpk / 4) : 'RENGAS ' + nmTxt(mpk / 4) + ' mpk', lx, ty + lh, 'left');
-      if (C.viritys === 'huono') tekstiHalolla(kapea ? 'VIR HUONO' : 'VIRITYS HUONO', lx, ty + 2 * lh, 'left');
-      tekstiHalolla(kapea ? (C.suuntaYlos ? 'S\u2191 ' : 'N\u2191 ') + pad3(S.hdg) + '\u00b0' : (C.suuntaYlos ? 'SUUNTA YLÖS ' : 'POHJOINEN YLÖS ') + pad3(S.hdg) + '°', rx, ty, 'right');
-      tekstiHalolla(kapea ? fnum(S.kn, 1) + ' kn' : 'NOPEUS ' + fnum(S.kn, 1) + ' kn', rx, ty + lh, 'right');
+      geom.luk = [];
+      var sh = siirrot(), lh = fs + 3, lx = 6, rx = geom.w - UI_BW - 6, ty = fs + 5, ryy = sh.tr + fs + 3, by = geom.by, ebx = sh.eblX;
+      var pt = function (x) { return nmTxt(x).replace(',', '.'); };
+      tekstiHalolla('RANGE ' + pt(mpk) + ' NM', lx, ty, 'left');
+      tekstiHalolla('RR ' + pt(mpk / 4) + ' NM', lx, ty + lh, 'left');
+      if (C.offset) tekstiHalolla('OFFSET', lx, ty + 2 * lh, 'left');
+      tekstiHalolla('HDG ' + pad3(S.hdg) + '\u00b0 ' + (C.suuntaYlos ? 'H UP' : 'N UP'), rx, ryy, 'right');
+      tekstiHalolla('SOG ' + fnum(S.kn, 1).replace(',', '.') + ' kn', rx, ryy + lh, 'right');
+      var ry2 = ryy + 2 * lh;
+      if (JALJET[C.jalkiIdx] > 0) { tekstiHalolla('TRAIL ' + (JALJET[C.jalkiIdx] >= 60 ? JALJET[C.jalkiIdx] / 60 + ' min' : JALJET[C.jalkiIdx] + ' s'), rx, ry2, 'right'); ry2 += lh; }
+      if (C.sadeSuodatin > 0) { tekstiHalolla('RAIN', rx, ry2, 'right'); ry2 += lh; }
+      if (C.viritys === 'huono') { tekstiHalolla('DETUNED', rx, ry2, 'right'); ry2 += lh; }
+      if (C.hairio.pois) { tekstiHalolla('STBY', rx, ry2, 'right'); ry2 += lh; }
       if (naytaEV) {
-        tekstiHalolla('EBL ' + pad3(C.ebl) + '° T', lx, by, 'left');
-        tekstiHalolla('VRM ' + nmTxt(C.vrm) + ' mpk', rx, by, 'right');
+        tekstiHalolla('EBL ' + pad3(C.ebl) + '\u00b0 T', ebx, by, 'left');
+        tekstiHalolla('VRM ' + pt(C.vrm) + ' NM', rx, by, 'right');
       }
-      var tags = [];
-      if (JALJET[C.jalkiIdx] > 0) tags.push('JÄLKI ' + (JALJET[C.jalkiIdx] >= 60 ? JALJET[C.jalkiIdx] / 60 + ' min' : JALJET[C.jalkiIdx] + ' s'));
-      if (C.sadeSuodatin > 0) tags.push('SADESUODIN');
-      if (C.hairio.pois) tags.push('LÄHETIN POIS');
-      if (tags.length) tekstiHalolla(tags.join('  '), geom.cx, by - lh, 'center');
-      if (S.onTila && (jono.length || rakennetaan || aidsPending)) tekstiHalolla('LADATAAN…', geom.cx, geom.cy + r * 0.45, 'center');
+      if (S.onTila && (jono.length || rakennetaan || aidsPending)) tekstiHalolla('LOADING…', geom.cx, geom.cy + r * 0.45, 'center');
       var t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       tilasto.piirtoMs = t1 - t0; tilasto.piirrot++;
       if (t1 - t0 > tilasto.piirtoMax) tilasto.piirtoMax = t1 - t0;
     }
 
     // ---------- käyttöliittymä ----------
+    // Napit (vaihe 3h, toinen kierros) ovat puoliläpinäkyviä PPI:n päällä: kosketuskohde 52 x 44 px, piirretty 48 x 32 px, teksti 11 px englanniksi kuten laitteissa.
+    // Aina näkyvissä on neljä usein tarvittavaa nappia (RANGE + ja RANGE − päällekkäin vasemmassa alakulmassa, EBL/VRM ja OFFSET päällekkäin oikeassa alakulmassa)
+    // ja ≡-nappi oikeassa yläkulmassa. Harvoin tarvittavat (H UP / N UP, TRAIL, RAIN, TUNE ja STBY) ovat ≡-napin pystyvalikossa, joka sulkeutuu valinnan jälkeen.
+    // Nykyinen tila näkyy kulmalukemissa. Pieni 3D-ikkuna voi peittää kulman, jolloin sen kulman napit ja lukemat siirtyvät ikkunan viereen (siirrot).
     var STYLE_ID = 'tutka-tyylit';
     function lisaaTyylit() {
       if (document.getElementById(STYLE_ID)) return;
       var st = document.createElement('style'); st.id = STYLE_ID;
-      st.textContent = '.tutka-ui{position:absolute;pointer-events:none;z-index:5;font:650 15px/1.1 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:#e7eef3}' +
-        '.tutka-ui button{pointer-events:auto;position:absolute;min-width:44px;min-height:44px;margin:0;padding:4px 6px;border-radius:10px;border:1px solid #35607f;background:#1b3d58;color:#e7eef3;font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}' +
-        '.tutka-ui button:active{background:#0f7fb3;border-color:#5fc0ea}' +
-        '.tutka-ui button[aria-pressed=true]{background:#0f7fb3;border-color:#5fc0ea;color:#fff}' +
-        '.tutka-ui button:focus-visible{outline:2px solid #7cc4e8;outline-offset:2px}';
+      st.textContent = '.tutka-ui{position:absolute;pointer-events:none;z-index:5;font:650 11px/1.05 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:#e7eef3}' +
+        '.tutka-ui button{pointer-events:auto;position:absolute;display:flex;align-items:center;justify-content:center;width:52px;height:44px;min-width:44px;min-height:44px;margin:0;padding:6px 2px;box-sizing:border-box;border-radius:12px;border:0;' +
+        'background:rgba(14,28,40,0.58);background-clip:content-box;color:#e7eef3;font:inherit;text-align:center;white-space:normal;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}' +
+        '.tutka-ui button:active{background-color:rgba(15,127,179,0.85)}' +
+        '.tutka-ui button[aria-pressed=true]{background-color:rgba(15,127,179,0.72);color:#fff}' +
+        '.tutka-ui button[hidden]{display:none}.tutka-ui button:disabled{opacity:.45}' +
+        '.tutka-ui button:focus-visible{outline:2px solid #7cc4e8;outline-offset:-3px}';
       document.head.appendChild(st);
     }
-    var napit = {};
+    var napit = {}, jarjestys = [], ulkoiset = [], menyAuki = false, MENU_IDS = ['suunta', 'jalki', 'sade', 'viritys'];
+    function suljeMeny() { if (!menyAuki) return; menyAuki = false; paivitaUi(); asetteleUi(); }
     function luoUi() {
       lisaaTyylit();
       var par = canvas.parentNode;
       if (par && root.getComputedStyle(par).position === 'static') par.style.position = 'relative';
       ui = document.createElement('div'); ui.className = 'tutka-ui';
       par.appendChild(ui);
-      function nappi(id, teksti, nimi, fn) {
+      function nappi(id, teksti, nimi, fn, valikko) {
         var b = document.createElement('button'); b.type = 'button'; b.textContent = teksti; b.setAttribute('aria-label', nimi); b.setAttribute('data-tutka', id);
-        b.addEventListener('click', function (ev) { ev.preventDefault(); fn(); });
-        ui.appendChild(b); napit[id] = b; return b;
+        b.addEventListener('click', function (ev) { ev.preventDefault(); fn(); if (valikko) suljeMeny(); });
+        ui.appendChild(b); napit[id] = b; jarjestys.push(id); return b;
       }
-      nappi('alue-', 'Alue −', 'Pienennä alue', function () { asetaAlue(ALUEET[Math.max(0, C.alueIdx - 1)]); });
-      nappi('alue+', 'Alue +', 'Suurenna alue', function () { asetaAlue(ALUEET[Math.min(ALUEET.length - 1, C.alueIdx + 1)]); });
-      nappi('suunta', 'Suunta ylös', 'Vaihda suunta ylös ja pohjoinen ylös', function () { asetaSuuntaYlos(!C.suuntaYlos); });
-      nappi('jalki', 'Jälki', 'Jäljen kesto', function () { asetaJalki(JALJET[(C.jalkiIdx + 1) % JALJET.length]); });
-      nappi('sade', 'Sade', 'Sadesuodatin', function () { asetaSadeSuodatin(C.sadeSuodatin > 0 ? 0 : 0.6); });
+      nappi('alue+', 'RANGE +', 'Suurenna alue', function () { asetaAlue(ALUEET[Math.min(ALUEET.length - 1, C.alueIdx + 1)]); });
+      nappi('alue-', 'RANGE −', 'Pienennä alue', function () { asetaAlue(ALUEET[Math.max(0, C.alueIdx - 1)]); });
+      ['alue+', 'alue-'].forEach(function (id) { var m = id === 'alue+' ? '+' : '\u2212'; napit[id].style.flexDirection = 'column'; napit[id].innerHTML = '<span style="font-size:9px;letter-spacing:.3px">RANGE</span><b style="font-size:17px;line-height:13px;font-weight:700">' + m + '</b>'; });   // RANGE pienellä ja merkki isolla, jotta nappi näkyy yhdellä silmäyksellä
+      nappi('ev', 'EBL VRM', 'EBL ja VRM päälle tai pois', function () { asetaEV(!C.ev); kirjaa && kirjaa('ev', C.ev ? 1 : 0); });
+      nappi('offset', 'OFFSET', 'Offset: oma alus alas, eteenpäin näkyy 1,7-kertainen matka (näppäin O)', function () { asetaOffset(!C.offset); kirjaa && kirjaa('offset', C.offset ? 1 : 0); });
+      nappi('meny', '≡', 'Näytä tai piilota tutkan valikko', function () { menyAuki = !menyAuki; paivitaUi(); asetteleUi(); });
+      nappi('suunta', 'H UP', 'Vaihda suunta ylös (H UP) ja pohjoinen ylös (N UP)', function () { asetaSuuntaYlos(!C.suuntaYlos); kirjaa && kirjaa('suunta', C.suuntaYlos ? 1 : 0); }, true);
+      nappi('jalki', 'TRAIL', 'Jäljen kesto', function () { asetaJalki(JALJET[(C.jalkiIdx + 1) % JALJET.length]); }, true);
+      nappi('sade', 'RAIN', 'Sadesuodatin', function () { asetaSadeSuodatin(C.sadeSuodatin > 0 ? 0 : 0.6); }, true);
+      nappi('viritys', 'TUNED', 'Viritys hyvä tai huono', function () { var v = C.viritys === 'huono' ? 'hyva' : 'huono'; if (opt.onViritys) opt.onViritys(v); else asetaViritys(v); }, true);
+      // ulkoiset napit (esim. tutkan sammutus, STBY) siirretään samaan valikkoon ja palautetaan tuhottaessa
+      (opt.ulkoisetNapit || []).forEach(function (el) {
+        if (!el) return;
+        ulkoiset.push({ el: el, par: el.parentNode, next: el.nextSibling });
+        ui.appendChild(el); jarjestys.push(el);
+        el.addEventListener('click', suljeMeny);
+      });
       paivitaUi();
       asetteleUi();
     }
     function paivitaUi() {
       if (!ui) return;
-      napit['suunta'].textContent = C.suuntaYlos ? 'Suunta ylös' : 'Pohjoinen ylös';
+      napit['suunta'].textContent = C.suuntaYlos ? 'H UP' : 'N UP';
       napit['suunta'].setAttribute('aria-pressed', C.suuntaYlos ? 'true' : 'false');
-      napit['jalki'].textContent = JALJET[C.jalkiIdx] > 0 ? 'Jälki ' + (JALJET[C.jalkiIdx] >= 60 ? JALJET[C.jalkiIdx] / 60 + ' min' : JALJET[C.jalkiIdx] + ' s') : 'Jälki';
+      napit['jalki'].textContent = JALJET[C.jalkiIdx] > 0 ? 'TRAIL ' + (JALJET[C.jalkiIdx] >= 60 ? JALJET[C.jalkiIdx] / 60 + ' min' : JALJET[C.jalkiIdx] + ' s') : 'TRAIL';
       napit['jalki'].setAttribute('aria-pressed', JALJET[C.jalkiIdx] > 0 ? 'true' : 'false');
       napit['sade'].setAttribute('aria-pressed', C.sadeSuodatin > 0 ? 'true' : 'false');
+      napit['viritys'].textContent = C.viritys === 'huono' ? 'DETUNED' : 'TUNED';
+      napit['viritys'].setAttribute('aria-pressed', C.viritys === 'huono' ? 'true' : 'false');
+      napit['ev'].setAttribute('aria-pressed', C.ev ? 'true' : 'false');
+      napit['offset'].setAttribute('aria-pressed', C.offset ? 'true' : 'false');
+      napit['meny'].setAttribute('aria-pressed', menyAuki ? 'true' : 'false');
       napit['alue-'].disabled = C.alueIdx === 0; napit['alue+'].disabled = C.alueIdx === ALUEET.length - 1;
-      napit['alue-'].style.opacity = C.alueIdx === 0 ? '0.45' : '1'; napit['alue+'].style.opacity = C.alueIdx === ALUEET.length - 1 ? '0.45' : '1';
+    }
+    function nappiEl(x) { return typeof x === 'string' ? napit[x] : x; }
+    // Pieni 3D-ikkuna (varaus) voi peittää kulman. Palauttaa kulmien siirrot: tr = oikean yläkulman (≡ ja lukemat) ylin y, bl = vasemman alakulman nappien alareuna, eblX = EBL-lukeman vasen reuna.
+    var UI_BW = 52, UI_BH = 44, UI_MW = 104;
+    function siirrot() {
+      var o = { tr: 2, bl: geom.h - 2, eblX: UI_BW + 6 }, v = varaus, W = geom.w, H = geom.h;
+      if (!v) return o;
+      var hit = function (x0, y0, x1, y1) { return v.r > x0 && v.l < x1 && v.b > y0 && v.t < y1; };
+      if (hit(W - UI_BW - 130, 0, W, 4 + UI_BH)) o.tr = Math.round(v.b) + 2;
+      if (hit(0, H - 2 * UI_BH - 6, UI_BW + 4, H)) o.bl = Math.round(v.t) - 2;
+      if (hit(0, H - 24, UI_BW + 130, H)) o.eblX = Math.round(v.r) + 6;
+      return o;
     }
     function asetteleUi() {
       if (!ui) return;
       var cr = canvas.getBoundingClientRect(), pr = canvas.parentNode.getBoundingClientRect();
       ui.style.left = (cr.left - pr.left + canvas.parentNode.scrollLeft) + 'px'; ui.style.top = (cr.top - pr.top + canvas.parentNode.scrollTop) + 'px';
       ui.style.width = cr.width + 'px'; ui.style.height = cr.height + 'px';
-      var ids = ['alue-', 'alue+', 'suunta', 'jalki', 'sade'], g = 6, h = 46;
-      var wd = { 'alue-': 70, 'alue+': 70, suunta: 118, jalki: 84, sade: 56 };
-      if (geom.landscape) {
-        var x = geom.w - geom.col + 4, y = 6;
-        ids.forEach(function (id) { var b = napit[id]; b.style.left = x + 'px'; b.style.top = y + 'px'; b.style.width = (geom.col - 8) + 'px'; b.style.height = h + 'px'; b.style.fontSize = '13px'; y += h + g; });
-      } else {
-        var tot = ids.reduce(function (s, id) { return s + wd[id]; }, 0) + g * (ids.length - 1), sc = Math.min(1, (geom.w - 8) / tot), xx = (geom.w - tot * sc) / 2;
-        ids.forEach(function (id) { var b = napit[id]; var w = Math.floor(wd[id] * sc); b.style.left = xx + 'px'; b.style.top = (geom.h - geom.strip + 5) + 'px'; b.style.width = w + 'px'; b.style.height = h + 'px'; b.style.fontSize = sc < 0.9 ? '13px' : '15px'; xx += w + g * sc; });
+      var W = geom.w, H = geom.h, BW = UI_BW, BH = UI_BH, sh = siirrot(), i;
+      var valikko = [];
+      for (i = 0; i < jarjestys.length; i++) {
+        var el = nappiEl(jarjestys[i]);
+        if (typeof el === 'object' && el.getAttribute('data-tutka') == null) { if (el.hidden || root.getComputedStyle(el).display === 'none') continue; valikko.push(el); }
+        else if (MENU_IDS.indexOf(el.getAttribute('data-tutka')) >= 0) valikko.push(el);
       }
+      var sig = [W, H, menyAuki, sh.tr, sh.bl, sh.eblX, valikko.map(function (e) { return e.getAttribute('data-tutka') || e.id; }).join(',')].join('|');
+      if (geom.uiSig === sig) return;
+      geom.uiSig = sig;
+      function put(el, x, y, w) { el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'; el.style.width = (w || BW) + 'px'; el.style.height = BH + 'px'; el.style.visibility = ''; }
+      var x0 = 2, x1 = W - BW - 2;
+      put(napit['alue+'], x0, sh.bl - 2 * BH); put(napit['alue-'], x0, sh.bl - BH);
+      put(napit['ev'], x1, H - 2 - 2 * BH); put(napit['offset'], x1, H - 2 - BH);
+      put(napit['meny'], x1, sh.tr);
+      valikko.forEach(function (e, n) {
+        if (menyAuki) put(e, W - UI_MW - 2, sh.tr + BH + n * BH, UI_MW); else e.style.visibility = 'hidden';
+      });
+      geom.by = H - 8;
     }
 
     // ---------- kosketus ja hiiri ----------
-    var ptrs = new Map(), gest = null;
-    function bearingFromEvent(ev) {
-      var rc = canvas.getBoundingClientRect(), x = ev.clientX - rc.left - geom.cx, y = ev.clientY - rc.top - geom.cy;
+    // Napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen (omasta aluksesta mitattuna), veto siirtää niitä jatkuvasti ja vedon päättyessä
+    // lukema kirjataan kerran. Kahden sormen nipistys säätää VRM:ää, rulla ja hakasulut hienosäätävät VRM:ää ja pilkku ja piste EBL:ää.
+    var ptrs = new Map(), gest = null, logT = {}, varaus = null;
+    // Ulkopuolinen peittävä ikkuna (pieni 3D-ikkuna): suorakulmio kuvan pikseleinä {l, t, r, b} tai null
+    function asetaVaraus(v) { varaus = v || null; piirraPian(); }
+    function maxVrm() { return ALUEET[C.alueIdx] * (C.offset ? OFFSET_K : 1); }
+    function pisteTapahtumasta(ev) {
+      var rc = canvas.getBoundingClientRect(), x = ev.clientX - rc.left - geom.sx, y = ev.clientY - rc.top - geom.sy;
       var phi = Math.atan2(x, -y) / RAD, off = C.suuntaYlos ? S.hdg + C.hairio.suuntavirhe : 0;
-      return { b: norm360(phi + off), r: Math.hypot(x, y) };
+      return { b: norm360(phi + off), mpk: Math.hypot(x, y) / geom.r * ALUEET[C.alueIdx] };
+    }
+    function asetaPiste(ev) {
+      var q = pisteTapahtumasta(ev);
+      C.ebl = q.b; C.vrm = Math.max(0.005, Math.min(maxVrm(), q.mpk)); paivitaMuutos();
+    }
+    function kirjaaPiste() { if (kirjaa) kirjaa('evpiste', { ebl: Math.round(C.ebl) % 360, vrm: Math.round(C.vrm * 100) / 100 }); }
+    function kirjaaMyohemmin(laji) {
+      if (!kirjaa) return;
+      clearTimeout(logT[laji]);
+      logT[laji] = setTimeout(function () { kirjaa(laji, laji === 'ebl' ? Math.round(C.ebl) % 360 : Math.round(C.vrm * 100) / 100); }, 500);
     }
     function pDown(ev) {
       if (ev.button != null && ev.button > 0) return;
+      if (menyAuki) { suljeMeny(); return; }   // napautus valikon ulkopuolelle sulkee valikon eikä aseta EBL:ää
       try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
       ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       if (ptrs.size === 1) {
-        gest = { mode: 'ebl', ebl0: C.ebl };
-        asetaEBL(bearingFromEvent(ev).b);
+        gest = { mode: 'piste', ebl0: C.ebl, vrm0: C.vrm };
+        if (C.ev) asetaPiste(ev);
       } else if (ptrs.size === 2) {
         var ps = Array.from(ptrs.values());
-        C.ebl = gest ? gest.ebl0 : C.ebl;
+        if (gest) { C.ebl = gest.ebl0; C.vrm = gest.vrm0; }
         gest = { mode: 'vrm', d0: Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y), vrm0: C.vrm, ebl0: C.ebl };
         paivitaMuutos();
       }
@@ -1314,7 +1459,7 @@
     function pMove(ev) {
       if (!ptrs.has(ev.pointerId)) return;
       ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-      if (gest && gest.mode === 'ebl' && ptrs.size === 1) asetaEBL(bearingFromEvent(ev).b);
+      if (gest && gest.mode === 'piste' && ptrs.size === 1) { if (C.ev) asetaPiste(ev); }
       else if (gest && gest.mode === 'vrm' && ptrs.size >= 2) {
         var ps = Array.from(ptrs.values()), d = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y);
         if (gest.d0 > 8) asetaVRM(gest.vrm0 * d / gest.d0);
@@ -1322,26 +1467,32 @@
       ev.preventDefault();
     }
     function pUp(ev) {
+      if (!ptrs.has(ev.pointerId)) return;
       ptrs.delete(ev.pointerId);
       try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
-      if (ptrs.size === 0) gest = null;
-      else if (ptrs.size === 1) gest = { mode: 'jaa', ebl0: C.ebl };   // sormen nosto nipistyksen jälkeen ei siirrä EBL:ää
+      if (ptrs.size === 0) {
+        if (gest && gest.mode === 'piste' && ev.type === 'pointerup' && C.ev) { asetaPiste(ev); kirjaaPiste(); }
+        else if (gest && gest.mode === 'vrm' && ev.type === 'pointerup') kirjaaMyohemmin('vrm');
+        gest = null;
+      } else if (ptrs.size === 1) gest = { mode: 'jaa' };   // sormen nosto nipistyksen jälkeen ei siirrä EBL:ää
     }
     function onWheel(ev) {
       ev.preventDefault();
-      asetaVRM(C.vrm * (ev.deltaY < 0 ? 1.06 : 1 / 1.06));
+      asetaVRM(C.vrm * (ev.deltaY < 0 ? 1.06 : 1 / 1.06)); kirjaaMyohemmin('vrm');
     }
-    function onKey(ev) {
-      var k = ev.key, ok = true;
-      if (k === 'ArrowLeft') asetaEBL(C.ebl - (ev.shiftKey ? 10 : 1));
-      else if (k === 'ArrowRight') asetaEBL(C.ebl + (ev.shiftKey ? 10 : 1));
-      else if (k === 'ArrowUp') asetaVRM(C.vrm * 1.05);
-      else if (k === 'ArrowDown') asetaVRM(C.vrm / 1.05);
+    // Näppäimet: palauttaa true, jos tutka käsitteli näppäimen (sim.js reitittää myös globaalit näppäimet tänne, kun tutka on aktiivinen ruutu)
+    function kasitteleNappain(k, shift) {
+      if (k === 'ArrowLeft' || k === ',') { asetaEBL(C.ebl - (shift ? 10 : 1)); kirjaaMyohemmin('ebl'); }
+      else if (k === 'ArrowRight' || k === '.') { asetaEBL(C.ebl + (shift ? 10 : 1)); kirjaaMyohemmin('ebl'); }
+      else if (k === 'ArrowUp' || k === ']') { asetaVRM(C.vrm * 1.05); kirjaaMyohemmin('vrm'); }
+      else if (k === 'ArrowDown' || k === '[') { asetaVRM(C.vrm / 1.05); kirjaaMyohemmin('vrm'); }
       else if (k === '+' || k === '=') asetaAlue(ALUEET[Math.min(ALUEET.length - 1, C.alueIdx + 1)]);
-      else if (k === '-') asetaAlue(ALUEET[Math.max(0, C.alueIdx - 1)]);
-      else ok = false;
-      if (ok) ev.preventDefault();
+      else if (k === '-' || k === '_') asetaAlue(ALUEET[Math.max(0, C.alueIdx - 1)]);
+      else if (k === 'o' || k === 'O') { asetaOffset(!C.offset); kirjaa && kirjaa('offset', C.offset ? 1 : 0); }
+      else return false;
+      return true;
     }
+    function onKey(ev) { if (kasitteleNappain(ev.key, ev.shiftKey)) ev.preventDefault(); }
 
     // ---------- asetukset ----------
     function paivitaMuutos() { if (onMuutos) { try { onMuutos(lue()); } catch (e) {} } piirraPian(); }
@@ -1353,7 +1504,7 @@
       var vanha = ALUEET[C.alueIdx];
       C.alueIdx = idx;
       // VRM säilyttää suhteellisen kohdan, jos se jäisi alueen ulkopuolelle
-      if (C.vrm > ALUEET[idx]) C.vrm = ALUEET[idx] * 0.5;
+      if (C.vrm > ALUEET[idx] * (C.offset ? OFFSET_K : 1)) C.vrm = ALUEET[idx] * (C.offset ? OFFSET_K : 1) * 0.5;
       alustaPuskurit();
       varmista(true);
       paivitaUi(); paivitaMuutos();
@@ -1361,7 +1512,17 @@
     }
     function asetaSuuntaYlos(b) { C.suuntaYlos = !!b; paivitaUi(); paivitaMuutos(); }
     function asetaEBL(aste) { C.ebl = norm360(Number(aste)); paivitaMuutos(); }
-    function asetaVRM(mpk) { C.vrm = Math.max(0.005, Math.min(ALUEET[C.alueIdx], Number(mpk))); paivitaMuutos(); }
+    function asetaVRM(mpk) { C.vrm = Math.max(0.005, Math.min(maxVrm(), Number(mpk))); paivitaMuutos(); }
+    function asetaEV(b) { C.ev = !!b; paivitaUi(); paivitaMuutos(); }
+    // Offset: oma alus siirtyy kuvassa alaspäin (70 % säteestä), säteet marssitaan 1,7-kertaiselle matkalle ja kuva piirretään vastaavasti suurennettuna
+    function asetaOffset(b) {
+      b = !!b; if (b === C.offset) return b;
+      C.offset = b;
+      alustaPuskurit(); asettelu(); varmista(true);
+      if (C.vrm > maxVrm()) C.vrm = maxVrm() * 0.5;
+      paivitaUi(); paivitaMuutos();
+      return b;
+    }
     function asetaSade(v) { C.sade = Math.max(0, Math.min(1, Number(v) || 0)); paivitaMuutos(); }
     function asetaSadeSuodatin(v) { C.sadeSuodatin = Math.max(0, Math.min(1, Number(v) || 0)); paivitaUi(); paivitaMuutos(); }
     function asetaJalki(s) {
@@ -1374,7 +1535,7 @@
     function asetaViritys(v) {
       var uusi = v === 'huono' ? 'huono' : 'hyva';
       if (uusi === C.viritys) return uusi;
-      C.viritys = uusi;
+      C.viritys = uusi; paivitaUi();
       alustaPuskurit();       // säteiden määrä riippuu virityksestä, joten kuva piirtyy uudelleen seuraavalla pyyhkäisyllä
       varmista(true);
       paivitaMuutos();
@@ -1394,7 +1555,7 @@
     function lue() {
       var h = JSON.parse(JSON.stringify(C.hairio)); h.kohina = kohinaTeho();   // viritystilan kohina mukana
       return { alue: ALUEET[C.alueIdx], rengasvali: ALUEET[C.alueIdx] / 4, suuntaYlos: C.suuntaYlos, ebl: C.ebl, vrm: C.vrm, sade: C.sade, sadeSuodatin: C.sadeSuodatin,
-        jalkiS: JALJET[C.jalkiIdx], hairio: h, viritys: C.viritys, suunta: S.hdg, nopeus: S.kn, e: S.e, n: S.n, sateita: NR, askel: step, solu: cell };
+        jalkiS: JALJET[C.jalkiIdx], offset: C.offset, ev: C.ev, hairio: h, viritys: C.viritys, suunta: S.hdg, nopeus: S.kn, e: S.e, n: S.n, sateita: NR, askel: step, solu: cell };
     }
     function valmis() {
       return new Promise(function (res) {
@@ -1499,6 +1660,8 @@
       canvas.removeEventListener('pointerup', pUp); canvas.removeEventListener('pointercancel', pUp); canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('keydown', onKey);
       if (ro) ro.disconnect();
+      ulkoiset.forEach(function (u) { u.el.style.visibility = ''; u.el.style.left = u.el.style.top = u.el.style.width = u.el.style.height = ''; if (u.par) u.par.insertBefore(u.el, u.next && u.next.parentNode === u.par ? u.next : null); });
+      ulkoiset = [];
       if (ui && ui.parentNode) ui.parentNode.removeChild(ui);
     }
 
@@ -1518,7 +1681,7 @@
     if (opt.tila) paivita(opt.tila);
 
     return {
-      paivita: paivita, asetaViritys: asetaViritys, tila: lue, asetaAlue: asetaAlue, asetaSuuntaYlos: asetaSuuntaYlos, asetaEBL: asetaEBL, asetaVRM: asetaVRM, asetaSade: asetaSade,
+      paivita: paivita, asetaViritys: asetaViritys, tila: lue, asetaAlue: asetaAlue, asetaSuuntaYlos: asetaSuuntaYlos, asetaOffset: asetaOffset, asetaVaraus: asetaVaraus, asetaEV: asetaEV, nappain: kasitteleNappain, asetaEBL: asetaEBL, asetaVRM: asetaVRM, asetaSade: asetaSade,
       asetaSadeSuodatin: asetaSadeSuodatin, asetaJalki: asetaJalki, asetaVahvistus: asetaVahvistus, asetaHairio: asetaHairio,
       lue: lue, vapautaRuudut: vapautaRuudut, valmis: valmis, taytaKierros: taytaKierros, piirra: piirra, kaynnista: kaynnista, pysayta: pysayta, tuhoa: tuhoa, kohteet: kohteet,
       tilasto: function () { return JSON.parse(JSON.stringify(tilasto)); },

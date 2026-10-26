@@ -17,6 +17,9 @@
   var OFFSET_FRAC = 0.2;            // aluksen siirtymä näkymän keskipisteestä alaspäin näytön korkeuden osuutena (suunta ylös)
   var SHALLOW_M = (root.Liike && root.Liike.SETTINGS.draftM) || 1.1;   // pohjakosketuksen raja: syvyysalueen suurin syvyys (DRVAL2) alle tämän
   var NM = 1852;
+  var RANGE_MIN = 0.1, RANGE_MAX = 12;   // näkymän korkeus mpk:na (zoomausrajat)
+  var ZOOM_STEP = 1.25;                  // + ja − napit ja näppäimet
+  var SCALE_BARS = [[10, '10 m'], [20, '20 m'], [50, '50 m'], [100, '100 m'], [200, '200 m'], [500, '500 m'], [926, '0,5 mpk'], [1852, '1 mpk'], [3704, '2 mpk'], [9260, '5 mpk'], [18520, '10 mpk']];
   // Reittikartan vektorikartan värit (chart.js VEC, laiturien täyttö ja navigointilinjat)
   var COL = {
     land: '#faf0cb', deep: '#ffffff', d10: '#f4f9fe', d6: '#e2f0fc', d3: '#c6e2f9', contour: '#0096dc', coast: '#232323',
@@ -264,11 +267,12 @@
     var ctx = canvas.getContext('2d');
     var overlay = document.createElement('div'); overlay.className = 'plot-overlay'; container.appendChild(overlay);
     var own = container.querySelector('.plot-own');
-    var rangeNm = 1, w = 0, h = 0;
+    var rangeNm = 1, w = 0, h = 0, follow = true, anc = { x: 0, y: 0 }, lastAidCenter = null, lastFarLoad = 0;
+    var maxRange = interactive ? RANGE_MAX : 60;     // purkunäkymän kartta saa näyttää pitkänkin reitin
     var S = { x: 0, y: 0, hdg: 0, cog: 0, sog: 0, hdgTrue: 0, cogTrue: 0, px: 0, py: 0, lat: 61.5, has: false };
     var headUp = opts.fixedHeadUp ? true : opts.headUp !== false;
     var evOn = interactive && opts.ev !== false, ebl = 0, vrm = 0.5, vecIdx = 1, onEV = opts.onEV || null;
-    var route = { pts: [], turns: [] }, nextPt = null, trail = { src: null, n: 0, arr: [] };
+    var route = { pts: [], turns: [], legs: [], color: '#d4237f', legBrg: true, turnTicks: true, approved: true }, nextPt = null, trail = { src: null, n: 0, arr: [] };
     var extraLines = [], extraPts = [];
     var aidList = [], lastAidSync = 0, wantStamp = 0, lastNeedKey = '', dirty = false, readyFlag = false, destroyed = false;
     var view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0, s: 1, sx: 0, sy: 0 };
@@ -279,19 +283,22 @@
       canvas.width = Math.round(w * DPR); canvas.height = Math.round(h * DPR);
       dirty = true; draw();
     }
-    function setRangeNm(nm) { rangeNm = nm; dirty = true; if (S.has) draw(); }
+    function clampRange(nm) { return Math.max(RANGE_MIN, Math.min(maxRange, Number(nm) || 1)); }
+    function setRangeNm(nm) { rangeNm = clampRange(nm); dirty = true; if (S.has) draw(); }
     function getRangeNm() { return rangeNm; }
     function listener() { if (destroyed) return; if (!dirty) { dirty = true; (root.requestAnimationFrame || setTimeout)(function () { if (dirty) draw(); }); } }
     listeners.push(listener);
 
     // ---- piirto ----
     function computeView() {
-      var sxp = w / 2, syp = headUp ? h * (0.5 + OFFSET_FRAC) : h / 2;
+      var sxp = w / 2, syp = headUp ? h * (0.5 + OFFSET_FRAC) : h / 2;     // ankkuripiste: seurannassa alus, vapaassa tilassa kiinteä karttapiste (anc)
       var mpp = rangeNm * NM / Math.max(200, h), cl = Math.cos(S.lat * RAD), s = cl / mpp;
       var th = headUp ? S.hdgTrue * RAD : 0, cs = Math.cos(th), sn = Math.sin(th);
       var a = s * cs, b = -s * sn, c = -s * sn, d = -s * cs;
-      view.a = a; view.b = b; view.c = c; view.d = d; view.s = s; view.sx = sxp; view.sy = syp;
-      view.e = sxp - a * S.px - c * S.py; view.f = syp - b * S.px - d * S.py;
+      view.a = a; view.b = b; view.c = c; view.d = d; view.s = s;
+      var kx = follow ? S.px : anc.x, ky = follow ? S.py : anc.y;
+      view.e = sxp - a * kx - c * ky; view.f = syp - b * kx - d * ky; view.ax = sxp; view.ay = syp;
+      view.sx = a * S.px + c * S.py + view.e; view.sy = b * S.px + d * S.py + view.f;      // oman aluksen paikka kuvassa
       view.z = Math.log(156543.03392 * cl / mpp) / Math.LN2; view.mpp = mpp; view.cl = cl;
     }
     function toScreen(X, Y) { return [view.a * X + view.c * Y + view.e, view.b * X + view.d * Y + view.f]; }
@@ -299,6 +306,28 @@
       var det = view.a * view.d - view.b * view.c, uu = u - view.e, vv = v - view.f;
       return [(view.d * uu - view.c * vv) / det, (-view.b * uu + view.a * vv) / det];
     }
+    // Siirtää vapaan tilan ankkuria niin, että karttapiste g (plot-koordinaatit) on kuvapisteessä (px, py). Mittakaava ja kierto säilyvät.
+    function panTo(g, px, py) {
+      computeView();
+      var det = view.a * view.d - view.b * view.c, vx = px - view.ax, vy = py - view.ay;
+      anc.x = g[0] - (view.d * vx - view.c * vy) / det; anc.y = g[1] - (-view.b * vx + view.a * vy) / det;
+      follow = false; updateReadouts();
+    }
+    function plotToWorld(X, Y) {
+      var lon = (X + OX) / RE / RAD, lat = (2 * Math.atan(Math.exp((Y + OY) / RE)) - Math.PI / 2) / RAD;
+      return root.Paikka.lonlatToWorld(lon, lat);
+    }
+    // Zoomaus kertoimella f (yli 1 lähentää) pisteen (px, py) ympäri. Seurannassa alus pysyy paikallaan, vapaassa tilassa piste pysyy kartan päällä.
+    function zoomAt(f, px, py) {
+      var old = rangeNm; if (S.has && w) computeView();
+      var g = S.has && w && !follow ? toPlot(px, py) : null;
+      rangeNm = clampRange(rangeNm / f);
+      if (g && rangeNm !== old) panTo(g, px, py);
+      dirty = true; updateReadouts(); if (S.has) draw();
+      return rangeNm;
+    }
+    function zoomBy(f) { return zoomAt(f, view.ax || w / 2, follow ? (view.ay || h / 2) : h / 2); }
+    function recenter() { follow = true; updateReadouts(); dirty = true; if (S.has) draw(); }
     function neededTiles() {
       var Zt = Math.max(8, Math.min(16, Math.round(view.z))), T = 2 * PIR / Math.pow(2, Zt), out = [];
       var corners = [toPlot(0, 0), toPlot(w, 0), toPlot(0, h), toPlot(w, h)], xs = corners.map(function (p) { return p[0]; }), ys = corners.map(function (p) { return p[1]; });
@@ -370,14 +399,21 @@
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       drawSoundings(drawn);
       drawAids();
+      drawRouteNotes();
       drawEV();
       placeOverlay();
+      updateScale();
     }
     function polyPath(arr) { ctx.beginPath(); for (var i = 0; i < arr.length; i += 2) { if (i) ctx.lineTo(arr[i], arr[i + 1]); else ctx.moveTo(arr[i], arr[i + 1]); } }
     function drawRouteLayers(inv) {
-      if (route.pts.length >= 4) { polyPath(route.pts); ctx.strokeStyle = 'rgba(194,24,143,0.85)'; ctx.lineWidth = 4 * inv; ctx.stroke(); }
+      if (route.pts.length >= 4) {
+        polyPath(route.pts); ctx.strokeStyle = route.color; ctx.globalAlpha = 0.95; ctx.lineWidth = 3 * inv; ctx.stroke(); ctx.globalAlpha = 1;
+        // reittipisteet pieninä pisteinä, käännöspisteet (suunta muuttuu vähintään 12°) rengastettuina
+        ctx.fillStyle = route.color;
+        for (var vi = 0; vi < route.pts.length; vi += 2) { ctx.beginPath(); ctx.arc(route.pts[vi], route.pts[vi + 1], 3 * inv, 0, 2 * Math.PI); ctx.fill(); }
+      }
       route.turns.forEach(function (p) {
-        ctx.beginPath(); ctx.arc(p[0], p[1], 3.5 * inv, 0, 2 * Math.PI); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#c2188f'; ctx.lineWidth = 1.5 * inv; ctx.stroke();
+        ctx.beginPath(); ctx.arc(p[0], p[1], 4.5 * inv, 0, 2 * Math.PI); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = route.color; ctx.lineWidth = 2 * inv; ctx.stroke();
       });
       if (trail.arr.length >= 4) { polyPath(trail.arr); ctx.strokeStyle = 'rgba(31,78,156,0.8)'; ctx.lineWidth = 2.5 * inv; ctx.stroke(); }
       extraLines.forEach(function (l) {
@@ -385,6 +421,86 @@
         polyPath(l.pts); ctx.strokeStyle = l.style.color || '#000'; ctx.globalAlpha = l.style.opacity == null ? 1 : l.style.opacity; ctx.lineWidth = (l.style.weight || 3) * inv; ctx.stroke(); ctx.globalAlpha = 1;
       });
       if (nextPt) { ctx.beginPath(); ctx.arc(nextPt[0], nextPt[1], 9 * inv, 0, 2 * Math.PI); ctx.strokeStyle = '#c2188f'; ctx.lineWidth = 3 * inv; ctx.stroke(); }
+    }
+    // Reittimerkinnät Reittikartan tapaan (routes.js): legin tosisuunta isolla ja nuoli kulkusuuntaan, vastasuunta ja matka pienellä, laatikko legin oikealla puolella
+    // kulkusuuntaan nähden ja pitkällä legillä toistettuna, sekä käännösmerkit 2 ja 1 kaapelia ennen jokaista reittipistettä. Näytön koordinaateissa, joten teksti ei kierry kartan mukana.
+    function clipSeg(A, B, x0, y0, x1, y1) {   // Liang–Barsky: viivan näkyvä osa suorakulmiossa tai null
+      var dx = B[0] - A[0], dy = B[1] - A[1], t0 = 0, t1 = 1, p = [-dx, dx, -dy, dy], q = [A[0] - x0, x1 - A[0], A[1] - y0, y1 - A[1]];
+      for (var i = 0; i < 4; i++) {
+        if (p[i] === 0) { if (q[i] < 0) return null; }
+        else { var r = q[i] / p[i]; if (p[i] < 0) { if (r > t1) return null; if (r > t0) t0 = r; } else { if (r < t0) return null; if (r < t1) t1 = r; } }
+      }
+      return [[A[0] + t0 * dx, A[1] + t0 * dy], [A[0] + t1 * dx, A[1] + t1 * dy]];
+    }
+    function brgText(b) { b = ((b % 360) + 360) % 360; var t = String(Math.round(b) % 360); while (t.length < 3) t = '0' + t; return t + '°'; }
+    function nmText(m) { var nm = m / 1852; return (nm < 10 ? nm.toFixed(2) : nm.toFixed(1)).replace('.', ',') + ' mpk'; }
+    function drawRouteNotes() {
+      if (!route.legs.length || !w || !h) return;
+      var legs = route.legs, i;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      var color = route.color;
+      // käännösmerkit: 2 ja 1 kaapelia (0,2 ja 0,1 mpk) ennen reittipistettä, kohtisuoraan legiä vastaan
+      if (route.turnTicks) {
+        for (i = 1; i < legs.length; i++) {
+          var Lp = legs[i - 1], A0 = toScreen(Lp.ax, Lp.ay), B0 = toScreen(Lp.bx, Lp.by), sl = Math.hypot(B0[0] - A0[0], B0[1] - A0[1]);
+          if (sl < 1) continue;
+          var ux = (B0[0] - A0[0]) / sl, uy = (B0[1] - A0[1]) / sl;
+          [2, 1].forEach(function (kbl) {
+            var d = kbl * 185.2; if (Lp.dist < d + 15) return;
+            var frac = d / Lp.dist, qx = B0[0] - ux * sl * frac, qy = B0[1] - uy * sl * frac;
+            if (qx < -20 || qy < -20 || qx > w + 20 || qy > h + 20) return;
+            ctx.beginPath(); ctx.moveTo(qx - uy * 9, qy + ux * 9); ctx.lineTo(qx + uy * 9, qy - ux * 9);
+            ctx.strokeStyle = color; ctx.lineWidth = kbl === 1 ? 3 : 2; ctx.stroke();
+            if (sl * 185.2 / Lp.dist >= 22) {   // numero näkyy, kun kaapeli on vähintään 22 px
+              ctx.font = '700 11px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              var lx = qx - uy * 20, ly = qy + ux * 20, tw = ctx.measureText(String(kbl)).width + 6;
+              ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(lx - tw / 2, ly - 7, tw, 14); ctx.fillStyle = '#333'; ctx.fillText(String(kbl), lx, ly + 0.5);
+            }
+          });
+        }
+      }
+      if (!route.legBrg) return;
+      var M = 40, cands = [], placed = [];
+      for (i = 0; i < legs.length; i++) {
+        var L = legs[i], A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), plen = Math.hypot(B[0] - A[0], B[1] - A[1]);
+        if (plen < 1) continue;
+        var vis = clipSeg(A, B, M, M, w - M, h - M); if (!vis) continue;
+        var vlen = Math.hypot(vis[1][0] - vis[0][0], vis[1][1] - vis[0][1]); if (vlen < 60) continue;
+        cands.push({ L: L, A: A, B: B, plen: plen, vis: vis, vlen: vlen });
+      }
+      cands.sort(function (a, b) { return b.vlen - a.vlen; });
+      var BW = 92, BH = 38;
+      function free(cx, cy) {
+        if (cx - BW / 2 < 2 || cx + BW / 2 > w - 2 || cy - BH / 2 < 2 || cy + BH / 2 > h - 2) return false;
+        for (var k = 0; k < placed.length; k++) if (Math.abs(placed[k][0] - cx) < BW + 4 && Math.abs(placed[k][1] - cy) < BH + 4) return false;
+        return true;
+      }
+      cands.forEach(function (c) {
+        var ux = (c.B[0] - c.A[0]) / c.plen, uy = (c.B[1] - c.A[1]) / c.plen, nx = -uy, ny = ux;
+        var off = 12 + Math.abs(nx) * (BW / 2) + Math.abs(ny) * (BH / 2) + 2;   // laatikko ei peitä reittiviivaa missään kulmassa
+        var reps = Math.max(1, Math.min(6, Math.floor(c.vlen / 520)));
+        for (var k = 1; k <= reps; k++) {
+          var tt = k / (reps + 1), bx = c.vis[0][0] + (c.vis[1][0] - c.vis[0][0]) * tt, by = c.vis[0][1] + (c.vis[1][1] - c.vis[0][1]) * tt;
+          var mx = bx + nx * off, my = by + ny * off;
+          if (!free(mx, my)) { mx = bx - nx * off; my = by - ny * off; if (!free(mx, my)) continue; }
+          placed.push([mx, my]);
+          drawLegBox(mx, my, BW, BH, c.L, color);
+        }
+      });
+    }
+    function drawLegBox(cx, cy, bw, bh, L, color) {
+      var x0 = cx - bw / 2, y0 = cy - bh / 2, r = 4;
+      ctx.beginPath(); ctx.moveTo(x0 + r, y0); ctx.lineTo(x0 + bw - r, y0); ctx.arcTo(x0 + bw, y0, x0 + bw, y0 + r, r); ctx.lineTo(x0 + bw, y0 + bh - r); ctx.arcTo(x0 + bw, y0 + bh, x0 + bw - r, y0 + bh, r);
+      ctx.lineTo(x0 + r, y0 + bh); ctx.arcTo(x0, y0 + bh, x0, y0 + bh - r, r); ctx.lineTo(x0, y0 + r); ctx.arcTo(x0, y0, x0 + r, y0, r); ctx.closePath();
+      ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = '800 15px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      var t1 = brgText(L.brg), tw1 = ctx.measureText(t1).width, gap = 4, aw = 13, tot = aw + gap + tw1, sx = cx - tot / 2;
+      // nuoli kulkusuuntaan (kartan suuntaan nähden: plotterin kartta voi olla käännetty, joten nuolen kulma lasketaan näytön suunnasta)
+      var A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), ang = Math.atan2(B[0] - A[0], -(B[1] - A[1]));
+      ctx.save(); ctx.translate(sx + aw / 2, cy - 8); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(0, -6.5); ctx.lineTo(4.8, 5.5); ctx.lineTo(0, 3); ctx.lineTo(-4.8, 5.5); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+      ctx.fillStyle = '#111'; ctx.fillText(t1, sx + aw + gap, cy - 8);
+      ctx.font = '600 10.5px ' + FONT; ctx.textAlign = 'center'; ctx.fillStyle = '#444';
+      ctx.fillText(brgText(L.brg + 180) + ' · ' + nmText(L.dist), cx, cy + 9);
     }
     // heading line ja COG/SOG-vektori (plot-koordinaateissa)
     function drawOwnLines(inv) {
@@ -475,8 +591,21 @@
         q.el.style.transform = 'translate(' + p[0].toFixed(1) + 'px,' + p[1].toFixed(1) + 'px)';
       }
     }
+    var scaleEls = null, scaleTxt = '';
+    function updateScale() {
+      if (!interactive) return;
+      if (!scaleEls) { var sb = container.parentNode && container.parentNode.querySelector('.hud-scale'); scaleEls = sb ? { box: sb, bar: sb.querySelector('.sb-bar'), lab: sb.querySelector('.sb-lab'), hh: sb.querySelector('.sb-h') } : false; }
+      if (!scaleEls) return;
+      var pick = SCALE_BARS[0], i;
+      for (i = 0; i < SCALE_BARS.length; i++) if (SCALE_BARS[i][0] / view.mpp <= 110) pick = SCALE_BARS[i];
+      var wpx = Math.round(pick[0] / view.mpp), t = pick[1] + '|' + wpx + '|' + fnum(rangeNm, 2);
+      if (t === scaleTxt) return; scaleTxt = t;
+      scaleEls.bar.style.width = wpx + 'px'; scaleEls.lab.textContent = pick[1]; scaleEls.hh.textContent = 'Näkymä ' + fnum(rangeNm, 2) + ' mpk';
+    }
     function updateReadouts() {
-      var info = container.parentNode && container.parentNode.querySelector('.plot-info');
+      var pn = container.parentNode, zc = pn && interactive && pn.querySelector('.zm-ctr');
+      if (zc) { zc.setAttribute('aria-pressed', follow ? 'true' : 'false'); zc.title = follow ? 'Seuranta päällä' : 'Keskitä aluksen kohdalle'; }
+      var info = pn && pn.querySelector('.plot-info');
       if (!info || !interactive) return;
       var el = info.querySelector('.ro-ebl'), vr = info.querySelector('.ro-vrm'), vb = info.querySelector('.ro-vec'), tg = info.querySelector('.ro-tgl');
       if (el) { el.hidden = !evOn; el.textContent = 'EBL ' + pad3(ebl) + '° T'; }
@@ -497,8 +626,14 @@
     }
     function ready() { return !w || !S.has || readyFlag; }
     function cvt(pts) { var a = new Float64Array(pts.length * 2); for (var i = 0; i < pts.length; i++) { var p = worldToPlot(pts[i].x, pts[i].y); a[2 * i] = p[0]; a[2 * i + 1] = p[1]; } return a; }
-    function setRoute(pts, turnPts) {
-      route.pts = cvt(pts); route.turns = (turnPts || []).map(function (p) { var q = worldToPlot(p.x, p.y); return [q[0], q[1]]; }); dirty = true;
+    // Reitti: pts = reittipisteet maailmakoordinaateissa, turnPts = käännöspisteet, ro = { legs: [{a: {x, y}, b: {x, y}, brg, dist}], legBrg, turnTicks, approved }.
+    // Legien suunta ja matka tulevat kutsujalta (tosisuunta ja matka metreinä), jolloin plotteri ei laske niitä itse.
+    function setRoute(pts, turnPts, ro) {
+      ro = ro || {};
+      route.pts = cvt(pts); route.turns = (turnPts || []).map(function (p) { var q = worldToPlot(p.x, p.y); return [q[0], q[1]]; });
+      route.legs = (ro.legs || []).map(function (l) { var a = worldToPlot(l.a.x, l.a.y), b = worldToPlot(l.b.x, l.b.y); return { ax: a[0], ay: a[1], bx: b[0], by: b[1], brg: l.brg, dist: l.dist }; });
+      route.legBrg = ro.legBrg !== false; route.turnTicks = ro.turnTicks !== false; route.approved = ro.approved !== false;
+      route.color = route.approved ? '#d4237f' : '#9a5b2a'; dirty = true;
     }
     function setNext(p) { if (!p) { nextPt = null; return; } var q = worldToPlot(p.x, p.y); nextPt = [q[0], q[1]]; }
     function setTrail(pts) {
@@ -521,7 +656,17 @@
       lastAidSync = now;
       var M = root.Merkit;
       if (!root.ChartSymbols || !M) return;
-      var rad = rangeNm * NM * 1.1 + 200, list = M.near(x, y, rad);
+      var cx = x, cy = y, rad;
+      if (w && h && S.has && view.mpp) {
+        if (follow) rad = Math.hypot(w, h) * view.mpp + 200;       // alus on ankkurissa, joten koko kuvan lävistäjä riittää
+        else { var cw = plotToWorld.apply(null, toPlot(w / 2, h / 2)); cx = cw.x; cy = cw.y; rad = Math.hypot(w, h) * view.mpp * 0.55 + 200; }
+      } else rad = rangeNm * NM * 1.1 + 200;
+      // vapaassa tilassa katsottavan alueen turvalaitteet ladataan tarvittaessa (aluksen lähellä ne on jo ladattu)
+      if (!follow && now - lastFarLoad > 1500 && (!lastAidCenter || Math.hypot(cx - lastAidCenter.x, cy - lastAidCenter.y) > 1200)) {
+        lastFarLoad = now; lastAidCenter = { x: cx, y: cy };
+        M.load(cx, cy, Math.min(rad, 3500)).then(function () { if (!destroyed) syncAids(x, y, true); }, function () {});
+      }
+      var list = M.near(cx, cy, rad);
       aidList = list.map(function (a) { var q = worldToPlot(a.x, a.y), sk = symbolFor(a); return { X: q[0], Y: q[1], key: sk[0], make: sk[1], nimi: a.nimi || '' }; });
     }
     function setRasterVisible(on) {
@@ -548,36 +693,46 @@
     function cycleVec() { setVecIdx(vecIdx + 1); return VEC_SEC[vecIdx]; }
 
     if (interactive) {
-      var ptrs = new Map(), gest = null;
-      // Kuvapiste -> EBL (tosisuuntima omasta aluksesta) ja VRM (etäisyys mpk). Veto tai napautus asettaa molemmat kerralla kuten kursori-EBL/VRM,
-      // ja risti piirtyy vedettyyn pisteeseen, koska risti on EBL-viivan ja VRM-renkaan leikkauspiste.
+      var ptrs = new Map(), gest = null, pane = container.parentNode;
+      // Kuvapiste -> EBL (tosisuuntima omasta aluksesta) ja VRM (etäisyys mpk). Omasta aluksesta mitataan, koska alus ei ole enää aina kuvan ankkurissa.
       var pointOf = function (ev) {
         var rc = canvas.getBoundingClientRect(), x = ev.clientX - rc.left - view.sx, y = ev.clientY - rc.top - view.sy;
         return { ebl: norm360(Math.atan2(x, -y) / RAD + (headUp ? S.hdgTrue : 0)), vrm: Math.max(0.01, Math.min(6, Math.hypot(x, y) * view.mpp / NM)) };
       };
       var setPoint = function (ev) { var q = pointOf(ev); ebl = q.ebl; vrm = q.vrm; updateReadouts(); if (S.has) draw(); };
-      var endPoint = function () {   // vedon päätyttyä yksi rivi komentolokiin
+      var endPoint = function () {   // napautus asettaa EBL:n ja VRM:n yhtenä rivinä komentolokiin
         if (onEV) onEV('evpiste', { ebl: Math.round(ebl) % 360, vrm: Math.round(vrm * 100) / 100 });
       };
+      var local = function (ev) { var rc = canvas.getBoundingClientRect(); return [ev.clientX - rc.left, ev.clientY - rc.top]; };
+      var dist2 = function () { var ps = Array.from(ptrs.values()); return Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y); };
+      var mid2 = function () { var ps = Array.from(ptrs.values()), rc = canvas.getBoundingClientRect(); return [(ps[0].x + ps[1].x) / 2 - rc.left, (ps[0].y + ps[1].y) / 2 - rc.top]; };
       canvas.addEventListener('pointerdown', function (ev) {
-        if (!evOn || (ev.button != null && ev.button > 0)) return;
+        if (ev.button != null && ev.button > 0) return;
         try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
         ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-        if (ptrs.size === 1) { gest = { mode: 'ebl', ebl0: ebl, vrm0: vrm }; setPoint(ev); }
-        else if (ptrs.size === 2) {
-          var ps = Array.from(ptrs.values()); if (gest) { ebl = gest.ebl0; vrm = gest.vrm0; }   // toinen sormi: ensimmäinen kosketus peruuntuu ja nipistys säätää VRM:ää
-          updateReadouts();
-          gest = { mode: 'vrm', d0: Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y), vrm0: vrm, ebl0: ebl };
+        if (S.has && w) computeView();
+        if (ptrs.size === 1) {
+          var l = local(ev);
+          gest = { mode: 'tap', x0: ev.clientX, y0: ev.clientY, slop: ev.pointerType === 'mouse' ? 4 : 8, g: toPlot(l[0], l[1]) };
+        } else if (ptrs.size === 2) {
+          var m = mid2();
+          gest = { mode: 'pinch', d0: Math.max(10, dist2()), range0: rangeNm, g: toPlot(m[0], m[1]) };
         }
         ev.preventDefault();
       });
       canvas.addEventListener('pointermove', function (ev) {
         if (!ptrs.has(ev.pointerId)) return;
         ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-        if (gest && gest.mode === 'ebl' && ptrs.size === 1) setPoint(ev);
-        else if (gest && gest.mode === 'vrm' && ptrs.size >= 2) {
-          var ps = Array.from(ptrs.values()), d = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y);
-          if (gest.d0 > 8) setVRM(gest.vrm0 * d / gest.d0);
+        if (!gest) return;
+        if (gest.mode === 'tap' && ptrs.size === 1) {
+          if (Math.hypot(ev.clientX - gest.x0, ev.clientY - gest.y0) > gest.slop) gest.mode = 'pan';
+        }
+        if (gest.mode === 'pan' && ptrs.size === 1) {
+          var l = local(ev); panTo(gest.g, l[0], l[1]); dirty = true; if (S.has) draw();
+        } else if (gest.mode === 'pinch' && ptrs.size >= 2) {
+          var m = mid2(); rangeNm = clampRange(gest.range0 * gest.d0 / Math.max(10, dist2()));
+          if (!follow) panTo(gest.g, m[0], m[1]);
+          dirty = true; updateReadouts(); if (S.has) draw();
         }
         ev.preventDefault();
       });
@@ -586,24 +741,34 @@
         ptrs.delete(ev.pointerId);
         try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
         if (ptrs.size === 0) {
-          if (gest && gest.mode === 'ebl') { if (ev.type === 'pointerup') setPoint(ev); endPoint(); }
+          if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && evOn) { setPoint(ev); endPoint(); }
           gest = null;
-        } else if (ptrs.size === 1) gest = { mode: 'jaa', ebl0: ebl };
+        } else if (ptrs.size === 1) gest = { mode: 'jaa' };     // sormen nosto nipistyksen jälkeen ei siirrä karttaa eikä EBL:ää
       };
       canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-      canvas.addEventListener('wheel', function (ev) { if (!evOn) return; ev.preventDefault(); scaleVRM(ev.deltaY < 0 ? 1.06 : 1 / 1.06); }, { passive: false });
-      var info = container.parentNode && container.parentNode.querySelector('.plot-info');
+      canvas.addEventListener('wheel', function (ev) {
+        ev.preventDefault();
+        var l = local(ev), dy = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaY;
+        zoomAt(Math.exp(-dy * 0.0015), l[0], l[1]);
+      }, { passive: false });
+      var info = pane && pane.querySelector('.plot-info');
       if (info) {
         var tg = info.querySelector('.ro-tgl'), vb = info.querySelector('.ro-vec');
         if (tg) tg.addEventListener('click', function () { setEV(!evOn); });
         if (vb) vb.addEventListener('click', function () { cycleVec(); });
       }
+      var zin = pane && pane.querySelector('.zm-in'), zout = pane && pane.querySelector('.zm-out'), zc = pane && pane.querySelector('.zm-ctr');
+      if (zin) zin.addEventListener('click', function () { zoomBy(ZOOM_STEP); });
+      if (zout) zout.addEventListener('click', function () { zoomBy(1 / ZOOM_STEP); });
+      if (zc) zc.addEventListener('click', recenter);
       updateReadouts();
     }
     function destroy() { destroyed = true; var i = listeners.indexOf(listener); if (i >= 0) listeners.splice(i, 1); }
 
     return {
-      update: update, resize: resize, setRangeNm: setRangeNm, getRangeNm: getRangeNm, setRoute: setRoute, setNext: setNext,
+      update: update, resize: resize, setRangeNm: setRangeNm, getRangeNm: getRangeNm, zoomBy: zoomBy, zoomAt: zoomAt, recenter: recenter,
+      isFollow: function () { return follow; }, limits: { min: RANGE_MIN, max: RANGE_MAX, step: ZOOM_STEP },
+      centerWorld: function () { computeView(); var q = toPlot(w / 2, h / 2); return plotToWorld(q[0], q[1]); }, setRoute: setRoute, setNext: setNext,
       setTrail: setTrail, syncAids: syncAids, clearExtra: clearExtra, addExtraLine: addExtraLine, addExtraPoint: addExtraPoint,
       setRasterVisible: setRasterVisible, isRaster: function () { return rasterMode; }, redraw: redraw, rebase: rebase, ready: ready,
       setHeadUp: setHeadUp, isHeadUp: function () { return headUp; },
@@ -611,7 +776,7 @@
       setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
       setVectorIdx: setVecIdx, getVecIdx: function () { return vecIdx; }, cycleVector: cycleVec, vectorSec: function () { return VEC_SEC[vecIdx]; },
       toScreen: function (x, y) { var p = worldToPlot(x, y); return toScreen(p[0], p[1]); },
-      canvas: canvas, destroy: destroy, view: function () { return { z: view.z, mpp: view.mpp, sx: view.sx, sy: view.sy, w: w, h: h }; },
+      canvas: canvas, destroy: destroy, view: function () { return { z: view.z, mpp: view.mpp, sx: view.sx, sy: view.sy, ax: view.ax, ay: view.ay, w: w, h: h, follow: follow, rangeNm: rangeNm }; },
       cacheInfo: function () { var n = 0, r = 0; TILES.forEach(function (e) { n++; if (e.st === 3) r++; }); return { tiles: n, ready: r, max: MAXT, B: BAKE.B }; }
     };
   }

@@ -4,7 +4,7 @@
  * ja kuljettajan näkymä vaihtavat päänäkymää napilla, tutka ja plotteri vaihtuvat toisiinsa mittarin omalla napilla. Leveällä näytöllä (vähintään
  * 1024 px) mittari ja 3D ovat rinnakkain, ja vähintään 1440 px leveällä näytöllä plotteri, 3D ja tutka ovat kolmena ruutuna.
  * Simulaatio etenee 0,1 s:n kiinteillä askelilla, joten tallenne ja automaattiohjaus ovat samat nopeutuksesta riippumatta.
- * URL-parametrit (kehitys ja testit): aineisto (paketin osoite), harjoitus (h1 tai free), auto (automaattiohjauksen tavoitenopeus kn),
+ * URL-parametrit (kehitys ja testit): aineisto (paketin osoite), harjoitus (h1, free, rk1, rk2 ... tai Reittikartan reitin tunniste), suunta=kaanteinen (lähtö viimeisestä pisteestä), auto (automaattiohjauksen tavoitenopeus kn),
  * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö). */
 (function (root) {
   'use strict';
@@ -17,8 +17,8 @@
 
   var G = {
     S: null, view: null, pl: null, route: null, auto: null, rec: null, mode: 'start', main: 'plot', origin: { e: 0, n: 0 },
-    ex: 'h1', targetKn: 30, eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
-    plotterOn: true, rangeNm: 1, lastPlotT: 0, lastTrailT: 0, trail: [], gazeKey: 0, lastMerkitLoad: { x: 1e9, y: 1e9 }, lastVis: -1e9,
+    ex: 'h1', dir: 'fwd', stored: [], showRk: { legBrg: true, turnTicks: true }, budgetKn: 30, targetKn: 30, eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
+    plotterOn: true, lastPlotT: 0, lastTrailT: 0, trail: [], gazeKey: 0, lastMerkitLoad: { x: 1e9, y: 1e9 }, lastVis: -1e9,
     speedSteps: [1, 2, 5, 10], speedIdx: 0, seated: false, ground: null, lastConvT: -1e9, loadedLandmarks: false, ready: false,
     layout: { land: false, wide: false, tri: false, tp: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, budgetSec: null, finishedAt: null,
     // mittarit: disp = aloitusvalinta (plot, radar, both), instr = näytettävä mittari (plot, radar, both = kolme ruutua)
@@ -33,12 +33,12 @@
       var o = JSON.parse(localStorage.getItem('sim.asetukset') || '{}');
       if (o.northUp != null) G.northUp = !!o.northUp; if (o.raster != null) G.raster = !!o.raster;
       if (o.vecIdx != null) G.vecIdx = Math.max(0, Math.min(3, o.vecIdx | 0)); if (o.fovDeg) G.fovDeg = Number(o.fovDeg);
-      if (o.rangeNm) G.rangeNm = Number(o.rangeNm); if (o.evOn != null) G.evOn = !!o.evOn;
+      if (o.evOn != null) G.evOn = !!o.evOn;
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, rangeNm: G.rangeNm, evOn: G.evOn, radarTune: G.radarTune })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune })); } catch (e) {}
   }
   loadPrefs();
 
@@ -73,12 +73,47 @@
       cb(b.getAttribute('data-v'));
     });
   }
+  // Reittikartan reitit (localStorage reittikartta.v1) luetaan aloitusnäytön avautuessa ja aina, kun toinen välilehti muuttaa niitä.
+  function refreshStored() {
+    G.stored = H.listStored(); G.showRk = H.storedShow();
+    if (G.ex !== 'h1' && G.ex !== 'free' && !G.stored.some(function (x) { return x.id === G.ex; })) G.ex = 'h1';
+    renderExList();
+  }
+  function statusText(ex) { return ex.status === 'approved' ? 'hyväksytty' : 'luonnos'; }
+  function renderExList() {
+    var seg = $('segEx'), freeBtn = seg.querySelector('button[data-v="free"]');
+    Array.prototype.slice.call(seg.querySelectorAll('button[data-rk]')).forEach(function (b) { seg.removeChild(b); });
+    G.stored.forEach(function (ex) {
+      var b = doc.createElement('button'), sm = doc.createElement('small');
+      b.type = 'button'; b.setAttribute('data-v', ex.id); b.setAttribute('data-rk', '1');
+      b.appendChild(doc.createTextNode(ex.nimi));
+      sm.textContent = statusText(ex) + ' · ' + fnum(ex.lengthM / 1852, 2) + ' mpk · ' + ex.pisteita + ' pistettä';
+      b.appendChild(sm); seg.insertBefore(b, freeBtn);
+    });
+    Array.prototype.forEach.call(seg.children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === G.ex); });
+    var hint = $('routeHint');
+    hint.textContent = '';
+    var a = doc.createElement('a'); a.href = 'index.html'; a.id = 'rkLink';
+    if (G.stored.length) { hint.appendChild(doc.createTextNode('Reitit ovat Reittikartasta. ')); a.textContent = 'Avaa Reittikartta'; hint.appendChild(a); }
+    else { hint.appendChild(doc.createTextNode('Tallennettuja reittejä ei löytynyt. ')); a.textContent = 'Suunnittele reitti Reittikartassa'; hint.appendChild(a); hint.appendChild(doc.createTextNode('.')); }
+    updateBudgetHint();
+  }
+  // Valittu reitti (null = vapaa ajo), käänteisenä, jos lähtö on viimeisestä pisteestä
+  function currentEx() {
+    if (G.ex === 'free') return null;
+    var ex = G.ex === 'h1' ? H.EXERCISES.h1 : (G.stored.filter(function (x) { return x.id === G.ex; })[0] || H.EXERCISES.h1);
+    return G.dir === 'rev' ? H.reversed(ex) : ex;
+  }
   function updateBudgetHint() {
-    var h = $('budgetHint');
-    if (G.ex !== 'h1') { h.textContent = ''; $('fldSpeed').hidden = true; return; }
-    $('fldSpeed').hidden = false;
-    var rt = H.buildRoute(H.EXERCISES.h1), sec = rt.total / (G.targetKn * KN);
-    h.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).';
+    var h = $('budgetHint'), info = $('exInfo'), ex = currentEx();
+    $('fldDir').hidden = !ex; $('fldSpeed').hidden = !(ex && ex.builtin);
+    if (!ex) { h.textContent = ''; info.textContent = 'Alus lähtee Mustalahdesta levosta, ei reittiä. Purku näyttää ajetun matkan, nopeudet, komennot ja etäisyydet rantaan ja matalikkoon.'; return; }
+    var rt = H.buildRoute(ex), sec = rt.total / (G.targetKn * KN);
+    if (ex.builtin) { info.textContent = ''; h.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).'; }
+    else {
+      h.textContent = '';
+      info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Lähtönopeus ' + fnum(ex.startKn, 0) + ' kn (' + (ex.speedFromRoute ? 'reitin nopeus' : 'oletus') + '), aikabudjetti ' + H.mmss(rt.total / (ex.startKn * KN)) + '.';
+    }
   }
   function updateDispHint() {
     var h = { plot: 'Plotteri ja kuljettajan näkymä.', radar: 'Tutka ja kuljettajan näkymä, ei plotteria.', both: 'Plotteri ja tutka. Puhelimessa mittari vaihtuu napilla, vähintään 1440 px leveällä näytöllä kaikki kolme ovat rinnakkain.' };
@@ -108,6 +143,10 @@
   }
   function initStart() {
     segInit('segEx', function (v) { G.ex = v; updateBudgetHint(); });
+    segInit('segDir', function (v) { G.dir = v; updateBudgetHint(); });
+    refreshStored();
+    root.addEventListener('storage', function (e) { if (G.mode === 'start' && (!e.key || e.key === H.STORE_KEY)) refreshStored(); });
+    root.addEventListener('focus', function () { if (G.mode === 'start') refreshStored(); }); root.addEventListener('pageshow', function () { if (G.mode === 'start') refreshStored(); });
     segInit('segSpeed', function (v) { G.targetKn = Number(v); updateBudgetHint(); });
     segInit('segEye', function (v) { G.eye = v; });
     segInit('segDisp', function (v) { G.disp = v; updateDispHint(); });
@@ -117,7 +156,6 @@
     $('dateIn').addEventListener('input', function () { G.dateStr = $('dateIn').value || todayHelsinki(); updateClockHint(); });
     updateClockHint();
     $('startBtn').addEventListener('click', startRun);
-    updateBudgetHint();
     var dq = qs.get('naytot');
     if (dq === 'plot' || dq === 'radar' || dq === 'both') {
       G.disp = dq;
@@ -166,9 +204,12 @@
     if (G.instr === 'plot') return 'radar';
     return 'plot';
   }
+  // Plotterin ja tutkan yhteiset näppäimet (, . [ ] + - O): tutka saa ne, kun vain tutka on näkyvissä tai viimeksi käytetty ruutu oli tutka. O on vain tutkan.
+  G.keyTarget = 'plot';
+  function radarKeyTarget() { return !!G.radar && G.radarShown && (!G.plotShown || G.keyTarget === 'radar'); }
   function updateInstrButtons() {
     var n = nextInstr(), label = n === 'radar' ? 'Tutka' : n === 'both' ? 'Molemmat' : 'Plotteri', show = G.disp === 'both';
-    ['pInstrBtn', 'rInstrBtn'].forEach(function (id) { var b = $(id); b.hidden = !show; if (b.textContent !== label) b.textContent = label; b.setAttribute('aria-label', 'Näytä ' + label.toLowerCase()); });
+    var ib = $('instrBtn'); ib.hidden = !show || G.layout.wide; if (ib.textContent !== label) ib.textContent = label; ib.setAttribute('aria-label', 'Näytä ' + label.toLowerCase());
   }
   function applyPanes() {
     var st = resolveInstr(), wide = G.layout.wide;
@@ -193,20 +234,27 @@
       var small = instrMain ? p3 : ip, r = small.getBoundingClientRect(), s = $('stage').getBoundingClientRect();
       sw.style.left = (r.left - s.left) + 'px'; sw.style.top = (r.top - s.top) + 'px'; sw.style.width = r.width + 'px'; sw.style.height = r.height + 'px';
     }
-    // tutkan kuva alkaa pystyasennossa pienen 3D-ikkunan alapuolelta, muuten mittarin nappirivin alta
-    var rtop = 58;
-    if (!wide && instrMain && ip === pr && !G.layout.land) { var b3 = p3.getBoundingClientRect(), sb = $('stage').getBoundingClientRect(); rtop = Math.max(58, Math.round(b3.bottom - sb.top + 6)); }
-    pr.style.setProperty('--rtop', rtop + 'px');
+    // tutkan kuva täyttää ruudun, napit ovat sen päällä
     var radarSmall = showR && !wide && !instrMain;
-    if (G.radarOpt) G.radarOpt.ui = !radarSmall;        // pienessä ikkunassa ei tutkan nappeja, jolloin kuva käyttää koko ikkunan
     G.plotShown = showP; G.radarShown = showR; G.radarMain = showR && !radarSmall;
     updateInstrButtons();
-    $('turnBox').style.display = '';
+    updateRadarReserve();
     $('gazeBtn').hidden = !(wide || !instrMain) || Math.abs(G.view ? G.view.getGaze() : 0) < 1;
     if (G.view && G.view.isBino() && !(wide || !instrMain)) setBino(false);   // kiikari vain, kun 3D on päänäkymä
   }
+  // pieni 3D-ikkuna peittää osan tutkan kuvasta: tutka siirtää peittyvät lukemat ikkunan viereen
+  function updateRadarReserve() {
+    if (!G.radar) return;
+    var p3 = $('pane3d'), cv = $('radar'), v = null;
+    if (!G.layout.wide && p3.classList.contains('small') && G.radarShown) {
+      var a = p3.getBoundingClientRect(), c = cv.getBoundingClientRect();
+      v = { l: a.left - c.left, t: a.top - c.top, r: a.right - c.left, b: a.bottom - c.top };
+    }
+    G.radar.asetaVaraus(v);
+  }
   function sizeViews() {
     if (!G.view) return;
+    setTimeout(updateRadarReserve, 0);
     var p3 = $('pane3d'), r = p3.getBoundingClientRect();
     if (r.width > 4 && r.height > 4) G.view.setSize(Math.round(r.width), Math.round(r.height), !G.layout.wide && $('pane3d').classList.contains('small'));
     if (G.plotShown) { G.pl.resize(); if (G.trail) G.pl.setTrail(G.trail); }
@@ -233,16 +281,35 @@
   }
   function setLoad(p, text) { $('loadBar').style.width = Math.round(p * 100) + '%'; if (text) $('loadText').textContent = text; }
 
+  // Reitin lyhyt tunniste URL-parametrista: h1, free, rk1 (Reittikartan ensimmäinen reitti) tai reitin oma tunniste
+  function exFromParam(v) {
+    if (!v) return null;
+    if (v === 'h1' || v === 'free') return v;
+    var m = /^rk(\d+)$/.exec(v);
+    if (m && G.stored[Number(m[1]) - 1]) return G.stored[Number(m[1]) - 1].id;
+    var id = v.indexOf('rk:') === 0 ? v : 'rk:' + v;
+    return G.stored.some(function (x) { return x.id === id; }) ? id : null;
+  }
+  // Tavoitenopeus ja lähtönopeus: sisäänrakennettu harjoitus alkaa levosta, tallennettu reitti ja vapaa ajo kulussa (reitin nopeus tai 12 kn, vapaassa ajossa auto-parametrin nopeus)
+  function startSpeedKn(ex) {
+    var auto = Number(qs.get('auto')) > 0 ? Number(qs.get('auto')) : 0;
+    if (!ex) return auto;
+    if (ex.builtin) return 0;
+    return auto > 0 ? auto : ex.startKn;
+  }
   function startRun() {
-    G.ex = qs.get('harjoitus') || G.ex;
+    refreshStored();
+    G.ex = exFromParam(qs.get('harjoitus')) || G.ex;
+    if (qs.get('suunta')) G.dir = qs.get('suunta') === 'kaanteinen' ? 'rev' : 'fwd';
     if (qs.get('nopeus')) G.targetKn = Number(qs.get('nopeus'));
     $('start').hidden = true; $('debrief').hidden = true; $('game').hidden = false; $('loading').hidden = false;
-    G.mode = 'loading'; G.ready = false; G.frozen = false; G.ground = null; G.finishedAt = null; G.leg = null;
+    G.mode = 'loading'; G.ready = false; G.frozen = false; G.ground = null; G.finishedAt = null;
     if (G.paused) { G.paused = false; $('pauseIco').innerHTML = '<path d="M7 5v14M17 5v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'; }
     $('groundBanner').hidden = true;
     ensureViews();
-    var free = G.ex === 'free';
-    G.route = free ? null : H.buildRoute(H.EXERCISES.h1);
+    var ex = currentEx();
+    G.route = ex ? H.buildRoute(ex) : null;
+    G.budgetKn = ex && !ex.builtin ? startSpeedKn(ex) : G.targetKn;
     // maailmakoordinaatiston origo: harjoituksessa reitin keskipiste, vapaassa ajossa Mustalahti
     if (G.route) {
       var es = G.route.pts.map(function (p) { return p.e; }), ns = G.route.pts.map(function (p) { return p.n; });
@@ -255,22 +322,19 @@
     G.S = L.create({ x: w0.x, y: w0.y, hdg: st.brg, conv: conv, clockMs: startClockMs() });
     G.S.speedFactor = 1; G.speedIdx = 0; $('speedBtn').textContent = '1×';
     if (qs.get('ff')) { var ff = Number(qs.get('ff')); G.S.speedFactor = ff; G.speedIdx = Math.max(0, G.speedSteps.indexOf(ff)); $('speedBtn').textContent = ff + '×'; }
-    G.rec = G.route ? H.createRecorder(G.route, G.origin) : null;
-    if (G.rec) G.rec.t0 = 0;
-    G.auto = G.route && qs.get('auto') ? H.createAuto(G.route, Number(qs.get('auto')), G.origin) : null;
+    var sk = startSpeedKn(ex);
+    if (sk > 0) H.settleSpeed(G.S, sk);
+    G.rec = H.createRecorder(G.route, G.origin);       // reitti on valinnainen: vapaassa ajossa tallenne ja purku toimivat ilman reittiä
+    G.rec.t0 = 0;
+    G.auto = qs.get('auto') ? H.createAuto(G.route, Number(qs.get('auto')), G.origin) : null;
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setSimTime(G.S.clockMs);
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
     G.view.setGaze(0); if (G.view.isBino()) { G.view.setBinoculars(false); binoUi(false); }
-    $('exName').textContent = G.route ? G.route.nimi + ': ' + G.route.kuvaus : 'Vapaa ajo, Mustalahti';
-    $('turnBox').hidden = !G.route;
-    // reitti plotterille
-    if (G.route) {
-      var wp = G.route.pts.map(function (p) { return P.enToWorld(p.e, p.n); });
-      G.pl.setRoute(wp, G.route.turns.map(function (t) { return P.enToWorld(t.e, t.n); }));
-    } else G.pl.setRoute([], []);
+    $('exName').textContent = G.route ? G.route.nimi + (G.route.kuvaus ? ': ' + G.route.kuvaus : '') + (G.route.reverse ? ' (käänteinen)' : '') : 'Vapaa ajo, Mustalahti';
+    setPlotterRoute(G.pl, G.route);
     G.pl.setTrail([]); G.pl.clearExtra();
-    G.pl.setRangeNm(G.rangeNm);
+    G.pl.setRangeNm(1); G.pl.recenter();      // ajo alkaa aina seurannassa ja 1 mpk korkeudella, zoomia ja seurantaa ei tallenneta
     G.main = 'plot'; G.instr = G.disp === 'radar' ? 'radar' : 'plot'; layout();
     G.pl.setHeadUp(!G.northUp); G.pl.setRasterVisible(G.raster); G.view.setHfov(G.fovDeg);
     updateMenuLabels();
@@ -287,6 +351,21 @@
     requestAnimationFrame(loop);
   }
 
+  // Reitti plotterille Reittikartan tapaan: reittiviiva ja -pisteet, legin tosisuunta ja matka sekä käännösmerkit (Reittikartan asetusten mukaan)
+  function setPlotterRoute(pl, rt) {
+    if (!rt) { pl.setRoute([], [], {}); return; }
+    var wp = rt.pts.map(function (p) { return P.enToWorld(p.e, p.n); }), legs = [];
+    for (var i = 0; i < rt.pts.length - 1; i++) {
+      var a = rt.pts[i], b = rt.pts[i + 1], brg, dist;
+      if (root.Geo) {
+        var la = P.enToLonLat(a.e, a.n), lb = P.enToLonLat(b.e, b.n), rh = root.Geo.rhumb({ lat: la.lat, lng: la.lon }, { lat: lb.lat, lng: lb.lon });
+        brg = rh.brg; dist = rh.dist;
+      } else { brg = P.gridToTrue(rt.legs[i].brg, wp[i].x, wp[i].y); dist = rt.legs[i].len; }
+      legs.push({ a: wp[i], b: wp[i + 1], brg: brg, dist: dist });
+    }
+    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft' });
+  }
+
   // ---------- tutka ----------
   // Tutka saa oman sijaintinsa, tosisuuntansa, nopeutensa ja aikansa samasta tilasta (G.S) kuin plotteri ja käyttää jaettua Aineisto-moduulia.
   // Aika on simulaatioaika ja kuluva 0,1 s:n askel mukana, jolloin pyyhkäisy etenee tasaisesti, pysähtyy tauolla ja kulkee nopeutetussa ajossa mukana.
@@ -299,7 +378,8 @@
     G.radarOn = true; $('radarOff').hidden = true; G.radarSec = 0; G.radarMainSec = 0; G.lastRadarT = 0; G.radarReady = true;
     if (G.rec) G.rec.radar = [{ t: 0, on: true }];
     if (G.disp === 'plot') { G.radarOpt = null; return; }
-    G.radarOpt = { aineisto: root.Aineisto, alue: 1.5, suuntaYlos: true, ui: true, eblVrm: true, kuvavali: 50, viritys: G.radarTune };
+    G.radarOpt = { aineisto: root.Aineisto, alue: 1.5, suuntaYlos: true, ui: true, eblVrm: true, kuvavali: 50, viritys: G.radarTune,
+      ulkoisetNapit: [$('rOffBtn')], onViritys: setRadarTune, onKirjaus: function (kind, value) { onEV('tutka' + kind, value); } };
     G.radar = root.Tutka.luoTutka($('radar'), G.radarOpt);
     root.__radar = G.radar;
     applyPanes();
@@ -391,16 +471,11 @@
     $('speedBtn').addEventListener('click', function () { setSpeedFactor((G.speedIdx + 1) % G.speedSteps.length); });
     $('pauseBtn').addEventListener('click', togglePause);
     $('swapBtn').addEventListener('click', swapViews);
-    $('plotOffBtn').addEventListener('click', function () { setPlotter(false); });
+    $('mPlotOff').addEventListener('click', function () { $('menu').hidden = true; setPlotter(false); });
     $('plotOnBtn').addEventListener('click', function () { setPlotter(true); });
     $('rOffBtn').addEventListener('click', function () { setRadar(false); });
     $('radarOnBtn').addEventListener('click', function () { setRadar(true); });
-    $('pInstrBtn').addEventListener('click', cycleInstr); $('rInstrBtn').addEventListener('click', cycleInstr);
-    $('rangeBox').addEventListener('click', function (e) {
-      var b = e.target.closest('button'); if (!b) return;
-      G.rangeNm = Number(b.getAttribute('data-r')); G.pl.setRangeNm(G.rangeNm); G.lastPlotT = 0;
-      Array.prototype.forEach.call($('rangeBox').querySelectorAll('button'), function (c) { c.classList.toggle('on', c === b); });
-    });
+    $('instrBtn').addEventListener('click', cycleInstr);
     $('gazeBtn').addEventListener('click', function () { G.view.setGaze(0); G.view.setBinoPitch(0); });
     $('binoBtn').addEventListener('click', function () { setBino(!G.view.isBino()); });
     $('menuBtn').addEventListener('click', function () { $('menu').hidden = false; });
@@ -453,10 +528,14 @@
     $('mFov').addEventListener('click', function () {
       var opts = [70, 80, 90, 100, 110], i = opts.indexOf(G.fovDeg); G.fovDeg = opts[(i + 1) % opts.length]; G.view.setHfov(G.fovDeg); updateMenuLabels(); savePrefs();
     });
+    // viimeksi käytetty mittari (plotteri tai tutka) saa yhteiset näppäimet
+    doc.addEventListener('pointerdown', function (e) { var t = e.target; if (t && t.closest) { if (t.closest('#paneR')) G.keyTarget = 'radar'; else if (t.closest('#paneP')) G.keyTarget = 'plot'; } }, true);
     // näppäimistö
     doc.addEventListener('keydown', function (e) {
       if (G.mode !== 'run' || e.target.tagName === 'INPUT') return;
       var k = e.key, handled = true;
+      var radarKeys = ',.[]+=-_oO'.indexOf(k) >= 0 && k.length === 1;
+      if (radarKeys && G.radar && (e.target.id === 'radar' || radarKeyTarget() || ((k === 'o' || k === 'O') && G.radarShown))) { if (e.target.id !== 'radar') { if (G.radar.nappain(k, e.shiftKey)) e.preventDefault(); } return; }   // tutkan ruutu on aktiivinen: tutka käsittelee näppäimen (kohdistettuna tutkalla se on jo käsitellyt sen itse)
       if (k === 'ArrowLeft') cmdHeading(-1, e.shiftKey);
       else if (k === 'ArrowRight') cmdHeading(1, e.shiftKey);
       else if (k === 'ArrowUp') { if (canCmd()) L.stepSpeedOrder(G.S, 1); }
@@ -468,8 +547,11 @@
       else if (k === 'e' || k === 'E') { if (!e.repeat) G.gazeT = performance.now(); G.gazeKey = 1; }
       else if (k === ',') G.pl.stepEBL(e.shiftKey ? -10 : -1);
       else if (k === '.') G.pl.stepEBL(e.shiftKey ? 10 : 1);
-      else if (k === '+' || k === '=') G.pl.scaleVRM(1.05);
-      else if (k === '-') G.pl.scaleVRM(1 / 1.05);
+      else if (k === '[') G.pl.scaleVRM(1 / 1.05);
+      else if (k === ']') G.pl.scaleVRM(1.05);
+      else if (k === '+' || k === '=') G.pl.zoomBy(G.pl.limits.step);
+      else if (k === '-' || k === '_') G.pl.zoomBy(1 / G.pl.limits.step);
+      else if (k === 'c' || k === 'C') G.pl.recenter();
       else if (k === 'v' || k === 'V') { G.pl.cycleVector(); G.vecIdx = G.pl.getVecIdx(); savePrefs(); }
       else if (k === 'Tab') swapViews();
       else if (k === 'r' || k === 'R') cycleInstr();
@@ -525,12 +607,12 @@
     // tallenne
     if (G.rec) {
       G.rec._acc += dt;
-      if (G.rec._acc >= H.SETTINGS.sampleSec) { G.rec._acc = 0; G.rec.sample(S, inFairwayNow(S)); }
+      if (G.rec._acc >= H.SETTINGS.sampleSec) { G.rec._acc = 0; G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y)); }
       G.rec._visAcc += dt;
       if (G.rec._visAcc >= H.SETTINGS.visSampleSec && G.view) {
         var vdt = G.rec._visAcc; G.rec._visAcc = 0;
         root.Merkit.near(S.x, S.y, H.SETTINGS.visRangeM + 150).forEach(function (a) {
-          if (a.tyyppi !== 'Viitta') return;
+          if (a.tyyppi !== 'Viitta' && G.route) return;      // reittiajossa seurataan viittoja kuten ennen, vapaassa ajossa kaikkia turvalaitteita
           G.rec.sampleAid(S, { numero: a.numero, nimi: a.nimi, tyyppi: a.tyyppi, nl: a.nl, e: a.e, n: a.n }, aidVisible(a, S), vdt);
         });
       }
@@ -577,23 +659,6 @@
   }
 
   // ---------- kuvan päivitys ----------
-  function turnText() {
-    var S = G.S, e = S.x + G.origin.e, n = S.y + G.origin.n, pr = H.project(G.route, e, n, G.leg != null ? G.leg : null);
-    G.leg = pr.leg;
-    var nt = H.nextTurn(G.route, pr.cum, S.v);
-    var title, info;
-    if (nt) {
-      title = 'Käännös ' + nt.turn.no;
-      info = Math.round(Math.abs(nt.turn.delta)) + '° ' + (nt.turn.delta > 0 ? 'oik' : 'vas') + ' · ' + Math.round(nt.distM) + ' m' + (nt.etaSec != null ? ' · ' + H.mmss(nt.etaSec) : '');
-    } else {
-      var last = G.route.pts[G.route.pts.length - 1], d = Math.hypot(e - last.e, n - last.n);
-      title = 'Perille'; info = Math.round(d) + ' m' + (S.v > 0.8 ? ' · ' + H.mmss(d / S.v) : '');
-    }
-    var remain = G.route.total - pr.cum, rem = G.route.total / (G.targetKn * KN) - S.t;
-    var prog = fnum(remain / 1852, 2) + ' mpk jäljellä';
-    var bud = rem >= 0 ? 'Budjetti ' + H.mmss(rem) : 'Budjetti ylitetty ' + H.mmss(-rem);
-    setText($('turnTitle'), title); setText($('turnInfo'), info); setText($('progInfo'), prog); setText($('budgetInfo'), bud);
-  }
   // ---------- kiikari (vaihe 3g) ----------
   function lookTrue() { return P_norm(L.trueHdg(G.S) + G.view.getGazeNow()); }
   function loadAids(r) { root.Merkit.load(G.S.x, G.S.y, r).then(function () { if (G.view && G.mode === 'run') G.view.aids.sync(G.S.x, G.S.y, true); }, function () {}); }
@@ -653,7 +718,6 @@
     setText($('v3hud'), pad3(hdgT) + '° · ' + fnum(S.v / KN, 1) + ' kn');
     Array.prototype.forEach.call(doc.querySelectorAll('.cb.sp'), function (b) { b.classList.toggle('cur', Number(b.getAttribute('data-kn')) === S.orderSpeedKn); });
     $('gazeBtn').hidden = !(G.layout.wide || G.main === '3d') || Math.abs(G.view.getGaze()) < 1;
-    if (G.route) turnText();
     drawCompass();
   }
   function maybeLoadAids() {
@@ -690,8 +754,8 @@
       if (idle || t > 60) {
         $('loading').hidden = true; G.mode = 'run'; G.ready = true; G.lastT = performance.now();
         if (G.auto == null && !G.route) toast('Anna nopeus ja suunta', 1800);
-        if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.targetKn * KN)), 2600);
-        if (G.rec) G.rec.sample(S, inFairwayNow(S));
+        if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.budgetKn * KN)), 2600);
+        if (G.rec) G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y));
         applyPanes(); sizeViews();
         loadAids(v.aids.settings.loadRadius);   // loistojen ja linjataulujen näkyvyysrajat ovat kilometrejä, joten kauempana olevat laitteet luetaan taustalla
       }
@@ -713,7 +777,6 @@
     var nowMs = performance.now();
     if (G.plotterOn && G.plotShown && nowMs - G.lastPlotT > ((G.layout.wide || G.main === 'plot') ? 70 : 250)) {
       G.lastPlotT = nowMs; G.pl.update(S.x, S.y, S.hdg, cogOf(S), S.v); G.pl.syncAids(S.x, S.y, false);
-      if (G.route) { var nt = H.nextTurn(G.route, (H.project(G.route, S.x + G.origin.e, S.y + G.origin.n, G.leg != null ? G.leg : null)).cum, S.v); G.pl.setNext(nt ? P.enToWorld(nt.turn.e, nt.turn.n) : null); }
     }
     if (nowMs - G.lastTrailT > 1000 && S.v > 0.3) {
       G.lastTrailT = nowMs; G.trail.push({ x: S.x, y: S.y }); if (G.trail.length > 3000) G.trail.shift(); if (G.plotterOn && G.plotShown) G.pl.setTrail(G.trail);
@@ -744,9 +807,6 @@
     if (G.radar) G.radar.vapautaRuudut();     // tutkan ruudukko (enintään noin 39 Mt) vapautetaan, uusi ajo rakentaa sen uudelleen
     if (G.rec) { G.rec.aborted = why === 'aborted'; G.rec.endMs = G.S.clockMs; }
     $('groundBanner').hidden = true; $('toast').hidden = true; $('menu').hidden = true;
-    if (!G.route || !G.rec) { // vapaa ajo: ei purkua
-      $('game').hidden = true; $('start').hidden = false; G.mode = 'start'; return;
-    }
     $('game').hidden = true; $('debrief').hidden = false;
     var an = H.analyze(G.rec, G.S); root.__analysis = an;
     radarStats(an);
@@ -772,6 +832,12 @@
     if (c.kind === 'ebl') return 'Plotterin EBL ' + pad3(c.value) + '° T';
     if (c.kind === 'vrm') return 'Plotterin VRM ' + fnum(c.value, 2) + ' mpk';
     if (c.kind === 'evpiste') return 'Plotterin EBL ' + pad3(c.value.ebl) + '° T ja VRM ' + fnum(c.value.vrm, 2) + ' mpk';
+    if (c.kind === 'tutkaevpiste') return 'Tutkan EBL ' + pad3(c.value.ebl) + '° T ja VRM ' + fnum(c.value.vrm, 2) + ' mpk';
+    if (c.kind === 'tutkaebl') return 'Tutkan EBL ' + pad3(c.value) + '° T';
+    if (c.kind === 'tutkavrm') return 'Tutkan VRM ' + fnum(c.value, 2) + ' mpk';
+    if (c.kind === 'tutkaoffset') return c.value ? 'Tutkan offset päälle' : 'Tutkan offset pois';
+    if (c.kind === 'tutkasuunta') return c.value ? 'Tutka: suunta ylös (H UP)' : 'Tutka: pohjoinen ylös (N UP)';
+    if (c.kind === 'tutkaev') return c.value ? 'Tutkan EBL ja VRM päälle' : 'Tutkan EBL ja VRM pois';
     if (c.kind === 'kiikari') return c.value.on ? 'Kiikari päälle, suunta ' + pad3(c.value.suunta) + '°' : 'Kiikari pois, suunta ' + pad3(c.value.suunta) + '°';
     if (c.kind === 'eblvrm') return c.value ? 'Plotterin EBL ja VRM päälle' : 'Plotterin EBL ja VRM pois';
     return H.cmdText(c);
@@ -790,19 +856,22 @@
     if (a === 0) return 'käännöspisteellä';
     return a + ' m ' + (m < 0 ? 'ennen' : 'jälkeen');
   }
+  // Purku. Reitti on valinnainen: vapaassa ajossa (G.route == null) reittiin sidotut osat (poikkeama, käännökset, aikabudjetti) jäävät pois ja tilalle tulevat
+  // ajetun matkan, nopeuksien, rannan ja matalikon etäisyyksien sekä väyläalueen ulkopuolella ajetun matkan tiedot.
   function renderDebrief(an, why) {
-    var rt = G.route, S = G.S, h = [];
+    var rt = G.route, S = G.S, h = [], free = !rt;
     $('dbTitle').textContent = 'Purku';
-    var stat = why === 'finish' ? '<span class="pill ok">Perillä</span>' : why === 'ground' ? '<span class="pill bad">Pohjakosketus</span>' : '<span class="pill">Keskeytetty</span>';
-    $('dbStatus').innerHTML = esc(rt.nimi + ': ' + rt.kuvaus) + ' ' + stat;
+    var stat = why === 'finish' ? '<span class="pill ok">Perillä</span>' : why === 'ground' ? '<span class="pill bad">Pohjakosketus</span>' : free ? '<span class="pill">Päättynyt</span>' : '<span class="pill">Keskeytetty</span>';
+    $('dbStatus').innerHTML = (free ? 'Vapaa ajo' : esc(rt.nimi + (rt.kuvaus ? ': ' + rt.kuvaus : '') + (rt.reverse ? ' (käänteinen)' : ''))) + ' ' + stat;
     if (!an.ok) { $('dbBody').innerHTML = '<p>Ajoa ei ole tarpeeksi purettavaksi.</p>'; return; }
     // 5. yhteenveto
-    var budgetSec = rt.total / (G.targetKn * KN);
+    var budgetSec = rt ? rt.total / (G.budgetKn * KN) : 0;
     h.push('<div class="db-sec"><h2>Yhteenveto</h2><div class="tblwrap"><table class="db"><tbody>' +
-      '<tr><td>Kokonaisaika</td><td class="n">' + H.mmss(an.timeSec) + '</td></tr>' +
-      '<tr><td>Ajettu matka</td><td class="n">' + fnum(an.distM / 1852, 2) + ' mpk (reitti ' + fnum(rt.total / 1852, 2) + ' mpk)</td></tr>' +
+      '<tr><td>Kokonaisaika</td><td class="n" id="dbTime">' + H.mmss(an.timeSec) + '</td></tr>' +
+      '<tr><td>Ajettu matka</td><td class="n" id="dbDist">' + fnum(an.distM / 1852, 2) + ' mpk' + (rt ? ' (reitti ' + fnum(rt.total / 1852, 2) + ' mpk)' : '') + '</td></tr>' +
       '<tr><td>Keskinopeus</td><td class="n">' + fnum(an.avgKn, 1) + ' kn</td></tr>' +
-      '<tr><td>Aikabudjetti ' + G.targetKn + ' kn</td><td class="n">' + H.mmss(budgetSec) + (an.finished ? ' (' + (an.timeSec <= budgetSec ? '−' : '+') + H.mmss(Math.abs(an.timeSec - budgetSec)) + ')' : '') + '</td></tr>' +
+      (free ? '<tr><td>Suurin nopeus</td><td class="n">' + fnum(an.maxKn, 1) + ' kn</td></tr>' : '') +
+      (rt ? '<tr><td>Aikabudjetti ' + fnum(G.budgetKn, 0) + ' kn</td><td class="n">' + H.mmss(budgetSec) + (an.finished ? ' (' + (an.timeSec <= budgetSec ? '−' : '+') + H.mmss(Math.abs(an.timeSec - budgetSec)) + ')' : '') + '</td></tr>' : '') +
       '<tr><td>Pohjakosketukset</td><td class="n">' + (an.groundings.length ? an.groundings.length + ' kpl' : 'ei yhtään') + '</td></tr>' +
       (an.plotterOffSec > 0 ? '<tr><td>Plotteri pois päältä</td><td class="n">' + H.mmss(an.plotterOffSec) + '</td></tr>' : '') +
       (an.radarUsed && an.radarVisPct != null ? '<tr><td>Tutka näkyvissä</td><td class="n">' + fnum(an.radarVisPct, 0) + ' % ajasta (' + H.mmss(an.radarVisSec) + ')</td></tr>' +
@@ -810,29 +879,43 @@
       (an.radarOffSec > 0 ? '<tr><td>Tutka pois päältä</td><td class="n">' + H.mmss(an.radarOffSec) + '</td></tr>' : '') +
       '</tbody></table></div></div>');
     // 1. väyläalue
-    h.push('<div class="db-sec"><h2>1. Väylä</h2>' + (an.fairwayPct == null ? '<p>Väyläalueen tietoa ei ollut saatavilla.</p>' :
-      '<p>Väyläalueen sisällä ' + fnum(an.fairwayPct, 0) + ' % ajasta. <span class="dim">Väyläalue on Väyläviraston väyläaluepolygoni tai, missä sitä ei ole, ' + H.SETTINGS.fairwayHalfM + ' m navigointilinjan molemmin puolin.</span>' + (an.fairwayKnownPct < 95 ? ' <span class="dim">(tieto ' + fnum(an.fairwayKnownPct, 0) + ' %:lla näytteistä)</span>' : '') + '</p>') +
-      '<p class="dim">Kuvassa sininen jälki on väyläalueella ja punainen sen ulkopuolella. Violetti viiva on navigointilinja.</p></div>');
-    // 2. suurin poikkeama
-    var md = an.maxDev, near = nearestPointName(md.cum);
-    h.push('<div class="db-sec"><h2>2. Suurin poikkeama navigointilinjasta</h2><p>' + Math.round(md.m) + ' m, reitin kohdassa ' + fnum(md.cum / 1852, 2) + ' mpk' + (near ? ' (' + esc(near) + ' lähellä)' : '') + ', ajan ' + H.mmss(md.t) + ' kohdalla.</p></div>');
-    // 3. käännökset
-    var tr = an.turns.map(function (t) {
-      return '<tr><td>' + t.no + (t.nimi ? ' ' + esc(t.nimi) : '') + '</td><td class="n">' + Math.round(Math.abs(t.delta)) + '° ' + (t.delta > 0 ? 'oik' : 'vas') + '</td><td>' + offsetText(t.startOffsetM) + '</td><td class="n">' + (t.cutM == null ? '–' : Math.round(t.cutM) + ' m') + '</td></tr>';
-    }).join('');
-    h.push('<div class="db-sec"><h2>3. Käännökset</h2><p class="dim">Käännös katsotaan alkaneeksi, kun ruorin käyttö ylitti 20 %.</p><div class="tblwrap"><table class="db"><thead><tr><th>Käännös</th><th class="n">Kulma</th><th>Alkoi</th><th class="n">Ohitus pisteestä</th></tr></thead><tbody>' + tr + '</tbody></table></div></div>');
-    // 4. viitat
-    var ar = an.aids.filter(function (a) { return a.tyyppi === 'Viitta'; }).map(function (a) {
-      return '<tr><td>' + esc(a.nimi || a.numero) + '</td><td class="n">' + Math.round(a.seenSec) + ' s</td><td class="n">' + (a.firstSeenD == null ? '–' : Math.round(a.firstSeenD) + ' m') + '</td><td class="n">' + Math.round(a.minD) + ' m ' + (a.side > 0 ? 'oik' : 'vas') + '</td></tr>';
-    }).join('');
-    h.push('<div class="db-sec"><h2>4. Sivuutetut viitat</h2><p class="dim">Näkyvissä ennen sivuutusta: alle 700 m, kuvakentässä, ei maaston, rungon tai ohjaamon peitossa.</p>' +
-      (ar ? '<div class="tblwrap"><table class="db"><thead><tr><th>Viitta</th><th class="n">Näkyi</th><th class="n">Ensi näkö</th><th class="n">Sivuutus</th></tr></thead><tbody>' + ar + '</tbody></table></div>' : '<p>Ei sivuutettuja viittoja.</p>') + '</div>');
-    // komentoloki
+    if (free) {
+      h.push('<div class="db-sec"><h2>Väylä</h2>' + (an.outsidePct == null ? '<p>Väyläalueen tietoa ei ollut saatavilla.</p>' :
+        '<p id="dbOutside">Väyläalueen ulkopuolella ' + fnum(an.outsideM / 1852, 2) + ' mpk eli ' + fnum(an.outsidePct, 0) + ' % ajetusta matkasta. Väyläalueen sisällä ' + fnum(an.fairwayPct, 0) + ' % ajasta. <span class="dim">Väyläalue on Väyläviraston väyläaluepolygoni.' + (an.fairwayKnownPct < 95 ? ' Tieto oli ' + fnum(an.fairwayKnownPct, 0) + ' %:lla näytteistä.' : '') + '</span></p>') +
+        '<p class="dim">Kuvassa sininen jälki on väyläalueella ja punainen sen ulkopuolella.</p></div>');
+      var near = function (m, name) { return m ? '<tr><td>' + name + '</td><td class="n">' + Math.round(m.m) + ' m</td><td>ajan ' + H.mmss(m.t) + ' kohdalla</td></tr>' : '<tr><td>' + name + '</td><td class="n">yli 290 m</td><td></td></tr>'; };
+      h.push('<div class="db-sec"><h2>Etäisyys rantaan ja matalikkoon</h2><div class="tblwrap"><table class="db" id="dbNear"><tbody>' + near(an.minShore, 'Lähin rantaviiva') + near(an.minShoal, 'Lähin alle 2 m:n syvyysalue') + '</tbody></table></div></div>');
+      var arf = an.aids.map(function (a) {
+        return '<tr><td>' + esc(a.nimi || a.numero) + '</td><td>' + esc(a.tyyppi || '') + '</td><td class="n">' + Math.round(a.minD) + ' m</td><td>' + (a.side > 0 ? 'oikealla' : 'vasemmalla') + '</td></tr>';
+      }).join('');
+      h.push('<div class="db-sec"><h2>Sivuutetut turvalaitteet</h2><p class="dim">Lähin etäisyys turvalaitteeseen ja sivuutuspuoli (alle 450 m).</p>' +
+        (arf ? '<div class="tblwrap"><table class="db"><thead><tr><th>Turvalaite</th><th>Tyyppi</th><th class="n">Lähin</th><th>Puoli</th></tr></thead><tbody>' + arf + '</tbody></table></div>' : '<p>Ei sivuutettuja turvalaitteita.</p>') + '</div>');
+    } else {
+      h.push('<div class="db-sec"><h2>1. Väylä</h2>' + (an.fairwayPct == null ? '<p>Väyläalueen tietoa ei ollut saatavilla.</p>' :
+        '<p>Väyläalueen sisällä ' + fnum(an.fairwayPct, 0) + ' % ajasta. <span class="dim">Väyläalue on Väyläviraston väyläaluepolygoni tai, missä sitä ei ole, ' + H.SETTINGS.fairwayHalfM + ' m navigointilinjan molemmin puolin.</span>' + (an.fairwayKnownPct < 95 ? ' <span class="dim">(tieto ' + fnum(an.fairwayKnownPct, 0) + ' %:lla näytteistä)</span>' : '') + '</p>') +
+        '<p class="dim">Kuvassa sininen jälki on väyläalueella ja punainen sen ulkopuolella. Violetti viiva on navigointilinja.</p></div>');
+      // 2. suurin poikkeama
+      var md = an.maxDev, nr = nearestPointName(md.cum);
+      h.push('<div class="db-sec"><h2>2. Suurin poikkeama navigointilinjasta</h2><p>' + Math.round(md.m) + ' m, reitin kohdassa ' + fnum(md.cum / 1852, 2) + ' mpk' + (nr ? ' (' + esc(nr) + ' lähellä)' : '') + ', ajan ' + H.mmss(md.t) + ' kohdalla.</p></div>');
+      // 3. käännökset
+      var tr = an.turns.map(function (t) {
+        return '<tr><td>' + t.no + (t.nimi ? ' ' + esc(t.nimi) : '') + '</td><td class="n">' + Math.round(Math.abs(t.delta)) + '° ' + (t.delta > 0 ? 'oik' : 'vas') + '</td><td>' + offsetText(t.startOffsetM) + '</td><td class="n">' + (t.cutM == null ? '–' : Math.round(t.cutM) + ' m') + '</td></tr>';
+      }).join('');
+      h.push('<div class="db-sec"><h2>3. Käännökset</h2><p class="dim">Käännös katsotaan alkaneeksi, kun ruorin käyttö ylitti 20 %.</p>' + (tr ? '<div class="tblwrap"><table class="db" id="dbTurns"><thead><tr><th>Käännös</th><th class="n">Kulma</th><th>Alkoi</th><th class="n">Ohitus pisteestä</th></tr></thead><tbody>' + tr + '</tbody></table></div>' : '<p>Reitillä ei ole käännöksiä.</p>') + '</div>');
+      // 4. viitat
+      var ar = an.aids.filter(function (a) { return a.tyyppi === 'Viitta'; }).map(function (a) {
+        return '<tr><td>' + esc(a.nimi || a.numero) + '</td><td class="n">' + Math.round(a.seenSec) + ' s</td><td class="n">' + (a.firstSeenD == null ? '–' : Math.round(a.firstSeenD) + ' m') + '</td><td class="n">' + Math.round(a.minD) + ' m ' + (a.side > 0 ? 'oik' : 'vas') + '</td></tr>';
+      }).join('');
+      h.push('<div class="db-sec"><h2>4. Sivuutetut viitat</h2><p class="dim">Näkyvissä ennen sivuutusta: alle 700 m, kuvakentässä, ei maaston, rungon tai ohjaamon peitossa.</p>' +
+        (ar ? '<div class="tblwrap"><table class="db"><thead><tr><th>Viitta</th><th class="n">Näkyi</th><th class="n">Ensi näkö</th><th class="n">Sivuutus</th></tr></thead><tbody>' + ar + '</tbody></table></div>' : '<p>Ei sivuutettuja viittoja.</p>') + '</div>');
+    }
+    // komentoloki: vapaassa ajossa aika, komento ja aluksen suunta ja nopeus komennon hetkellä, reittiajossa komennon paikka suhteessa käännöspisteeseen
     var cl = an.cmdLog.map(function (c) {
-      var rel = c.turnNo == null ? '' : (Math.abs(c.offsetM) < 1 ? 'käännöspisteellä ' : Math.round(Math.abs(c.offsetM)) + ' m ' + (c.offsetM < 0 ? 'ennen ' : 'jälkeen ')) + 'käännös ' + c.turnNo;
+      var rel = free ? (c.hdgTrue != null ? 'suunta ' + pad3(c.hdgTrue) + '°, ' + fnum(c.vKn || 0, 1) + ' kn' : '') :
+        c.turnNo == null ? '' : (Math.abs(c.offsetM) < 1 ? 'käännöspisteellä ' : Math.round(Math.abs(c.offsetM)) + ' m ' + (c.offsetM < 0 ? 'ennen ' : 'jälkeen ')) + 'käännös ' + c.turnNo;
       return '<tr><td>' + H.mmss(c.t) + '</td><td>' + esc(cmdLabel(c)) + '</td><td class="dim">' + esc(rel) + '</td></tr>';
     }).join('');
-    h.push('<div class="db-sec"><h2>Komentoloki</h2>' + (cl ? '<div class="tblwrap"><table class="db"><thead><tr><th>Aika</th><th>Komento</th><th>Paikka</th></tr></thead><tbody>' + cl + '</tbody></table></div>' : '<p>Ei komentoja.</p>') + '</div>');
+    h.push('<div class="db-sec"><h2>Komentoloki</h2>' + (cl ? '<div class="tblwrap"><table class="db" id="dbCmds"><thead><tr><th>Aika</th><th>Komento</th><th>' + (free ? 'Alus' : 'Paikka') + '</th></tr></thead><tbody>' + cl + '</tbody></table></div>' : '<p>Ei komentoja.</p>') + '</div>');
     $('dbBody').innerHTML = h.join('');
   }
   function nearestPointName(cum) {
@@ -844,13 +927,13 @@
     var rec = G.rec, rt = G.route;
     if (!G.dbPl) G.dbPl = root.Plotteri.create($('dbPlot'), { interactive: false, fixedHeadUp: true, noOwnLines: true });
     var pl = G.dbPl; pl.resize();
-    var es = rec.e.concat(rt.pts.map(function (p) { return p.e; })), ns = rec.n.concat(rt.pts.map(function (p) { return p.n; }));
+    var es = rt ? rec.e.concat(rt.pts.map(function (p) { return p.e; })) : rec.e.slice(), ns = rt ? rec.n.concat(rt.pts.map(function (p) { return p.n; })) : rec.n.slice();
+    if (!es.length) return;
     var emin = Math.min.apply(null, es), emax = Math.max.apply(null, es), nmin = Math.min.apply(null, ns), nmax = Math.max.apply(null, ns);
     var cE = (emin + emax) / 2, cN = (nmin + nmax) / 2, w = $('dbPlot').clientWidth, h = $('dbPlot').clientHeight;
     var rangeM = Math.max((nmax - nmin) * 1.18 + 200, (emax - emin) * 1.18 * h / Math.max(100, w) + 200);
     pl.setRangeNm(rangeM / 1852);
-    var wp = rt.pts.map(function (p) { return P.enToWorld(p.e, p.n); });
-    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); })); pl.setNext(null); pl.setTrail([]); pl.clearExtra();
+    setPlotterRoute(pl, rt); pl.setNext(null); pl.setTrail([]); pl.clearExtra();
     // jälki väyläalueen mukaan väritettynä
     var seg = [], cur = null;
     for (var i = 0; i < rec.e.length; i++) {
@@ -861,8 +944,13 @@
     var pin = function (e, n, txt, color) { pl.addExtraPoint(P.enToWorld(e, n), '<div style="transform:translate(-50%,-50%);background:' + color + ';color:#fff;border:2px solid #fff;border-radius:11px;min-width:22px;height:22px;padding:0 5px;font:700 12px/18px sans-serif;text-align:center;white-space:nowrap">' + txt + '</div>', 'plot-pin'); };
     pin(rec.e[0], rec.n[0], 'Alku', '#2a7a48');
     pin(rec.e[rec.e.length - 1], rec.n[rec.n.length - 1], an.finished ? 'Perillä' : 'Loppu', '#222');
-    pin(an.maxDev.e, an.maxDev.n, 'Maks. poikkeama ' + Math.round(an.maxDev.m) + ' m', '#a06a00');
-    an.turns.forEach(function (t) { if (t.startE != null) pin(t.startE, t.startN, 'K' + t.no, '#6a3d9a'); });
+    if (rt) {
+      pin(an.maxDev.e, an.maxDev.n, 'Maks. poikkeama ' + Math.round(an.maxDev.m) + ' m', '#a06a00');
+      an.turns.forEach(function (t) { if (t.startE != null) pin(t.startE, t.startN, 'K' + t.no, '#6a3d9a'); });
+    } else {
+      if (an.minShore) pin(an.minShore.e, an.minShore.n, 'Lähin ranta ' + Math.round(an.minShore.m) + ' m', '#6a3d9a');
+      if (an.minShoal) pin(an.minShoal.e, an.minShoal.n, 'Lähin matalikko ' + Math.round(an.minShoal.m) + ' m', '#a06a00');
+    }
     an.groundings.forEach(function (g) { pin(g.e, g.n, '✕ Pohjakosketus', '#c00'); });
     pl.syncAids(0, 0, true);
     // keskitys: update siirtää keskipistettä aluksen suunnassa 20 % alaspäin, joten korjataan siirto
