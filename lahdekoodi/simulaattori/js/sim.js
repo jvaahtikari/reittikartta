@@ -134,6 +134,7 @@
     G.pl.setRasterVisible(G.raster); G.pl.setVectorIdx(G.vecIdx); G.pl.setEV(G.evOn, true);
     G.view = root.Nakyma.create($('v3'), { preserve: !!qs.get('preserve'), settings: { hfovDeg: G.fovDeg } });
     root.__view = G.view; root.__pl = G.pl;
+    G.bridges = root.Sillat3D ? root.Sillat3D.attach(G.view) : null;   // sillat (vaihe 3i): piirto joka kuvalla view.render-kutsun yhteydessä, rebase addExtra-kautta
     new ResizeObserver(function () { layout(); }).observe($('stage'));
     new ResizeObserver(function () { sizeViews(); }).observe($('pane3d'));
     root.addEventListener('resize', layout);
@@ -683,7 +684,7 @@
       var prog = Math.min(0.95, 0.15 + 0.8 * Math.min(1, t / 12));
       if (G.radar && performance.now() - G.lastRadarT >= 100) { G.lastRadarT = performance.now(); feedRadar(); }
       if (G.plotShown && G.plotterOn) G.pl.update(S.x, S.y, S.hdg, cogOf(S), S.v);
-      var idle = v.terrain.idle() && (!v.piers || v.piers.idle()) && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && t > 1.2 && G.radarReady && (!G.plotShown || G.pl.ready());
+      var idle = v.terrain.idle() && (!v.piers || v.piers.idle()) && (!G.bridges || G.bridges.idle()) && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && t > 1.2 && G.radarReady && (!G.plotShown || G.pl.ready());
       setLoad(idle ? 1 : prog, 'Ladataan maastoa ' + (j.jobs + j.queued) + ' ruutua');
       v.render(S, dtReal);
       if (idle || t > 60) {
