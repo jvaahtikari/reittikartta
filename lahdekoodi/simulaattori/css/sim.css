@@ -59,10 +59,10 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .hud-zoom button:active{background-color:rgba(15,127,179,.9)}
 .hud-zoom button.zm-ctr[aria-pressed=true]{background-color:rgba(15,95,138,.78)}
 .hud-zoom button.zm-ctr[aria-pressed=false]{background-color:rgba(138,90,0,.85);color:#fff}
-.hud-scale{left:8px;bottom:140px;padding:3px 8px 3px 6px;font:600 12px ui-monospace,Menlo,Consolas,monospace;pointer-events:none;display:flex;flex-direction:column;gap:2px}
-.hud-scale .sb-line{display:flex;align-items:flex-end;gap:6px}
-.hud-scale .sb-bar{display:block;height:6px;border:2px solid #fff;border-top:0;min-width:2px}
-.hud-scale .sb-h{color:#c8d9e6;font-weight:500}
+.hud-scale{right:8px;bottom:8px;left:auto;padding:0;background:none!important;border:0!important;box-shadow:none!important;font:600 10px ui-monospace,Menlo,Consolas,monospace;color:#1d2b36;text-shadow:0 0 2px #fff,0 0 3px #fff;pointer-events:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px;opacity:.85}  /* 27.10.2026: pieni ja kulmassa, ei laatikkoa */
+.hud-scale .sb-line{display:flex;align-items:flex-end;gap:6px;white-space:nowrap}
+.hud-scale .sb-bar{display:block;height:4px;border:1.5px solid #1d2b36;border-top:0;min-width:2px;box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+.hud-scale .sb-h{display:none}
 .hud-hdg{left:8px;top:8px;font:600 16px ui-monospace,Menlo,monospace;padding:6px 12px}
 .hud-gaze{right:8px;bottom:8px;min-height:44px;padding:4px 12px;border:1px solid var(--line);font-weight:600}
 #plotOff{position:absolute;inset:0;z-index:25;background:#0b141c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:20px;font-weight:600}
@@ -111,6 +111,13 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #game.deck:not(.tp) #bSlower,#game.deck:not(.tp) #bFaster{grid-column:span 2}
 #game.deck:not(.tp) #bSlower{order:1}#game.deck:not(.tp) #bFaster{order:2}#game.deck:not(.tp) .cb.sp{order:3}
 #game.deck.tp .row.r6{grid-template-columns:repeat(6,1fr)}
+/* komentopalstan sovitus matalalla näytöllä (sim.js fitCmd) */
+#game.deck.cfit1:not(.tp){--cmdw:270px}
+#game.deck.cfit1:not(.tp) .row.r6,#game.land.cfit1 .row.r6{grid-template-columns:.8fr 1fr 1fr 1fr 1fr .8fr}
+#game.deck.cfit1:not(.tp) #bSlower,#game.deck.cfit1:not(.tp) #bFaster,#game.land.cfit1 #bSlower,#game.land.cfit1 #bFaster{grid-column:auto}
+#game.deck.cfit1:not(.tp) #bSlower,#game.land.cfit1 #bSlower{order:0}#game.deck.cfit1:not(.tp) .cb.sp,#game.land.cfit1 .cb.sp{order:1}#game.deck.cfit1:not(.tp) #bFaster,#game.land.cfit1 #bFaster{order:2}
+#game.cfit1 .row.r6 .cb{padding:2px 1px}
+#game.cfit2 .cb{min-height:36px}#game.cfit2 .row{margin-top:3px;gap:3px}#game.cfit2 .status{font-size:11px;line-height:1.15}#game.cfit2 #cmd{padding-top:4px}
 #game.deck .pane{border:0;border-radius:0;aspect-ratio:auto;box-shadow:none}
 #game.deck #pane3d{left:0;right:0;top:0;bottom:auto;width:auto;height:60%}
 #game.deck #paneP,#game.deck #paneR{top:60%;bottom:0;height:auto;left:0;right:auto;width:calc(100% - var(--cmdw))}
@@ -189,3 +196,6 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .pane.small .g3d-badge{display:none}
 #g3dInfo .sheet-box{display:flex;flex-direction:column;gap:8px}
 #g3dInfo .hint{white-space:pre-line}
+
+/* Google-tila: Googlen lähdemerkintä (vasen alakulma) jää näkyviin, ja Kiikari-nappi nostetaan sen yläpuolelle (27.10.2026) */
+#pane3d.g3d .bino{bottom:34px}

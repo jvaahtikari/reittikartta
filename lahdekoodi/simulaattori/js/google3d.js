@@ -40,7 +40,8 @@
     keyStore: 'sim.googleKey',
     altStore: 'sim.googleAltOffset',
     calibStore: 'sim.googleKalib',
-    attribClipPx: 24,         // oman kankaan alareunasta rajataan tämän verran pois, jotta Googlen lähdemerkintä (logo ja tietolähteet) jää näkyviin
+    attribClipPx: 26, attribClipW: 170,   // vain vasemman alakulman lovi (logo ja tietolähteet), ei koko alareunan kaistaa (27.10.2026)
+    attribClipPxOld: 24,         // oman kankaan alareunasta rajataan tämän verran pois, jotta Googlen lähdemerkintä (logo ja tietolähteet) jää näkyviin
     fogLevelsKm: [0, 20, 10, 5, 2, 1]   // sumukerroksen näkyvyys (km), 0 = ei sumukerrosta
   };
 

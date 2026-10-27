@@ -315,8 +315,20 @@
     var tp = deck && !land;
     g.classList.toggle('land', land && !deck); g.classList.toggle('deck', deck); g.classList.toggle('tp', tp);
     G.layout.land = land; G.layout.wide = deck; G.layout.tp = tp; G.layout.tri = false;
+    fitCmd();
     applyPanes();
     sizeViews();
+  }
+  // Komentopalstan sovitus (27.10.2026, iPad Safari välilehtipalkin kanssa: alin rivi leikkautui): jos napit eivät mahdu palstaan,
+  // ensin nopeusrivi yhdeksi riviksi ja palsta 20 px leveämmäksi (cfit1), sitten matalammat napit (cfit2). Vieritys jää viimeiseksi varaksi.
+  function fitCmd() {
+    var g = $('game'), cm = $('cmd');
+    g.classList.remove('cfit1', 'cfit2');
+    if (!(G.layout.wide && !G.layout.tp) && !G.layout.land) return;
+    var over = function () { return cm.scrollHeight > cm.clientHeight + 1; };
+    if (!over()) return;
+    g.classList.add('cfit1');
+    if (over()) g.classList.add('cfit2');
   }
   // Mittarin tila: aloitusvalinta rajaa vaihtoehdot. Kolme ruutua (both) kelpaa vain, kun leveys riittää.
   function resolveInstr() {
@@ -679,6 +691,23 @@
       var k = root.Google3D.setKey($('g3dKeyIn').value); updateKeyHint();
       if (!k) return; $('g3dInfo').hidden = true; setExtView(true);
     });
+    // Koko näyttö (27.10.2026): Fullscreen API, kun selain tukee sitä (tietokone, Android, iPad). iPhonessa ohje kotivalikkoon lisäämisestä.
+    (function () {
+      var de = document.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, can = !!req;
+      var standalone = (root.matchMedia && root.matchMedia('(display-mode: standalone)').matches) || root.navigator.standalone;
+      if (!can || standalone) { $('mFull').hidden = !!standalone; if (!can && !standalone) { $('mFull').hidden = true; $('fullHint').hidden = false; } }
+      function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+      function label() { $('mFull').textContent = isFull() ? 'Poistu koko näytöstä' : 'Koko näyttö'; }
+      $('mFull').addEventListener('click', function () {
+        $('menu').hidden = true;
+        try {
+          if (isFull()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+          else { var r = req.call(de); if (r && r.catch) r.catch(function () { toast('Koko näyttö ei onnistunut tässä selaimessa', 2000); }); }
+        } catch (e) { toast('Koko näyttö ei onnistunut tässä selaimessa', 2000); }
+      });
+      document.addEventListener('fullscreenchange', function () { label(); setTimeout(function () { applyPanes(); sizeViews(); }, 120); });
+      document.addEventListener('webkitfullscreenchange', function () { label(); setTimeout(function () { applyPanes(); sizeViews(); }, 120); });
+    })();
     $('mGfx').addEventListener('click', function () { G.gfx = gfxNow() === 'full' ? 'light' : 'full'; G.view.setQuality(G.gfx); applyBoatsQuality(); updateMenuLabels(); savePrefs(); });
     $('mRaster').addEventListener('click', function () { G.raster = !G.raster; G.pl.setRasterVisible(G.raster); updateMenuLabels(); savePrefs(); });
     $('mFov').addEventListener('click', function () {
@@ -871,13 +900,13 @@
       if (!r.ok) { G.ext = 'own'; g3Info('Google 3D (testi) tarvitsee avaimen', 'Google 3D -näkymä näyttää Googlen fotorealistisen 3D-kartan oman näkymän tilalla. Se tarvitsee oman Google Maps -avaimen.\n\n' + root.Google3D.HELP_LINES.join('\n'), true); return false; }
       // vaihe 3n: oma kangas pysyy näkyvissä Googlen kartan päällä (läpinäkyvä tausta), ja Googlen lisenssimerkinnän kohta alareunassa jää vapaaksi
       G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true);
-      $('v3').classList.add('g3d-over'); canvas.style.clipPath = 'inset(0 0 ' + root.Google3D.SETTINGS.attribClipPx + 'px 0)';
+      $('v3').classList.add('g3d-over'); var gS = root.Google3D.SETTINGS; canvas.style.clipPath = 'polygon(0 0, 100% 0, 100% 100%, ' + gS.attribClipW + 'px 100%, ' + gS.attribClipW + 'px calc(100% - ' + gS.attribClipPx + 'px), 0 calc(100% - ' + gS.attribClipPx + 'px))'; $('pane3d').classList.add('g3d');
       if (G.S) logCustom('google3d', 1);
     } else {
       if (G.g3) G.g3.disable();
       G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = ''; }
       if (G.view) G.view.setOverlay(false);
-      $('v3').classList.remove('g3d-over');
+      $('v3').classList.remove('g3d-over'); $('pane3d').classList.remove('g3d');
       $('g3dBadge').hidden = true;
     }
     updateMenuLabels();

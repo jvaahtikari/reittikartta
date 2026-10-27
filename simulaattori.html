@@ -16,6 +16,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Simulaattori">
+<link rel="manifest" href="simulaattori.webmanifest">
 <meta name="theme-color" content="#15324a">
 <title>Simulaattori</title>
 <style>
@@ -80,10 +84,10 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .hud-zoom button:active{background-color:rgba(15,127,179,.9)}
 .hud-zoom button.zm-ctr[aria-pressed=true]{background-color:rgba(15,95,138,.78)}
 .hud-zoom button.zm-ctr[aria-pressed=false]{background-color:rgba(138,90,0,.85);color:#fff}
-.hud-scale{left:8px;bottom:140px;padding:3px 8px 3px 6px;font:600 12px ui-monospace,Menlo,Consolas,monospace;pointer-events:none;display:flex;flex-direction:column;gap:2px}
+.hud-scale{right:8px;bottom:8px;left:auto;padding:0;background:none!important;border:0!important;box-shadow:none!important;font:600 10px ui-monospace,Menlo,Consolas,monospace;color:#1d2b36;text-shadow:0 0 2px #fff,0 0 3px #fff;pointer-events:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px;opacity:.85}  /* 27.10.2026: pieni ja kulmassa, ei laatikkoa */
 .hud-scale .sb-line{display:flex;align-items:flex-end;gap:6px}
-.hud-scale .sb-bar{display:block;height:6px;border:2px solid #fff;border-top:0;min-width:2px}
-.hud-scale .sb-h{color:#c8d9e6;font-weight:500}
+.hud-scale .sb-bar{display:block;height:4px;border:1.5px solid #1d2b36;border-top:0;min-width:2px;box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+.hud-scale .sb-h{display:none}
 .hud-hdg{left:8px;top:8px;font:600 16px ui-monospace,Menlo,monospace;padding:6px 12px}
 .hud-gaze{right:8px;bottom:8px;min-height:44px;padding:4px 12px;border:1px solid var(--line);font-weight:600}
 #plotOff{position:absolute;inset:0;z-index:25;background:#0b141c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:20px;font-weight:600}
@@ -132,6 +136,13 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #game.deck:not(.tp) #bSlower,#game.deck:not(.tp) #bFaster{grid-column:span 2}
 #game.deck:not(.tp) #bSlower{order:1}#game.deck:not(.tp) #bFaster{order:2}#game.deck:not(.tp) .cb.sp{order:3}
 #game.deck.tp .row.r6{grid-template-columns:repeat(6,1fr)}
+/* komentopalstan sovitus matalalla näytöllä (sim.js fitCmd) */
+#game.deck.cfit1:not(.tp){--cmdw:270px}
+#game.deck.cfit1:not(.tp) .row.r6,#game.land.cfit1 .row.r6{grid-template-columns:.8fr 1fr 1fr 1fr 1fr .8fr}
+#game.deck.cfit1:not(.tp) #bSlower,#game.deck.cfit1:not(.tp) #bFaster,#game.land.cfit1 #bSlower,#game.land.cfit1 #bFaster{grid-column:auto}
+#game.deck.cfit1:not(.tp) #bSlower,#game.land.cfit1 #bSlower{order:0}#game.deck.cfit1:not(.tp) .cb.sp,#game.land.cfit1 .cb.sp{order:1}#game.deck.cfit1:not(.tp) #bFaster,#game.land.cfit1 #bFaster{order:2}
+#game.cfit1 .row.r6 .cb{padding:2px 1px}
+#game.cfit2 .cb{min-height:36px}#game.cfit2 .row{margin-top:3px;gap:3px}#game.cfit2 .status{font-size:11px;line-height:1.15}#game.cfit2 #cmd{padding-top:4px}
 #game.deck .pane{border:0;border-radius:0;aspect-ratio:auto;box-shadow:none}
 #game.deck #pane3d{left:0;right:0;top:0;bottom:auto;width:auto;height:60%}
 #game.deck #paneP,#game.deck #paneR{top:60%;bottom:0;height:auto;left:0;right:auto;width:calc(100% - var(--cmdw))}
@@ -210,6 +221,9 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .pane.small .g3d-badge{display:none}
 #g3dInfo .sheet-box{display:flex;flex-direction:column;gap:8px}
 #g3dInfo .hint{white-space:pre-line}
+
+/* Google-tila: Googlen lähdemerkintä (vasen alakulma) jää näkyviin, ja Kiikari-nappi nostetaan sen yläpuolelle (27.10.2026) */
+#pane3d.g3d .bino{bottom:34px}
 
 </style>
 </head>
@@ -408,6 +422,8 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
     <button type="button" class="big" id="mTune">Tutkan viritys: hyvä</button>
     <button type="button" class="big" id="mGfx">Grafiikka: täysi</button>
     <button type="button" class="big" id="mView">Ulkonäkymä: oma</button>
+    <button type="button" class="big" id="mFull">Koko näyttö</button>
+    <div class="hint" id="fullHint" hidden>iPhonessa selaimen palkit saa pois avaamalla sivun kotivalikosta: Jaa ja sitten Lisää Koti-valikkoon. Kotivalikosta avattuna simulaattori aukeaa koko näytölle.</div>
     <button type="button" class="big" id="mVis">Näkyvyys (Google 3D): ei sumukerrosta</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
@@ -10114,7 +10130,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     keyStore: 'sim.googleKey',
     altStore: 'sim.googleAltOffset',
     calibStore: 'sim.googleKalib',
-    attribClipPx: 24,         // oman kankaan alareunasta rajataan tämän verran pois, jotta Googlen lähdemerkintä (logo ja tietolähteet) jää näkyviin
+    attribClipPx: 26, attribClipW: 170,   // vain vasemman alakulman lovi (logo ja tietolähteet), ei koko alareunan kaistaa (27.10.2026)
+    attribClipPxOld: 24,         // oman kankaan alareunasta rajataan tämän verran pois, jotta Googlen lähdemerkintä (logo ja tietolähteet) jää näkyviin
     fogLevelsKm: [0, 20, 10, 5, 2, 1]   // sumukerroksen näkyvyys (km), 0 = ei sumukerrosta
   };
 
@@ -12508,8 +12525,20 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var tp = deck && !land;
     g.classList.toggle('land', land && !deck); g.classList.toggle('deck', deck); g.classList.toggle('tp', tp);
     G.layout.land = land; G.layout.wide = deck; G.layout.tp = tp; G.layout.tri = false;
+    fitCmd();
     applyPanes();
     sizeViews();
+  }
+  // Komentopalstan sovitus (27.10.2026, iPad Safari välilehtipalkin kanssa: alin rivi leikkautui): jos napit eivät mahdu palstaan,
+  // ensin nopeusrivi yhdeksi riviksi ja palsta 20 px leveämmäksi (cfit1), sitten matalammat napit (cfit2). Vieritys jää viimeiseksi varaksi.
+  function fitCmd() {
+    var g = $('game'), cm = $('cmd');
+    g.classList.remove('cfit1', 'cfit2');
+    if (!(G.layout.wide && !G.layout.tp) && !G.layout.land) return;
+    var over = function () { return cm.scrollHeight > cm.clientHeight + 1; };
+    if (!over()) return;
+    g.classList.add('cfit1');
+    if (over()) g.classList.add('cfit2');
   }
   // Mittarin tila: aloitusvalinta rajaa vaihtoehdot. Kolme ruutua (both) kelpaa vain, kun leveys riittää.
   function resolveInstr() {
@@ -12872,6 +12901,23 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var k = root.Google3D.setKey($('g3dKeyIn').value); updateKeyHint();
       if (!k) return; $('g3dInfo').hidden = true; setExtView(true);
     });
+    // Koko näyttö (27.10.2026): Fullscreen API, kun selain tukee sitä (tietokone, Android, iPad). iPhonessa ohje kotivalikkoon lisäämisestä.
+    (function () {
+      var de = document.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, can = !!req;
+      var standalone = (root.matchMedia && root.matchMedia('(display-mode: standalone)').matches) || root.navigator.standalone;
+      if (!can || standalone) { $('mFull').hidden = !!standalone; if (!can && !standalone) { $('mFull').hidden = true; $('fullHint').hidden = false; } }
+      function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+      function label() { $('mFull').textContent = isFull() ? 'Poistu koko näytöstä' : 'Koko näyttö'; }
+      $('mFull').addEventListener('click', function () {
+        $('menu').hidden = true;
+        try {
+          if (isFull()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+          else { var r = req.call(de); if (r && r.catch) r.catch(function () { toast('Koko näyttö ei onnistunut tässä selaimessa', 2000); }); }
+        } catch (e) { toast('Koko näyttö ei onnistunut tässä selaimessa', 2000); }
+      });
+      document.addEventListener('fullscreenchange', function () { label(); setTimeout(function () { applyPanes(); sizeViews(); }, 120); });
+      document.addEventListener('webkitfullscreenchange', function () { label(); setTimeout(function () { applyPanes(); sizeViews(); }, 120); });
+    })();
     $('mGfx').addEventListener('click', function () { G.gfx = gfxNow() === 'full' ? 'light' : 'full'; G.view.setQuality(G.gfx); applyBoatsQuality(); updateMenuLabels(); savePrefs(); });
     $('mRaster').addEventListener('click', function () { G.raster = !G.raster; G.pl.setRasterVisible(G.raster); updateMenuLabels(); savePrefs(); });
     $('mFov').addEventListener('click', function () {
@@ -13064,13 +13110,13 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       if (!r.ok) { G.ext = 'own'; g3Info('Google 3D (testi) tarvitsee avaimen', 'Google 3D -näkymä näyttää Googlen fotorealistisen 3D-kartan oman näkymän tilalla. Se tarvitsee oman Google Maps -avaimen.\n\n' + root.Google3D.HELP_LINES.join('\n'), true); return false; }
       // vaihe 3n: oma kangas pysyy näkyvissä Googlen kartan päällä (läpinäkyvä tausta), ja Googlen lisenssimerkinnän kohta alareunassa jää vapaaksi
       G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true);
-      $('v3').classList.add('g3d-over'); canvas.style.clipPath = 'inset(0 0 ' + root.Google3D.SETTINGS.attribClipPx + 'px 0)';
+      $('v3').classList.add('g3d-over'); var gS = root.Google3D.SETTINGS; canvas.style.clipPath = 'polygon(0 0, 100% 0, 100% 100%, ' + gS.attribClipW + 'px 100%, ' + gS.attribClipW + 'px calc(100% - ' + gS.attribClipPx + 'px), 0 calc(100% - ' + gS.attribClipPx + 'px))'; $('pane3d').classList.add('g3d');
       if (G.S) logCustom('google3d', 1);
     } else {
       if (G.g3) G.g3.disable();
       G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = ''; }
       if (G.view) G.view.setOverlay(false);
-      $('v3').classList.remove('g3d-over');
+      $('v3').classList.remove('g3d-over'); $('pane3d').classList.remove('g3d');
       $('g3dBadge').hidden = true;
     }
     updateMenuLabels();

@@ -45,6 +45,7 @@ METRICS = r'''() => {
   const st = cm.querySelector('.status').getBoundingClientRect();
   out.cmd = { w: cm.getBoundingClientRect().width, h: cm.getBoundingClientRect().height, scrollH: cm.scrollHeight, clientH: cm.clientHeight, n: cb.length, status: { w: st.width, h: st.height },
     btn: cb.map(e => ({ id: lab(e), w: e.getBoundingClientRect().width, h: e.getBoundingClientRect().height, l: e.getBoundingClientRect().left, r: e.getBoundingClientRect().right, t: e.getBoundingClientRect().top, b: e.getBoundingClientRect().bottom })),
+    fit: ['cfit1', 'cfit2'].filter(k => document.getElementById('game').classList.contains(k)),
     rect: rc(cm), docScroll: document.documentElement.scrollHeight > innerHeight + 1 || document.documentElement.scrollWidth > innerWidth + 1 };
   return out;
 }'''
@@ -86,7 +87,9 @@ def check_plot(tag, m):
     z = q['zoom']; pn = q['pane']
     ok(z['l'] - pn['l'] < 8 and pn['b'] - z['b'] < 8, '%s: + − Keskitä pinottuna vasemmassa alakulmassa (reuna %.0f ja %.0f px)' % (tag, z['l'] - pn['l'], pn['b'] - z['b']))
     if q['scale']:
-        ok(q['scale']['b'] <= z['t'] + 1 and q['scale']['l'] - pn['l'] < 16, '%s: mittakaavajana vasemmassa alakulmassa nappien yläpuolella (jana alareuna %.0f, nappien yläreuna %.0f)' % (tag, q['scale']['b'], z['t']))
+        # 27.10.2026: mittakaavajana on pieni ja oikeassa alakulmassa (käyttäjän palaute: liian hallitseva)
+        sh = q['scale']['b'] - q['scale'].get('t', q['scale']['b'] - 20)
+        ok(pn['r'] - q['scale']['r'] < 16 and pn['b'] - q['scale']['b'] < 16 and sh <= 24, '%s: mittakaavajana pienenä oikeassa alakulmassa (oikea reuna %.0f, alareuna %.0f, korkeus %.0f px)' % (tag, pn['r'] - q['scale']['r'], pn['b'] - q['scale']['b'], sh))
     ok(q['vec'] is not None, '%s: vektorin aika on lukema, jota napautetaan (ei erillistä nappia)' % tag)
     if q['small']:
         bad = [b['id'] for b in q['btn'] if overlap(b['hit'], q['small'])] + (['lukemat'] if overlap(q['info'], q['small']) else [])
@@ -94,15 +97,20 @@ def check_plot(tag, m):
 
 def check_cmd(tag, m, wide):
     c = m['cmd']
+    fit = c.get('fit', [])
+    # 27.10.2026: matalalla näytöllä (iPad Safari välilehtipalkin kanssa) palsta tiivistyy: cfit1 = nopeusrivi yhdeksi riviksi ja palsta 270 px, cfit2 = napit 36 px
+    wmax = 270.5 if 'cfit1' in fit else 250.5
+    hmin = 35.5 if 'cfit2' in fit else 43.5
+    if fit: print('      komentopalstan sovitus: %s' % ' '.join(fit))
     if wide:
-        ok(c['w'] <= 250.5, '%s: komentopalstan leveys %.0f px (enintään 250)' % (tag, c['w']))
+        ok(c['w'] <= wmax, '%s: komentopalstan leveys %.0f px (enintään %.0f)' % (tag, c['w'], wmax))
     sizes = sorted(set((round(b['w']), round(b['h'])) for b in c['btn']))
-    ok(all(43.5 <= b['h'] <= 48.5 for b in c['btn']), '%s: komentonappien korkeus %s px (44 ... 48), nappeja %d' % (tag, sorted(set(round(b['h']) for b in c['btn'])), c['n']))
+    ok(all(hmin <= b['h'] <= 48.5 for b in c['btn']), '%s: komentonappien korkeus %s px (%.0f ... 48), nappeja %d' % (tag, sorted(set(round(b['h']) for b in c['btn'])), hmin, c['n']))
     ok(c['scrollH'] <= c['clientH'] + 1 and not c['docScroll'], '%s: komentopalstassa ei vieritystä (sisältö %d, ikkuna %d px)' % (tag, c['scrollH'], c['clientH']))
     if wide:
         rows = {}
         for b in c['btn']: rows.setdefault(round(b['t'] / 6), []).append(b['id'])
-        ok(len(rows) == 5, '%s: nappeja viidellä rivillä, vaihe 3k: erikoiskäskyt Peruutus 2, Peruutus 4, Nopeus 0 ja Crash stop 2 x 2 (%s)' % (tag, [len(v) for k, v in sorted(rows.items())]))
+        ok(len(rows) == (4 if 'cfit1' in fit else 5), '%s: nappeja viidellä rivillä (tiivistettynä neljällä), vaihe 3k: erikoiskäskyt Peruutus 2, Peruutus 4, Nopeus 0 ja Crash stop 2 x 2 (%s)' % (tag, [len(v) for k, v in sorted(rows.items())]))
 
 with sync_playwright() as pw:
     for cfg in configs:
