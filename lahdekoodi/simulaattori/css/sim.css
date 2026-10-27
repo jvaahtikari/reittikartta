@@ -177,7 +177,10 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .start-night{color:#ffd9a0}
 
 /* Google 3D -testinäkymä (vaihe 3m): kartta on #v3-ruudun päällä, oma näkymä piilotetaan (ei tuhota) */
-.g3d-box{position:absolute;inset:0;z-index:2;pointer-events:none;background:#0d1b27}
+/* vaihe 3n: kartta on alin kerros, oma kangas (läpinäkyvä tausta) on sen päällä, ja oma kangas jättää alareunan lähdemerkinnälle */
+.g3d-box{position:absolute;inset:0;z-index:0;pointer-events:none;background:#0d1b27}
+.v3.g3d-over .view3d-canvas{z-index:1}
+.v3.g3d-over .view3d-veil{z-index:2}
 .g3d-box > *{pointer-events:none}
 .keyin{margin-top:8px;width:100%;box-sizing:border-box;min-height:48px;font-size:16px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:#fff}
 .g3d-badge{right:8px;top:36px;display:flex;align-items:center;gap:8px;padding:4px 4px 4px 10px;font-size:13px;max-width:70%}

@@ -198,7 +198,10 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .start-night{color:#ffd9a0}
 
 /* Google 3D -testinäkymä (vaihe 3m): kartta on #v3-ruudun päällä, oma näkymä piilotetaan (ei tuhota) */
-.g3d-box{position:absolute;inset:0;z-index:2;pointer-events:none;background:#0d1b27}
+/* vaihe 3n: kartta on alin kerros, oma kangas (läpinäkyvä tausta) on sen päällä, ja oma kangas jättää alareunan lähdemerkinnälle */
+.g3d-box{position:absolute;inset:0;z-index:0;pointer-events:none;background:#0d1b27}
+.v3.g3d-over .view3d-canvas{z-index:1}
+.v3.g3d-over .view3d-veil{z-index:2}
 .g3d-box > *{pointer-events:none}
 .keyin{margin-top:8px;width:100%;box-sizing:border-box;min-height:48px;font-size:16px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:#fff}
 .g3d-badge{right:8px;top:36px;display:flex;align-items:center;gap:8px;padding:4px 4px 4px 10px;font-size:13px;max-width:70%}
@@ -396,6 +399,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
     <button type="button" class="big" id="mTune">Tutkan viritys: hyvä</button>
     <button type="button" class="big" id="mGfx">Grafiikka: täysi</button>
     <button type="button" class="big" id="mView">Ulkonäkymä: oma</button>
+    <button type="button" class="big" id="mVis">Näkyvyys (Google 3D): ei sumukerrosta</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
     <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus ja miinus, hiiren rulla ja kahden sormen nipistys zoomaavat (0,1 ... 12 mpk). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
@@ -9136,12 +9140,234 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
 
 </script>
 <script>
+/* Simulaattori – oma vesi Google 3D -kerroksen päälle (vaihe 3n).
+ *
+ * Googlen kartan vesi korvataan simulaattorin omalla vedellä, mutta vain siellä missä vesi todella on: vesimaski rakennetaan maastokuvio-kerroksen
+ * jarvi- ja virtavesi-polygoneista kolmioituna (sama lähde kuin maastossa, ruudut z13), enintään 5 km säteellä aluksesta. Ääretöntä vesitasoa ei piirretä,
+ * joten maa ja saaret jäävät Googlen kuvan varaan. Rantaviivassa vesi ulottuu 1,5 m maan puolelle (ja saarien reunoilla 1,5 m saaren puolelle),
+ * jotta Googlen vesi ei pilkota reunasta, jos rantaviivat eroavat toisistaan senttejä tai metrin. Ruutujen leikkausreunat (MVT-puskuri) pidetään paikallaan,
+ * jotta ruutujen saumoihin ei tule rakoja.
+ *
+ * Mesh on yksi verkko (kaikki ladatut ruudut yhdistettynä), jonka kärkipisteet ovat TM35FIN-koordinaateissa kiintopisteen (REF) suhteen. Verkon paikka
+ * päivitetään rebase()-kutsulla, kun maailman origo siirtyy. Materiaali annetaan ulkopuolelta (nakyma.js:n vesivarjostin), joten ulkoasu on sama kuin omassa näkymässä.
+ *
+ * Moduuli toimii selaimessa (window.Vesimaski3D) ja Nodessa (module.exports: rengasjako ja siirto, testattavissa ilman three.js:ää). */
+(function (root) {
+  'use strict';
+  var THREE = root.THREE, P = root.Paikka, A = root.Aineisto;
+  var SET = {
+    z: 13,                 // maastokuvio-ruutujen zoom (ruutu noin 2,3 km)
+    radiusM: 5000,         // vesi ladataan tälle säteelle aluksesta
+    extendM: 1.5,          // vesi ulottuu tämän verran maan puolelle
+    reselectM: 250,        // ruutuvalinta tehdään uudelleen, kun alus on liikkunut tämän verran
+    buffer: 80,            // MVT-ruudun puskuri (yksikköä), jonka leikkausreunat pidetään paikallaan
+    refE: 327000, refN: 6823500,
+    gridN: 8,              // ruudun muunnosruudukko (gridN x gridN väliä), välissä bilineaarinen
+    classes: { jarvi: 1, virtavesi: 1 }
+  };
+
+  // Renkaiden ryhmittely monikulmioiksi: positiivinen ala = ulkoreuna, negatiivinen = reikä (MVT, y alaspäin). ring = Int32Array [x0, y0, x1, y1, ...] suljettuna.
+  function ringArea(a) { var s = 0, n = a.length / 2; for (var i = 0; i < n - 1; i++) s += a[2 * i] * a[2 * i + 3] - a[2 * i + 2] * a[2 * i + 1]; return s / 2; }
+  function groupRings(parts) {
+    var polys = [], cur = null;
+    for (var i = 0; i < parts.length; i++) {
+      var r = parts[i]; if (r.length < 8) continue;
+      var a = ringArea(r);
+      if (a > 0) { cur = { outer: r, holes: [] }; polys.push(cur); }
+      else if (a < 0 && cur) cur.holes.push(r);
+    }
+    return polys;
+  }
+  /* Renkaan siirto veden suunnasta pois ext yksikköä (kaikissa renkaissa suunta (dy, -dx) normalisoituna: ulkoreunalla ulos, reiällä reiän sisään). Palauttaa Float64Array [x, y, ...]
+   * ilman sulkevaa toistopistettä. Leikkausreunalla (arvo -buffer tai extent + buffer) olevat pisteet eivät liiku, eikä niiden välisten reunojen normaali vaikuta naapuriin. */
+  function offsetRing(r, ext, lo, hi) {
+    var n = r.length / 2 - 1, out = new Float64Array(n * 2), i, tol = 1.01;
+    function pinned(k) { var x = r[2 * k], y = r[2 * k + 1]; return x <= lo + tol || x >= hi - tol || y <= lo + tol || y >= hi - tol; }
+    function clipEdge(a, b) {   // reuna kulkee leikkausviivaa pitkin
+      var xa = r[2 * a], ya = r[2 * a + 1], xb = r[2 * b], yb = r[2 * b + 1];
+      return (Math.abs(xa - lo) < tol && Math.abs(xb - lo) < tol) || (Math.abs(xa - hi) < tol && Math.abs(xb - hi) < tol) || (Math.abs(ya - lo) < tol && Math.abs(yb - lo) < tol) || (Math.abs(ya - hi) < tol && Math.abs(yb - hi) < tol);
+    }
+    for (i = 0; i < n; i++) {
+      var ip = (i + n - 1) % n, inx = (i + 1) % n;
+      out[2 * i] = r[2 * i]; out[2 * i + 1] = r[2 * i + 1];
+      if (pinned(i)) continue;
+      var nx = 0, ny = 0, cnt = 0, n1 = null, n2 = null;
+      if (!clipEdge(ip, i)) { var dx = r[2 * i] - r[2 * ip], dy = r[2 * i + 1] - r[2 * ip + 1], l = Math.hypot(dx, dy); if (l > 0) { n1 = [dy / l, -dx / l]; } }
+      if (!clipEdge(i, inx)) { var ex = r[2 * inx] - r[2 * i], ey = r[2 * inx + 1] - r[2 * i + 1], l2 = Math.hypot(ex, ey); if (l2 > 0) { n2 = [ey / l2, -ex / l2]; } }
+      if (n1 && n2) {
+        var dot = n1[0] * n2[0] + n1[1] * n2[1], k = 1 / Math.max(0.4, 1 + dot);   // miter, rajattu
+        nx = (n1[0] + n2[0]) * k; ny = (n1[1] + n2[1]) * k; var ml = Math.hypot(nx, ny); if (ml > 2.2) { nx *= 2.2 / ml; ny *= 2.2 / ml; }
+      } else if (n1) { nx = n1[0]; ny = n1[1]; } else if (n2) { nx = n2[0]; ny = n2[1]; } else continue;
+      out[2 * i] += nx * ext; out[2 * i + 1] += ny * ext;
+    }
+    return out;
+  }
+
+  function create(scene, opts) {
+    opts = opts || {};
+    var mat = opts.material, set = {}; for (var k0 in SET) set[k0] = SET[k0]; if (opts.settings) for (var k1 in opts.settings) set[k1] = opts.settings[k1];
+    var mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat); mesh.name = 'vesimaski'; mesh.frustumCulled = false; mesh.visible = false; mesh.renderOrder = -5; mesh.matrixAutoUpdate = false;
+    scene.add(mesh);
+    var tiles = new Map(), queue = [], wanted = [], last = { x: 1e9, y: 1e9 }, dirty = false, version = 0, stats = { tiles: 0, loaded: 0, empty: 0, tris: 0, verts: 0, buildMs: 0, maxMs: 0, rings: 0 };
+    var active = false, jobs = 0;
+
+    function sizeM(z, lat) { return 40075016.686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z); }
+    function key(z, x, y) { return z + '/' + x + '/' + y; }
+    // ruudun muunnosruudukko (u, v = -0,05 ... 1,05) TM35FIN-koordinaateiksi: tarkka muunnos ruudukon pisteissä, välissä bilineaarinen
+    function gridOf(z, x, y) {
+      var N = set.gridN, g = new Float64Array((N + 1) * (N + 1) * 2), u0 = -0.05, du = 1.1 / N;
+      for (var j = 0; j <= N; j++) for (var i = 0; i <= N; i++) {
+        var c = P.tileLonLat(z, x, y, u0 + i * du, u0 + j * du), en = P.lonlatToEN(c.lon, c.lat), q = (j * (N + 1) + i) * 2;
+        g[q] = en.e; g[q + 1] = en.n;
+      }
+      return g;
+    }
+    function mapPt(g, u, v) {
+      var N = set.gridN, fu = (u + 0.05) / 1.1 * N, fv = (v + 0.05) / 1.1 * N, i = Math.max(0, Math.min(N - 1, Math.floor(fu))), j = Math.max(0, Math.min(N - 1, Math.floor(fv))), a = fu - i, b = fv - j;
+      var q00 = (j * (N + 1) + i) * 2, q10 = q00 + 2, q01 = q00 + (N + 1) * 2, q11 = q01 + 2;
+      return [
+        g[q00] * (1 - a) * (1 - b) + g[q10] * a * (1 - b) + g[q01] * (1 - a) * b + g[q11] * a * b,
+        g[q00 + 1] * (1 - a) * (1 - b) + g[q10 + 1] * a * (1 - b) + g[q01 + 1] * (1 - a) * b + g[q11 + 1] * a * b
+      ];
+    }
+
+    // Ruudun kolmioverkko: { pos: Float32Array (E - refE, 0, -(N - refN)), idx: Uint32Array }
+    function buildTile(t, lyr) {
+      var mk = lyr && lyr.maastokuvio; if (!mk) return null;
+      var ext = mk.extent, lo = -set.buffer, hi = ext + set.buffer, g = gridOf(t.z, t.x, t.y);
+      var mPerUnit = sizeM(t.z, P.tileLonLat(t.z, t.x, t.y, 0.5, 0.5).lat) / ext, extU = set.extendM / mPerUnit;
+      var pos = [], idx = [], nRings = 0;
+      for (var fi = 0; fi < mk.features.length; fi++) {
+        var f = mk.features[fi];
+        if (f.type !== 3 || !set.classes[f.props.luokka]) continue;
+        var polys = groupRings(f.parts);
+        for (var pi = 0; pi < polys.length; pi++) {
+          var pl = polys[pi], rings = [offsetRing(pl.outer, extU, lo, hi)];
+          for (var hi2 = 0; hi2 < pl.holes.length; hi2++) {
+            var h = pl.holes[hi2], minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+            for (var q = 0; q < h.length; q += 2) { minx = Math.min(minx, h[q]); maxx = Math.max(maxx, h[q]); miny = Math.min(miny, h[q + 1]); maxy = Math.max(maxy, h[q + 1]); }
+            // aivan pientä reikää (alle 6 m) ei siirretä sisäänpäin, ettei se kutistu käänteiseksi
+            rings.push(Math.max(maxx - minx, maxy - miny) * mPerUnit < 6 ? offsetRing(h, 0, lo, hi) : offsetRing(h, extU, lo, hi));
+          }
+          var contour = [], holes = [], base = pos.length / 3, r, i;
+          for (r = 0; r < rings.length; r++) {
+            var ring = rings[r], vs = [];
+            for (i = 0; i < ring.length; i += 2) {
+              var en = mapPt(g, ring[i] / ext, ring[i + 1] / ext);
+              pos.push(en[0] - set.refE, 0, -(en[1] - set.refN));
+              vs.push(new THREE.Vector2(ring[i], ring[i + 1]));
+            }
+            if (r === 0) contour = vs; else holes.push(vs);
+            nRings++;
+          }
+          var tri;
+          try { tri = THREE.ShapeUtils.triangulateShape(contour, holes); } catch (e) { tri = []; }
+          for (i = 0; i < tri.length; i++) {   // kolmion pinta ylöspäin (normaalin y positiivinen), jotta FrontSide-materiaali ei karsi sitä
+            var a = tri[i], p0 = (base + a[0]) * 3, p1 = (base + a[1]) * 3, p2 = (base + a[2]) * 3;
+            var ny = (pos[p1 + 2] - pos[p0 + 2]) * (pos[p2] - pos[p0]) - (pos[p1] - pos[p0]) * (pos[p2 + 2] - pos[p0 + 2]);
+            if (ny >= 0) idx.push(base + a[0], base + a[1], base + a[2]); else idx.push(base + a[0], base + a[2], base + a[1]);
+          }
+        }
+      }
+      stats.rings += nRings;
+      if (!idx.length) return { pos: new Float32Array(0), idx: new Uint32Array(0) };
+      return { pos: Float32Array.from(pos), idx: Uint32Array.from(idx) };
+    }
+
+    function select(x, y) {
+      last.x = x; last.y = y;
+      var ll = P.worldToLonLat(x, y), t = P.lonlatToTile(ll.lon, ll.lat, set.z), sz = sizeM(set.z, ll.lat), rr = Math.ceil(set.radiusM / sz) + 1, cx = Math.floor(t.x), cy = Math.floor(t.y);
+      var out = [], bw = P.lonlatToEN(ll.lon, ll.lat);
+      for (var dy = -rr; dy <= rr; dy++) for (var dx = -rr; dx <= rr; dx++) {
+        var tx = cx + dx, ty = cy + dy, c = P.tileLonLat(set.z, tx, ty, 0.5, 0.5), en = P.lonlatToEN(c.lon, c.lat);
+        if (Math.hypot(en.e - bw.e, en.n - bw.n) - sz * 0.72 > set.radiusM) continue;
+        var k = key(set.z, tx, ty), tl = tiles.get(k);
+        if (!tl) { tl = { k: k, z: set.z, x: tx, y: ty, state: 'new', geo: null, d: Math.hypot(en.e - bw.e, en.n - bw.n) }; tiles.set(k, tl); }
+        tl.d = Math.hypot(en.e - bw.e, en.n - bw.n); out.push(tl);
+      }
+      out.sort(function (a, b) { return a.d - b.d; });
+      wanted = out; queue = out.filter(function (t2) { return t2.state === 'new'; });
+      dirty = true;
+      // muistista poistetaan kaukaiset ruudut
+      if (tiles.size > 120) { var keep = new Set(out.map(function (t3) { return t3.k; })); tiles.forEach(function (t4, k4) { if (!keep.has(k4) && t4.state !== 'loading') tiles.delete(k4); }); }
+    }
+
+    function rebuild() {
+      var np = 0, ni = 0, list = [];
+      wanted.forEach(function (t) { if (t.state === 'ready' && t.geo && t.geo.idx.length) { list.push(t); np += t.geo.pos.length; ni += t.geo.idx.length; } });
+      var pos = new Float32Array(np), idx = new Uint32Array(ni), po = 0, io = 0;
+      list.forEach(function (t) {
+        pos.set(t.geo.pos, po); var vo = po / 3;
+        for (var i = 0; i < t.geo.idx.length; i++) idx[io + i] = t.geo.idx[i] + vo;
+        po += t.geo.pos.length; io += t.geo.idx.length;
+      });
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      var old = mesh.geometry; mesh.geometry = geo; if (old) old.dispose();
+      mesh.visible = active && ni > 0; stats.tris = ni / 3; stats.verts = np / 3; version++;
+      placeMesh();
+    }
+    function placeMesh() {
+      var w = P.enToWorld(set.refE, set.refN);
+      mesh.position.set(w.x, 0, -w.y); mesh.updateMatrix(); mesh.matrixWorldNeedsUpdate = true;
+    }
+
+    // Aikaviipale: lataa ja rakentaa enintään yhden ruudun kerrallaan
+    function tick(budgetMs) {
+      if (!active) return false;
+      var t0 = performance.now(), changed = false;
+      while (queue.length && jobs < 2 && performance.now() - t0 < budgetMs) {
+        var t = queue.shift(); if (t.state !== 'new') continue;
+        t.state = 'loading'; jobs++;
+        (function (tl) {
+          A.layers(tl.z, tl.x, tl.y, ['maastokuvio']).then(function (lyr) { tl.lyr = lyr; tl.state = 'built-wait'; jobs--; }, function () { tl.state = 'empty'; jobs--; });
+        })(t);
+      }
+      // rakennus yksi ruutu kerrallaan
+      for (var i = 0; i < wanted.length && performance.now() - t0 < budgetMs; i++) {
+        var w = wanted[i];
+        if (w.state !== 'built-wait') continue;
+        var s = performance.now();
+        if (!w.lyr) { w.state = 'empty'; stats.empty++; changed = true; continue; }
+        try { w.geo = buildTile(w, w.lyr); w.state = w.geo ? 'ready' : 'empty'; } catch (e) { w.state = 'empty'; if (root.console) console.error('vesimaski', e); }
+        w.lyr = null; stats.loaded++; changed = true;
+        var d = performance.now() - s; stats.buildMs += d; stats.maxMs = Math.max(stats.maxMs, d);
+        break;
+      }
+      if (changed || dirty) { dirty = false; rebuild(); }
+      return changed;
+    }
+    function sync(x, y) {
+      if (!active) return;
+      if (Math.hypot(x - last.x, y - last.y) > set.reselectM) select(x, y);
+    }
+    function setActive(on) {
+      on = !!on; if (on === active) return; active = on;
+      if (!on) mesh.visible = false; else { last.x = last.y = 1e9; if (mesh.geometry.index) mesh.visible = true; }
+    }
+    function rebase() { placeMesh(); last.x = last.y = 1e9; }
+    function idle() { return active && !queue.length && jobs === 0 && !wanted.some(function (t) { return t.state === 'built-wait' || t.state === 'loading' || t.state === 'new'; }); }
+    function setMaterial(m) { mat = m; mesh.material = m; }
+    function info() { return { tiles: tiles.size, wanted: wanted.length, ready: wanted.filter(function (t) { return t.state === 'ready'; }).length, empty: wanted.filter(function (t) { return t.state === 'empty'; }).length, stats: stats, visible: mesh.visible, version: version }; }
+    return { mesh: mesh, sync: sync, tick: tick, setActive: setActive, rebase: rebase, idle: idle, setMaterial: setMaterial, info: info, settings: set };
+  }
+
+  var api = { create: create, SETTINGS: SET, groupRings: groupRings, offsetRing: offsetRing, ringArea: ringArea };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Vesimaski3D = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
 /* Simulaattori – kuljettajan näkymä (three.js).
  *
  * Maailmakoordinaatit: three.js (x, y, z) = (E, ylös, -N) metreinä origon suhteen (Paikka.enToWorld), järven pinta on y = 0.
  * Alus: rig-ryhmä on aluksen kääntö- ja kallistuspiste, ja runkomalli (malli: x keulaan, y SB, z ylös) on sen alla.
  * Kamera on ohjaamon sisällä ruorimiehen silmäpisteessä ja liikkuu rungon mukana, joten trimmi ja kallistus näkyvät.
- * Taivas ja vesi ovat omia varjostimiaan, ja sumu on sama kaava kummassakin kuin maastolla (FogExp2). */
+ * Taivas ja vesi ovat omia varjostimiaan, ja sumu on sama kaava kummassakin kuin maastolla (FogExp2).
+ *
+ * Vaihe 3n, kerrostila (setOverlay): Google 3D on näkymän alin kerros ja tämä kangas on sen päällä läpinäkyvällä taustalla. Silloin taivas, maastoväri, puusto, laiturit, sillat ja maamerkit
+ * eivät piirry (Google näyttää ne), vesi piirretään vain vesipolygoneista (vesimaski3d.js) ja maastoverkko ja rakennukset piirretään vain syvyyspuskuriin (peitto) tai, jos sumukerros on päällä,
+ * sumun värisenä ja etäisyydestä riippuvalla peittävyydellä. Kamera irrotetaan rungon keinunnasta ja asetetaan samaan paikkaan ja suuntaan kuin Googlen kamera. */
 (function (root) {
   'use strict';
   var THREE = root.THREE, P = root.Paikka;
@@ -9404,7 +9630,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var veil = document.createElement('div'); veil.className = 'view3d-veil';
     veil.style.cssText = 'position:absolute;inset:0;pointer-events:none;opacity:0';
     container.appendChild(veil);
-    var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.preserve });
+    var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, alpha: true, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.preserve });   // alpha: kerrostila (vaihe 3n) tarvitsee läpinäkyvän taustan, oma näkymä piirtää kuten ennen (tausta alfa 1)
     renderer.setClearColor(0xcfdce8, 1);
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = S.exposure;
@@ -9429,6 +9655,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var water = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 1, 1), waterFull);
     water.rotation.x = -Math.PI / 2; water.frustumCulled = false; water.renderOrder = -5; scene.add(water);
     scene.fog = new THREE.FogExp2(0xcfe0ee, S.fogDensity);
+    // vaihe 3n: oma vesi vain vesipolygoneista (kerrostila)
+    var wmask = root.Vesimaski3D ? root.Vesimaski3D.create(scene, { material: waterFull }) : null;
     // tuuli: aallot etenevät myötätuuleen, amplitudi kasvaa tuulen voiman mukana (3 m/s = 1)
     function setWind(fromDeg, speed) {
       if (fromDeg != null) S.windFromDeg = fromDeg; if (speed != null) S.windSpeed = speed;
@@ -9442,7 +9670,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     function setQuality(q) {
       quality = q === 'light' ? 'light' : 'full';
       var full = quality === 'full';
-      water.material = full ? waterFull : waterLight;
+      water.material = full ? waterFull : waterLight; if (wmask) wmask.setMaterial(water.material);
       U.uCloud.value = full ? S.cloudCover : 0;
       if (terrain && terrain.setQuality) terrain.setQuality(quality);
     }
@@ -9509,6 +9737,72 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     function placeCamera() { camera.position.set(S.eyeX - S.pivotX, eyeZ() - S.waterlineZ, S.eyeY); }
     placeCamera();
 
+    // ---- kerrostila (vaihe 3n) ----
+    // ov.on: Google-kerroksen päällä piirtävä tila. fogKm: sumukerroksen näkyvyys (0 = ei sumukerrosta). cal: kalibrointi (oman kameran korjaukset Googlen todelliseen käytökseen).
+    var horColor = new THREE.Color(0xcfdce8);
+    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.25, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
+    ov.mat = new THREE.ShaderMaterial({
+      uniforms: { uFogColor: { value: U.uFogColor.value }, uInvVis: { value: 0 }, uLower: { value: ov.lower } },
+      blending: THREE.NoBlending, fog: false, toneMapped: false, colorWrite: false,
+      vertexShader: 'varying vec3 vW; uniform float uLower; void main(){ vec4 w0 = modelMatrix * vec4(position, 1.0); float dd = length(w0.xz - cameraPosition.xz); vec3 p = position; if (position.y < -1.0) p.y -= dd * dd * 8.0e-7; p.y -= uLower; vec4 w = modelMatrix * vec4(p, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: 'uniform vec3 uFogColor; uniform float uInvVis; varying vec3 vW; void main(){ float d = length(cameraPosition - vW); float a = 1.0 - exp(-d * uInvVis); gl_FragColor = vec4(uFogColor * a, a); }'
+    });
+    // taivaan sumukupu: kaukana (yli maastoaineiston) horisontin lähellä oleva sumu, kun sumukerros on päällä
+    ov.dome = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), new THREE.ShaderMaterial({
+      uniforms: { uFogColor: { value: U.uFogColor.value }, uFarA: { value: 0 }, uElev: { value: ov.domeElevDeg } },
+      side: THREE.BackSide, transparent: true, depthWrite: false, depthTest: true, fog: false, toneMapped: false,
+      vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }',
+      fragmentShader: 'uniform vec3 uFogColor; uniform float uFarA; uniform float uElev; varying vec3 vDir; void main(){ float el = degrees(asin(clamp(vDir.y, -1.0, 1.0))); float a = uFarA * (1.0 - smoothstep(0.0, uElev, el)); gl_FragColor = vec4(uFogColor, a); }'
+    }));
+    ov.dome.frustumCulled = false; ov.dome.visible = false; ov.dome.renderOrder = 90; scene.add(ov.dome);
+    function applyFog() {
+      var dens = ov.on && ov.fogKm > 0 ? 1 / (ov.fogKm * 1000) : S.fogDensity;
+      scene.fog.density = dens; U.uFogDensity.value = dens;
+      ov.mat.uniforms.uInvVis.value = ov.on && ov.fogKm > 0 ? 1 / (ov.fogKm * 1000) : 0;
+      ov.mat.colorWrite = ov.on && ov.fogKm > 0;
+      ov.dome.material.uniforms.uFarA.value = ov.on && ov.fogKm > 0 ? 1 - Math.exp(-ov.domeDist / (ov.fogKm * 1000)) : 0;
+      ov.dome.visible = ov.on && ov.fogKm > 0;
+    }
+    function layerSet(o, l) { if (o && o.layers) o.layers.set(l); }
+    // kerrostilassa piirrettävät ja piilotettavat: maastoverkko ja rakennukset ovat tasolla 2 (syvyys- ja sumukierros), latvusto ja puut tasolla 3 (ei piirretä)
+    function overlayLayers() {
+      var i;
+      if (terrain && terrain.nodes) terrain.nodes.forEach(function (n) {
+        layerSet(n.mesh, 2); layerSet(n.bmesh, 2); layerSet(n.shell, 3);
+        if (n.tmeshes) for (var q = 0; q < n.tmeshes.length; q++) layerSet(n.tmeshes[q], 3);
+      });
+      for (i = 0; i < scene.children.length; i++) { var o = scene.children[i]; if (ov.hide[o.name] || ov.hidden.indexOf(o) >= 0) layerSet(o, 1); }
+    }
+    function restoreLayers() {
+      if (terrain && terrain.nodes) terrain.nodes.forEach(function (n) {
+        layerSet(n.mesh, 0); layerSet(n.bmesh, 0); layerSet(n.shell, 0);
+        if (n.tmeshes) for (var q = 0; q < n.tmeshes.length; q++) layerSet(n.tmeshes[q], 0);
+      });
+      for (var i = 0; i < scene.children.length; i++) layerSet(scene.children[i], 0);
+    }
+    function overlayCamera() { return ov.on && !freeCam; }
+    function setOverlay(on) {
+      on = !!on; if (on === ov.on) return;
+      ov.on = on;
+      if (on) {
+        layerSet(sky, 1); layerSet(water, 1);
+        if (wmask) { wmask.setMaterial(water.material); wmask.setActive(true); }
+        renderer.setClearColor(0x000000, 0);
+        if (!freeCam) { rig.remove(camera); scene.add(camera); camera.rotation.order = 'YXZ'; }
+        veil.style.display = 'none';
+      } else {
+        if (wmask) wmask.setActive(false);
+        restoreLayers();
+        renderer.setClearColor(horColor, 1);
+        if (!freeCam) { scene.remove(camera); rig.add(camera); camera.rotation.order = 'YXZ'; placeCamera(); }
+        veil.style.display = '';
+      }
+      applyFog(); updateFov();
+    }
+    function setFogKm(km) { ov.fogKm = Math.max(0, +km || 0); applyFog(); }
+    function setCalib(c) { c = c || {}; ov.cal.dHeadingDeg = +c.dHeadingDeg || 0; ov.cal.dPitchDeg = +c.dPitchDeg || 0; ov.cal.tanScale = (+c.tanScale > 0.3 && +c.tanScale < 3) ? +c.tanScale : 1; updateFov(); }
+    function overlayHide(o) { if (ov.hidden.indexOf(o) < 0) ov.hidden.push(o); if (ov.on) layerSet(o, 1); }
+
     // ---- tila ----
     var gaze = 0, gazeCmd = 0, w = 1, h = 1, dpr = Math.min(root.devicePixelRatio || 1, 3), pixelMp = S.pixelBudgetMp;
     var sun = { elevDeg: 45, azDeg: 180 }, sunDirW = new THREE.Vector3(0, 1, 0), simMs = Date.now();
@@ -9524,9 +9818,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       camera.position.set(pos[0], pos[1], pos[2]); camera.up.set(0, 1, 0); camera.lookAt(look[0], look[1], look[2]);
       if (fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     }
-    function clearFree() { if (freeCam) { scene.remove(camera); rig.add(camera); camera.rotation.order = 'YXZ'; freeCam = false; placeCamera(); updateFov(); } }
+    function clearFree() { if (freeCam) { scene.remove(camera); camera.rotation.order = 'YXZ'; freeCam = false; if (ov.on) scene.add(camera); else { rig.add(camera); placeCamera(); } updateFov(); } }
 
-    var compact = false;
+    var compact = false, reqVfov = 45;
     function setSize(cw, ch, compactMode) {
       w = Math.max(1, cw); h = Math.max(1, ch); compact = !!compactMode;
       applyPixelRatio();
@@ -9542,6 +9836,10 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var asp = w / h, v;
       if (bino.on) v = 2 * Math.atan(Math.tan(S.kiikariHfovDeg * RAD / 2) / asp) / RAD;   // kiikarissa vaakakuvakulma on aina kiikariHfovDeg
       else v = baseVfov(asp);
+      // kerrostila: Googlen fov hyväksyy vain 5 ... 80 astetta (pyydetty arvo), ja oma kamera käyttää Googlen todellista kuvakulmaa (kalibroitu tangentin kerroin)
+      if (ov.on) v = Math.min(ov.fovMax, Math.max(ov.fovMin, v));
+      reqVfov = v;
+      if (ov.on) v = 2 * Math.atan(Math.tan(v * RAD / 2) * ov.cal.tanScale) / RAD;
       camera.fov = v; camera.aspect = asp; camera.updateProjectionMatrix();
     }
     function baseVfov(asp) { return asp >= 1 ? 2 * Math.atan(Math.tan((compact ? S.hfovCompactDeg : S.hfovDeg) * RAD / 2) / asp) / RAD : S.portraitVfovDeg; }
@@ -9590,7 +9888,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       sunL.intensity = m.sunI * smooth01((e + 2) / 6);
       hemi.color.copy(m.hemiSky); hemi.groundColor.copy(m.hemiGnd); hemi.intensity = m.hemiI;
       scene.fog.color.copy(m.hor);
-      renderer.setClearColor(m.hor, 1);
+      horColor.copy(m.hor); if (!ov.on) renderer.setClearColor(m.hor, 1);
     }
     function sunScreen() {
       // auringon paikka kuvassa ja katseen suunta: päivän sumennus vastavalossa
@@ -9621,7 +9919,13 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       rig.rotation.set((st.roll + bobR) * RAD, yaw, (st.trim + bobP) * RAD);
       // katse
       gaze += (gazeCmd - gaze) * Math.min(1, dt * 8);
-      if (!freeCam) {
+      if (!freeCam && ov.on) {
+        // kerrostila: kamera ei keinu rungon mukana vaan on samassa paikassa ja suunnassa kuin Googlen kamera (silmäpiste aluksen suunnan mukaan, vaakasuora katse, ei kiikarin tärinää)
+        bino.shakeYaw = 0; bino.shakePitch = 0;
+        var hr = st.hdg * RAD, fw = S.eyeX - S.pivotX, sb = S.eyeY;
+        camera.position.set(st.x + Math.sin(hr) * fw + Math.cos(hr) * sb, eyeZ() - S.waterlineZ, -(st.y + Math.cos(hr) * fw - Math.sin(hr) * sb));
+        camera.rotation.set(ov.cal.dPitchDeg * RAD, -(st.hdg + gaze + ov.cal.dHeadingDeg) * RAD, 0);
+      } else if (!freeCam) {
         if (bino.on) {
           rig.updateMatrixWorld(true);
           // käden tärinä kasvaa nopeuden ja aallokon mukana (keskihajonta = puolet asetuksen amplitudista)
@@ -9641,7 +9945,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       rig.updateMatrixWorld(true);
       // vesi ja taivas seuraavat kameraa
       var cp = camera.getWorldPosition(new THREE.Vector3());
-      water.position.set(cp.x, 0, cp.z); sky.position.copy(cp);
+      water.position.set(cp.x, 0, cp.z); sky.position.copy(cp); ov.dome.position.copy(cp);
       U.uTime.value += dt;
       terrain.setBoat(st.x, st.y); aids3d.sync(st.x, st.y); if (piers) piers.sync(st.x, st.y);
       var kpx = 2 * Math.tan(camera.fov * RAD / 2);   // kuvapikselin koko: laitepikselinä (css-korkeus x laitepikselisuhde) ja piirtopuskurin pikselinä
@@ -9654,10 +9958,19 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         veil.style.background = 'radial-gradient(circle at ' + ss.x.toFixed(1) + '% ' + ss.y.toFixed(1) + '%, rgba(255,246,222,0.95), rgba(255,246,222,0.35) 45%, rgba(255,246,222,0.12) 100%)';
       } else veil.style.opacity = 0;
       renderer.info.reset();
-      renderer.render(scene, camera);
+      if (ov.on) { overlayLayers(); if (wmask) { wmask.sync(st.x, st.y); wmask.tick(4); } }
+      drawScene();
       var t1 = performance.now();
       frames.push(t1 - t0); if (frames.length > 240) frames.shift();
       return t1 - t0;
+    }
+    // Piirto: tavallisesti yksi kierros. Kerrostilassa ensin maastoverkko ja rakennukset (taso 2) syvyyspuskuriin ja sumun värisinä, sitten muu (vesi, vene, turvalaitteet, sumukupu) syvyystestillä.
+    function drawScene() {
+      if (!ov.on) { renderer.render(scene, camera); return; }
+      var ac = renderer.autoClear;
+      renderer.autoClear = true; camera.layers.set(2); scene.overrideMaterial = ov.mat; renderer.render(scene, camera);
+      scene.overrideMaterial = null; camera.layers.set(0); renderer.autoClear = false; renderer.render(scene, camera);
+      renderer.autoClear = ac;
     }
     function rendererStats() {
       var i = renderer.info;
@@ -9669,7 +9982,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       return { median: s[Math.floor(s.length / 2)], p95: s[Math.floor(s.length * 0.95)], n: s.length };
     }
     function resetFrameStats() { frames = []; }
-    function rebase() { terrain.rebase(); aids3d.rebase(); landmarks.rebase(); if (piers) piers.rebase(); extra.forEach(function (e) { if (e.rebase) e.rebase(); }); }
+    function rebase() { if (wmask) wmask.rebase(); terrain.rebase(); aids3d.rebase(); landmarks.rebase(); if (piers) piers.rebase(); extra.forEach(function (e) { if (e.rebase) e.rebase(); }); }
     function addExtra(o) { extra.push(o); return o; }
 
     return {
@@ -9678,6 +9991,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       setPixelBudget: setPixelBudget, getPixelBudget: getPixelBudget, rendererStats: rendererStats, frameStats: frameStats, resetFrameStats: resetFrameStats,
       rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; },
       setFree: setFree, clearFree: clearFree,
+      setOverlay: setOverlay, isOverlay: function () { return ov.on; }, setFogKm: setFogKm, getFogKm: function () { return ov.fogKm; }, setCalib: setCalib, getCalib: function () { return { dHeadingDeg: ov.cal.dHeadingDeg, dPitchDeg: ov.cal.dPitchDeg, tanScale: ov.cal.tanScale }; },
+      vfovRequested: function () { return reqVfov; }, eyeAboveWaterM: function () { return eyeZ() - S.waterlineZ; }, overlayHide: overlayHide, wmask: wmask, overlayMat: ov.mat, overlayDome: ov.dome, overlaySettings: ov,
       setCameraPitch: function (d) { camPitchDeg = d; }, isSeated: function () { return seated; },
       setWind: setWind, getWind: function () { return { fromDeg: S.windFromDeg, speed: S.windSpeed }; }, setQuality: setQuality, getQuality: function () { return quality; },
       setBinoculars: setBinoculars, isBino: function () { return bino.on; }, setBinoPitch: setBinoPitch, getBinoPitch: function () { return bino.pitch; },
@@ -9744,7 +10059,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
 
 </script>
 <script>
-/* Simulaattori – Google 3D -näkymä (testi, vaihe 3m).
+/* Simulaattori – Google 3D -näkymä (testi, vaihe 3m, kerrostus vaihe 3n).
  *
  * Valinnainen ulkonäkymä, joka korvaa oman three.js-näkymän Googlen Maps JavaScript API:n 3D-kartalla (Map3DElement, fotorealistiset 3D-tiilet).
  * Oma näkymä piilotetaan eikä tuhota, joten paluu on heti. Kirjasto ladataan vasta, kun käyttäjä on antanut oman API-avaimen,
@@ -9760,6 +10075,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
  * katseen suuntaan range metrin päähän. Korkeus on metreinä keskimerenpinnan yläpuolella (Googlen ohje: ABSOLUTE = EGM96-keskimerenpinta), eli
  * järven pinta 95,5 m N2000 plus silmän korkeus vedenpinnasta. N2000:n ja EGM96:n ero on Suomessa alle noin metrin (arvio, ei varmennettu),
  * ja korjaus on asetus altOffsetM (selaimen muisti sim.googleAltOffset).
+ *
+ * Vaihe 3n: Map3DElement on #v3-ruudun alin kerros ja oma three.js-kangas (läpinäkyvä tausta) on sen päällä, joten kartta ei enää piilota omaa näkymää.
+ * Kartta luodaan ajon aikana vain kerran (Immersive Maps laskuttaa karttalatauksen) ja pidetään elossa piilotettuna (display:none), kun käyttäjä vaihtaa omaan näkymään.
+ * Uusi lataus syntyy vain sivun uudelleenlatauksesta tai virheestä, joka pakottaa elementin hylkäämään (stats.loads laskee luodut elementit).
+ * Kalibrointi (calib) koskee vain omaa kameraa: Googlelle lähetetään aina nimelliset arvot ja oma kamera sovitetaan Googlen todelliseen käytökseen.
  *
  * Moduuli toimii selaimessa (window.Google3D) ja Nodessa (module.exports, vain laskenta). */
 (function (root) {
@@ -9779,7 +10099,10 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     minIntervalMs: 15,        // kameran päivitys joka kuvalla, enintään noin 60 kertaa sekunnissa
     steadyTimeoutMs: 25000,   // jos kartta ei vakiinnu tässä ajassa, näytetään huomautus
     keyStore: 'sim.googleKey',
-    altStore: 'sim.googleAltOffset'
+    altStore: 'sim.googleAltOffset',
+    calibStore: 'sim.googleKalib',
+    attribClipPx: 24,         // oman kankaan alareunasta rajataan tämän verran pois, jotta Googlen lähdemerkintä (logo ja tietolähteet) jää näkyviin
+    fogLevelsKm: [0, 20, 10, 5, 2, 1]   // sumukerroksen näkyvyys (km), 0 = ei sumukerrosta
   };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -9825,9 +10148,10 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var eye = offsetLatLon(p.lat, p.lon, east, north);
     var alt = S.waterN2000M + up + off;
     // keskipiste: silmästä katseen suuntaan range metrin päähän samalla korkeudella (tilt 90), jolloin kamera on silmäpisteessä
-    var c = moveAlong(eye.lat, eye.lon, look, range);
+    // katse alaspäin (pitchDownDeg, vain alaspäin, koska Googlen tilt ei sisällä vaakatason yläpuolta): kamera on keskipisteen yläpuolella
+    var pd = clamp(p.pitchDownDeg || 0, 0, 60), c = moveAlong(eye.lat, eye.lon, look, range * Math.cos(pd * RAD));
     var fov = clamp(p.vfovDeg != null ? p.vfovDeg : 45, S.fovMinDeg, S.fovMaxDeg);
-    return { lat: c.lat, lng: c.lon, altitude: alt, range: range, heading: look, tilt: tilt, fov: fov, eye: { lat: eye.lat, lng: eye.lon, altitude: alt } };
+    return { lat: c.lat, lng: c.lon, altitude: alt - range * Math.sin(pd * RAD), range: range, heading: look, tilt: tilt - pd, fov: fov, eye: { lat: eye.lat, lng: eye.lon, altitude: alt } };
   }
 
   // ---------- avain (selaimen muisti) ----------
@@ -9855,6 +10179,118 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   }
   function altOffset() {
     try { var v = parseFloat(localStorage.getItem(SETTINGS.altStore)); return isFinite(v) ? v : SETTINGS.altOffsetM; } catch (e) { return SETTINGS.altOffsetM; }
+  }
+
+
+  // ---------- kalibrointi (vaihe 3n) ----------
+  // Oman kameran korjaukset Googlen todelliseen käytökseen: dHeadingDeg (suunta), dPitchDeg (nousukulma, positiivinen = ylös), tanScale (kuvakulman tangentin kerroin,
+  // 1 = Googlen fov täsmää) ja altOffsetM (Googlen kameran korkeuskorjaus, sama kuin vaiheen 3m sim.googleAltOffset). Tallennus selaimen muistiin (sim.googleKalib).
+  var CAL0 = { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1, altOffsetM: null };
+  var memCalib = null;   // muistissa pidettävä kopio, jotta kalibrointi toimii myös silloin, kun selaimen muisti on estetty
+  function getCalib() {
+    var c = { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1, altOffsetM: altOffset() };
+    try {
+      var o = null;
+      try { o = JSON.parse(localStorage.getItem(SETTINGS.calibStore) || 'null'); } catch (e0) { o = null; }
+      if (!o) o = memCalib;
+      if (o) {
+        if (isFinite(o.dHeadingDeg)) c.dHeadingDeg = clamp(+o.dHeadingDeg, -10, 10);
+        if (isFinite(o.dPitchDeg)) c.dPitchDeg = clamp(+o.dPitchDeg, -10, 10);
+        if (isFinite(o.tanScale)) c.tanScale = clamp(+o.tanScale, 0.7, 1.4);
+        if (isFinite(o.altOffsetM)) c.altOffsetM = clamp(+o.altOffsetM, -50, 50);
+      }
+    } catch (e) {}
+    return c;
+  }
+  function setCalib(c) {
+    memCalib = c ? JSON.parse(JSON.stringify(c)) : null;
+    try { if (c) localStorage.setItem(SETTINGS.calibStore, JSON.stringify(c)); else localStorage.removeItem(SETTINGS.calibStore); } catch (e) {}
+    return getCalib();
+  }
+
+  // Tunnetut kohteet (TM35FIN E, N ja korkeus N2000). Näsinneula: huippu 168 m maasta (maanpinta 109,16 m), Tampellan piippu ja Naistenlahden piippu:
+  // vuoden 2008 keilauksen huippu (maamerkit.json), Siilinkarin loisto: valon korkeus 6,5 m vedestä (Väyläviraston turvalaiteaineisto), aallonmurtajan päät:
+  // vesieste-kerroksen viivan päätepisteet (korkeus 1,2 m vedestä, sama kuin vaiheen 3j rakennetun rannan korkeus).
+  var CAL_TARGETS = [
+    { id: 'nasinneula', nimi: 'Näsinneulan huippu', e: 326712.7, n: 6823364.1, z: 109.16 + 168 },
+    { id: 'tampella', nimi: 'Tampellan piipun huippu', e: 327814.7, n: 6823430.5, z: 199.62 },
+    { id: 'siilinkari', nimi: 'Siilinkarin loisto (valo)', e: 328045.6, n: 6824882.4, z: 95.5 + 6.5 },
+    { id: 'naistenlahti', nimi: 'Naistenlahden voimalaitoksen piippu', e: 328508.2, n: 6823853.2, z: 189.02, huom: 'uusi piippu, näkyy vain jos Googlen malli on tuore' },
+    { id: 'aallonmurtaja1', nimi: 'Naistenlahden aallonmurtajan eteläpää', e: 328375, n: 6823674, z: 95.5 + 1.2 },
+    { id: 'aallonmurtaja2', nimi: 'Naistenlahden aallonmurtajan pohjoispää', e: 328457, n: 6823887, z: 95.5 + 1.2 }
+  ];
+
+  // Kohteen suunta (ruutusuunta, aste), korkeuskulma (aste) ja etäisyys silmästä. dE, dN, dU metreinä. Maan kaarevuus otetaan huomioon (Googlen maapallo).
+  function viewAngles(dE, dN, dU, noCurv) {
+    var d = Math.hypot(dE, dN), up = dU - (noCurv ? 0 : d * d / (2 * 6371000));
+    return { az: ((Math.atan2(dE, dN) / RAD) % 360 + 360) % 360, el: Math.atan2(up, d) / RAD, dist: Math.hypot(d, dU) };
+  }
+  // Suunta/korkeuskulma -> kuvapiste. cam: heading (aste), pitch (aste, ylös positiivinen), vfov (aste), tanScale, w, h (kuvan koko). Palauttaa { u, v, z } tai null, jos kohde on kameran takana.
+  function projectRay(az, el, cam) {
+    var b = az * RAD, e = el * RAD, h = cam.heading * RAD, p = (cam.pitch || 0) * RAD;
+    var dx = Math.sin(b) * Math.cos(e), dy = Math.sin(e), dz = Math.cos(b) * Math.cos(e);
+    var fz = Math.sin(h) * Math.cos(p) * dx + Math.sin(p) * dy + Math.cos(h) * Math.cos(p) * dz;
+    if (fz <= 1e-6) return null;
+    var rx = Math.cos(h) * dx - Math.sin(h) * dz, uy = -Math.sin(h) * Math.sin(p) * dx + Math.cos(p) * dy - Math.cos(h) * Math.sin(p) * dz;
+    var f = (cam.h / 2) / (Math.tan(cam.vfov * RAD / 2) * (cam.tanScale || 1));
+    return { u: cam.w / 2 + f * rx / fz, v: cam.h / 2 - f * uy / fz, z: fz, f: f };
+  }
+  /* Sovitus: näytteet [{ az, el, heading, pitch, vfov, w, h, u, v }] (u, v = käyttäjän osoittama kohdan paikka Googlen kuvassa). Etsitään korjaukset
+   * (dHeadingDeg, dPitchDeg, tanScale), joilla oman kameran ennuste osuu osoitettuihin pisteisiin (pienimmän neliösumman Gauss-Newton, Levenberg-Marquardt).
+   * Yhdellä näytteellä sovitetaan vain suunta ja nousukulma, kahdella tai useammalla myös kuvakulma. Palauttaa korjaukset ja jäännökset asteina (vaaka ja pysty). */
+  function fitCalibration(samples, opts) {
+    opts = opts || {};
+    var n = samples.length, fitK = opts.fitScale != null ? !!opts.fitScale : n >= 2;
+    var th = [0, 0, 1];   // dh, dp, k
+    function resid(t, list) {
+      var out = [];
+      for (var i = 0; i < list.length; i++) {
+        var s = list[i], pr = projectRay(s.az, s.el, { heading: s.heading + t[0], pitch: (s.pitch || 0) + t[1], vfov: s.vfov, tanScale: t[2], w: s.w, h: s.h });
+        if (!pr) return null;
+        out.push(pr.u - s.u, pr.v - s.v);
+      }
+      return out;
+    }
+    var r = resid(th, samples); if (!r) return null;
+    function sse(rr) { var q = 0; for (var i = 0; i < rr.length; i++) q += rr[i] * rr[i]; return q; }
+    var lam = 1e-3, cost = sse(r), np = fitK ? 3 : 2;
+    for (var it = 0; it < 60; it++) {
+      var J = [], steps = [0.01, 0.01, 0.0005];
+      for (var j = 0; j < np; j++) {
+        var t2 = th.slice(); t2[j] += steps[j]; var r2 = resid(t2, samples); if (!r2) return null;
+        J.push(r2.map(function (v, i) { return (v - r[i]) / steps[j]; }));
+      }
+      var A = [], g = [];
+      for (var a = 0; a < np; a++) { A.push([]); g.push(0); for (var b2 = 0; b2 < np; b2++) { var q = 0; for (var i2 = 0; i2 < r.length; i2++) q += J[a][i2] * J[b2][i2]; A[a].push(q); } for (var i3 = 0; i3 < r.length; i3++) g[a] += J[a][i3] * r[i3]; }
+      var improved = false;
+      for (var tries = 0; tries < 12; tries++) {
+        var M = A.map(function (row, ri) { return row.map(function (v, ci) { return ri === ci ? v * (1 + lam) + 1e-9 : v; }); });
+        var dx = solve(M, g.map(function (v) { return -v; })); if (!dx) { lam *= 10; continue; }
+        var t3 = th.slice(); for (var k = 0; k < np; k++) t3[k] += dx[k];
+        var r3 = resid(t3, samples);
+        if (r3 && sse(r3) < cost) { th = t3; r = r3; cost = sse(r3); lam = Math.max(1e-9, lam / 3); improved = true; break; }
+        lam *= 4;
+      }
+      if (!improved) break;
+    }
+    var res = samples.map(function (s, i) {
+      var f = projectRay(s.az, s.el, { heading: s.heading + th[0], pitch: (s.pitch || 0) + th[1], vfov: s.vfov, tanScale: th[2], w: s.w, h: s.h }).f;
+      var pr0 = projectRay(s.az, s.el, { heading: s.heading, pitch: s.pitch || 0, vfov: s.vfov, tanScale: 1, w: s.w, h: s.h });
+      return { fitHorDeg: r[2 * i] / f / RAD, fitVerDeg: r[2 * i + 1] / f / RAD, rawHorDeg: pr0 ? (pr0.u - s.u) / pr0.f / RAD : null, rawVerDeg: pr0 ? (pr0.v - s.v) / pr0.f / RAD : null };
+    });
+    return { dHeadingDeg: th[0], dPitchDeg: th[1], tanScale: th[2], rmsPx: Math.sqrt(cost / Math.max(1, n)), residuals: res, fittedScale: fitK };
+  }
+  function solve(M, b) {   // Gaussin eliminointi
+    var n = b.length, A = M.map(function (r, i) { return r.concat([b[i]]); });
+    for (var c = 0; c < n; c++) {
+      var p = c; for (var r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      if (Math.abs(A[p][c]) < 1e-14) return null;
+      var tmp = A[c]; A[c] = A[p]; A[p] = tmp;
+      for (var r2 = c + 1; r2 < n; r2++) { var f = A[r2][c] / A[c][c]; for (var k = c; k <= n; k++) A[r2][k] -= f * A[c][k]; }
+    }
+    var x = new Array(n);
+    for (var i = n - 1; i >= 0; i--) { var sum = A[i][n]; for (var j = i + 1; j < n; j++) sum -= A[i][j] * x[j]; x[i] = sum / A[i][i]; }
+    return x;
   }
 
   // Ohjeteksti avaimen luontiin (kolme riviä), käytetään aloitusnäytössä ja ohjeruudussa
@@ -9885,45 +10321,62 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   }
 
   /* Ohjain. host = elementti, johon kartta lisätään (#v3), opts.onFail(syy) kutsutaan, kun näkymä ei aukea tai kaatuu,
-   * opts.onStatus(teksti) kertoo tilan. active on tosi, kun Google-näkymä on valittuna (myös latauksen aikana). */
+   * opts.onStatus(teksti) kertoo tilan. active on tosi, kun Google-näkymä on valittuna (myös latauksen aikana).
+   * Kartta luodaan kerran ja pidetään elossa: disable() vain piilottaa sen (display:none) ja enable() näyttää sen uudelleen ilman uutta latausta. */
   function create(host, opts) {
     opts = opts || {};
-    var box = null, map = null, active = false, ready = false, seq = 0, lastMs = 0, steadyTimer = null, lib = null;
-    var stats = { updates: 0, calls: 0, throttled: 0, last: null };
+    var box = null, map = null, active = false, ready = false, seq = 0, lastMs = 0, steadyTimer = null, lib = null, building = false;
+    var stats = { updates: 0, calls: 0, throttled: 0, last: null, loads: 0, shows: 0 };
 
     function status(t) { if (opts.onStatus) opts.onStatus(t); }
-    function fail(msg) { var wasActive = active; disable(); if (wasActive && opts.onFail) opts.onFail(msg); }
+    function fail(msg) { var wasActive = active; active = false; destroy(); status(''); if (wasActive && opts.onFail) opts.onFail(msg); }
 
     function enable() {
       var key = getKey();
-      if (!key) return { ok: false, reason: 'ei-avainta' };
+      if (!key && !map && !building) return { ok: false, reason: 'ei-avainta' };
       if (active) return { ok: true };
-      active = true; ready = false; var my = ++seq;
+      active = true; stats.shows++;
+      if (map && box) {            // kartta on jo luotu: näytetään vain uudelleen (ei uutta karttalatausta)
+        box.style.display = '';
+        status(ready ? 'Google 3D (testi)' : 'Google 3D: ladataan kuvaa');
+        return { ok: true, reused: true };
+      }
+      if (building) { status('Google 3D: ladataan'); return { ok: true }; }
+      building = true; ready = false; var my = ++seq;
       status('Google 3D: ladataan');
       box = document.createElement('div'); box.className = 'g3d-box'; box.setAttribute('aria-label', 'Google 3D -näkymä (testi)');
-      host.appendChild(box);
+      host.insertBefore(box, host.firstChild);
       loadLibrary(key).then(function () { return root.google.maps.importLibrary('maps3d'); }).then(function (L) {
-        if (my !== seq || !active) return;
+        if (my !== seq) return;
         lib = L;
         var c0 = opts.initial ? opts.initial() : null, cam = c0 ? camera(c0) : { lat: 61.5, lng: 23.77, altitude: SETTINGS.waterN2000M + SETTINGS.eyeStandM, range: SETTINGS.rangeM, heading: 0, tilt: SETTINGS.tiltDeg, fov: 45 };
         map = new L.Map3DElement({ center: { lat: cam.lat, lng: cam.lng, altitude: cam.altitude }, range: cam.range, tilt: cam.tilt, heading: cam.heading, fov: cam.fov, mode: 'SATELLITE', defaultUIHidden: true });
+        stats.loads++; building = false;
         try { map.maxTilt = 90; } catch (e) {}
         map.style.cssText = 'display:block;width:100%;height:100%';
-        map.addEventListener('gmp-error', function (ev) { if (my === seq) var em = ev && ((ev.error && ev.error.message) || ev.message); fail('Google 3D -kartta ei alustunut' + (em ? ': ' + em : ' (gmp-error). Syynä voi olla avain, laskutus tai alue.')); });
-        map.addEventListener('gmp-steadychange', function (ev) { if (my === seq && ev && ev.isSteady) { ready = true; clearTimeout(steadyTimer); status('Google 3D (testi)'); } });
+        map.addEventListener('gmp-error', function (ev) { if (my === seq) { var em = ev && ((ev.error && ev.error.message) || ev.message); fail('Google 3D -kartta ei alustunut' + (em ? ': ' + em : ' (gmp-error). Syynä voi olla avain, laskutus tai alue.')); } });
+        map.addEventListener('gmp-steadychange', function (ev) { if (my === seq && ev && ev.isSteady) { ready = true; clearTimeout(steadyTimer); if (active) status('Google 3D (testi)'); } });
         box.appendChild(map);
-        status('Google 3D: ladataan kuvaa');
+        if (!active) box.style.display = 'none';
+        else status('Google 3D: ladataan kuvaa');
         steadyTimer = setTimeout(function () { if (my === seq && active && !ready) status('Google 3D: ei vielä valmis 25 s kuluttua. Tarkista avain ja laskutus tai palaa omaan näkymään.'); }, SETTINGS.steadyTimeoutMs);
       }).catch(function (e) {
+        building = false;
         if (my === seq) fail((e && e.message) ? e.message : 'Google 3D -näkymän lataus epäonnistui.');
       });
       return { ok: true };
     }
+    // Piilotus: kartta pysyy elossa, mutta ei päivity eikä näy
     function disable() {
-      active = false; ready = false; seq++; clearTimeout(steadyTimer);
+      active = false;
+      if (box) box.style.display = 'none';
+      status('');
+    }
+    // Hylkäys (vain virheessä): seuraava enable luo uuden kartan
+    function destroy() {
+      seq++; ready = false; building = false; clearTimeout(steadyTimer);
       if (box && box.parentNode) box.parentNode.removeChild(box);
       box = null; map = null;
-      status('');
     }
     // Kameran päivitys simulaattorin tilasta. p kuten camera()-funktiolla.
     function update(p, force) {
@@ -9931,7 +10384,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       stats.calls++;
       var now = performance.now(); if (!force && now - lastMs < SETTINGS.minIntervalMs) { stats.throttled++; return null; }
       lastMs = now;
-      p.altOffsetM = altOffset();
+      var cal = getCalib(); p.altOffsetM = cal.altOffsetM;
       var c = camera(p);
       try {
         map.center = { lat: c.lat, lng: c.lng, altitude: c.altitude };
@@ -9940,15 +10393,174 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       stats.updates++; stats.last = c;
       return c;
     }
-    return { enable: enable, disable: disable, update: update, isActive: function () { return active; }, isReady: function () { return ready; }, stats: function () { return stats; }, element: function () { return map; } };
+    return { enable: enable, disable: disable, destroy: destroy, update: update, isActive: function () { return active; }, isReady: function () { return ready; }, hasMap: function () { return !!map; }, loads: function () { return stats.loads; }, stats: function () { return stats; }, element: function () { return map; } };
   }
 
   var api = {
-    SETTINGS: SETTINGS, HELP_LINES: HELP_LINES, camera: camera, vfovFromHfov: vfovFromHfov, metersPerDegLat: metersPerDegLat, metersPerDegLon: metersPerDegLon,
+    SETTINGS: SETTINGS, HELP_LINES: HELP_LINES, CAL_TARGETS: CAL_TARGETS, camera: camera, getCalib: getCalib, setCalib: setCalib, viewAngles: viewAngles, projectRay: projectRay, fitCalibration: fitCalibration, vfovFromHfov: vfovFromHfov, metersPerDegLat: metersPerDegLat, metersPerDegLon: metersPerDegLon,
     offsetLatLon: offsetLatLon, moveAlong: moveAlong, getKey: getKey, fetchServerKey: fetchServerKey, hasServerKey: hasServerKey, setKey: setKey, create: create
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Google3D = api;
 })(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Simulaattori – Google 3D -kerroksen kalibrointityökalu (vaihe 3n, kehitysvalinta).
+ *
+ * Käynnistys: osoitteeseen lisätään ?kalibrointi=1 (esimerkiksi simulaattori.html?kalibrointi=1&alku=1&harjoitus=free). Kun Google 3D on valittuna (valikko, Ulkonäkymä),
+ * oikeaan yläkulmaan tulee kalibrointipaneeli. Työkalu piirtää omaan kerrokseen ristit tunnettuihin pisteisiin (Näsinneulan huippu, Tampellan piippu, Siilinkarin loisto,
+ * Naistenlahden aallonmurtajan päät ja voimalaitoksen piippu) oman kameramallin mukaisiin kohtiin ja näyttää niiden lasketut suunnat, korkeuskulmat ja kuvakoordinaatit.
+ * Kun ristit eivät osu Googlen kuvan kohteisiin, käyttäjä valitsee kohteen, painaa Osoita ja napauttaa kohteen oikean paikan Googlen kuvassa. Kahdesta kolmeen osoitusta riittää
+ * sovittamaan oman kameran suunnan, nousukulman ja kuvakulman Googlen todelliseen kameraan (pienimmän neliösumman sovitus, google3d.js fitCalibration). Tulos tallentuu selaimen muistiin
+ * (sim.googleKalib) ja tulee heti käyttöön. Hyväksymisraja on 0,5 astetta vaakasuunnassa ja 0,3 astetta pystysuunnassa.
+ * Työkalu ei lähetä mitään verkkoon. */
+(function (root) {
+  'use strict';
+  var RAD = Math.PI / 180;
+  function f1(x, d) { return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d).replace('.', ','); }
+  var VIEWPOINTS = [
+    { id: 'B', nimi: 'Mustalahden edusta (Näsinneula, Tampella)', e: 327330, n: 6824000, hdgTrue: 184.9 },
+    { id: 'A', nimi: 'Naistenlahden satama (voimalaitos, aallonmurtaja)', e: 328010, n: 6823830, hdgTrue: 114.9 },
+    { id: 'C', nimi: 'Siilinkarin ohitus (loisto)', e: 327895, n: 6824881, hdgTrue: 102.9 }
+  ];
+  var LIM_H = 0.5, LIM_V = 0.3;
+
+  function attach(ctx) {
+    var G = ctx.G, doc = ctx.doc, Gg = root.Google3D;
+    var st = { sel: Gg.CAL_TARGETS[0].id, pick: false, samples: [], fit: null, lastTxt: '' };
+    var css = doc.createElement('style');
+    css.textContent = '#kalPanel{position:fixed;right:6px;top:44px;width:340px;max-width:calc(100vw - 12px);max-height:70vh;overflow:auto;z-index:60;background:rgba(10,20,30,.93);color:#e8f0f6;border:1px solid #4a6a85;border-radius:10px;padding:8px 10px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace}' +
+      '#kalPanel h3{margin:0 0 4px;font:700 13px sans-serif}#kalPanel button{min-height:36px;margin:2px 2px 2px 0;padding:2px 8px;border-radius:8px;border:1px solid #6b8aa5;background:#16324a;color:#fff;font:600 12px sans-serif}' +
+      '#kalPanel button.on{background:#b3541e}#kalPanel table{border-collapse:collapse;width:100%}#kalPanel td,#kalPanel th{padding:1px 3px;text-align:left;vertical-align:top}#kalPanel .ok{color:#7be08a}#kalPanel .bad{color:#ff8f80}' +
+      '#kalCross{position:absolute;left:0;top:0;width:100%;height:100%;z-index:24;pointer-events:none}#kalCross.pick{pointer-events:auto;cursor:crosshair}#kalPanel[hidden]{display:none}';
+    doc.head.appendChild(css);
+    var panel = doc.createElement('div'); panel.id = 'kalPanel'; panel.hidden = true; doc.body.appendChild(panel);
+    var cv = doc.createElement('canvas'); cv.id = 'kalCross'; doc.getElementById('pane3d').appendChild(cv);
+
+    function camera() {
+      var S = G.S, v = G.view, s = v.settings, hr = S.hdg * RAD, fw = s.eyeX - s.pivotX, sb = s.eyeY;
+      var look = S.hdg + v.getGazeNow(), r = cv.getBoundingClientRect(), cal = Gg.getCalib();
+      return {
+        eyeE: S.x + G.origin.e + Math.sin(hr) * fw + Math.cos(hr) * sb, eyeN: S.y + G.origin.n + Math.cos(hr) * fw - Math.sin(hr) * sb, eyeZ: 95.5 + v.eyeAboveWaterM() + (cal.altOffsetM || 0),
+        look: look, vfov: v.vfovRequested(), w: r.width, h: r.height, cal: cal
+      };
+    }
+    function targetAngles(c, t) { return Gg.viewAngles(t.e - c.eyeE, t.n - c.eyeN, t.z - c.eyeZ); }
+    function predict(c, a, useCal) {
+      var cal = useCal ? c.cal : { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 };
+      return Gg.projectRay(a.az, a.el, { heading: c.look + cal.dHeadingDeg, pitch: cal.dPitchDeg, vfov: c.vfov, tanScale: cal.tanScale, w: c.w, h: c.h });
+    }
+    function googleInfo() {
+      var m = G.g3 && G.g3.element ? G.g3.element() : null; if (!m) return 'Googlen kartta ei ole luotu';
+      var o = [];
+      ['fov', 'tilt', 'heading', 'range'].forEach(function (k) { try { if (m[k] != null) o.push(k + ' ' + f1(+m[k], 2)); } catch (e) {} });
+      try { var cp = m.cameraPosition; if (cp && cp.altitude != null) o.push('kamera korkeus ' + f1(cp.altitude, 2) + ' m'); } catch (e) {}
+      return o.join(', ') || 'ei luettavia ominaisuuksia';
+    }
+
+    function draw() {
+      var on = G.ext === 'google' && G.mode === 'run';
+      panel.hidden = !on; cv.style.display = on ? 'block' : 'none';
+      if (!on) return;
+      var r = cv.getBoundingClientRect(), dpr = 1;
+      if (cv.width !== Math.round(r.width) || cv.height !== Math.round(r.height)) { cv.width = Math.round(r.width); cv.height = Math.round(r.height); }
+      var g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height);
+      var c = camera(), rows = [];
+      Gg.CAL_TARGETS.forEach(function (t) {
+        var a = targetAngles(c, t), p = predict(c, a, true), vis = p && p.u >= 0 && p.u <= c.w && p.v >= 0 && p.v <= c.h;
+        rows.push({ t: t, a: a, p: p, vis: vis });
+        if (vis) {
+          var sel = t.id === st.sel;
+          g.strokeStyle = sel ? '#ffd400' : '#ff3b30'; g.lineWidth = sel ? 2.5 : 1.5;
+          g.beginPath(); g.moveTo(p.u - 14, p.v); g.lineTo(p.u + 14, p.v); g.moveTo(p.u, p.v - 14); g.lineTo(p.u, p.v + 14); g.stroke();
+          g.font = '12px sans-serif'; g.fillStyle = sel ? '#ffd400' : '#ff9a90'; g.fillText(t.nimi, p.u + 8, p.v - 8);
+        }
+      });
+      st.samples.forEach(function (s) { if (s.cur) { g.strokeStyle = '#4cd964'; g.lineWidth = 2; g.beginPath(); g.arc(s.u, s.v, 7, 0, 7); g.stroke(); } });
+      var txt = renderPanel(c, rows);
+      if (txt !== st.lastTxt) { st.lastTxt = txt; panel.innerHTML = txt; bind(); }
+    }
+
+    function renderPanel(c, rows) {
+      var h = ['<h3>Google 3D -kalibrointi</h3>'];
+      h.push('<div>Googlen kamera: ' + googleInfo() + '</div>');
+      var cal = c.cal; h.push('<div>Käytössä: suunta ' + f1(cal.dHeadingDeg, 2) + '°, nousu ' + f1(cal.dPitchDeg, 2) + '°, kuvakulman kerroin ' + f1(cal.tanScale, 4) + ', korkeuskorjaus ' + f1(cal.altOffsetM || 0, 2) + ' m</div>');
+      h.push('<div>Googlen kameran korkeus: ' + [-1, -0.5, -0.1, 0.1, 0.5, 1].map(function (d) { return '<button data-alt="' + d + '">' + (d > 0 ? '+' : '') + String(d).replace('.', ',') + ' m</button>'; }).join('') + '</div>');
+      h.push('<div>Katselupisteet: ' + VIEWPOINTS.map(function (v) { return '<button data-vp="' + v.id + '" title="' + v.nimi + '">' + v.id + '</button>'; }).join('') + ' ' + VIEWPOINTS.map(function (v) { return v.id + ' ' + v.nimi.split(' (')[0]; }).join(', ') + '</div>');
+      h.push('<table><tr><th></th><th>Kohde</th><th>Suunta</th><th>Kork.</th><th>Väli</th><th>Kuva (x, y)</th></tr>');
+      rows.forEach(function (rw) {
+        h.push('<tr><td><input type="radio" name="kalSel" data-t="' + rw.t.id + '"' + (rw.t.id === st.sel ? ' checked' : '') + '></td><td>' + rw.t.nimi + '</td><td>' + f1((((rw.a.az + (G.S ? G.S.conv : 0)) % 360) + 360) % 360, 2) + '°</td><td>' + f1(rw.a.el, 2) + '°</td><td>' + Math.round(rw.a.dist) + ' m</td><td>' +
+          (rw.p ? (rw.vis ? Math.round(rw.p.u) + ', ' + Math.round(rw.p.v) : 'kuvan ulkopuolella') : 'takana') + '</td></tr>');
+      });
+      h.push('</table>');
+      h.push('<div><button id="kalTurn">Käännä kohti valittua kohdetta</button></div>');
+      h.push('<div><button id="kalPick" class="' + (st.pick ? 'on' : '') + '">' + (st.pick ? 'Napauta kohteen paikkaa kuvassa' : 'Osoita valittu kohde') + '</button><button id="kalFit">Sovita (' + st.samples.length + ' osoitusta)</button><button id="kalClr">Tyhjennä osoitukset</button></div>');
+      if (st.fit) {
+        var f = st.fit, okAll = true;
+        h.push('<div>Sovitus: suunta ' + f1(f.dHeadingDeg, 2) + '°, nousu ' + f1(f.dPitchDeg, 2) + '°, kuvakulman kerroin ' + f1(f.tanScale, 4) + (f.fittedScale ? '' : ' (ei sovitettu, yksi osoitus)') + ', keskivirhe ' + f1(f.rmsPx, 1) + ' px</div>');
+        h.push('<table><tr><th>Kohde</th><th>Ennen vaaka/pysty</th><th>Jälkeen vaaka/pysty</th></tr>');
+        f.residuals.forEach(function (rs, i) {
+          var ok = Math.abs(rs.fitHorDeg) <= LIM_H && Math.abs(rs.fitVerDeg) <= LIM_V; if (!ok) okAll = false;
+          h.push('<tr><td>' + st.samples[i].name + '</td><td>' + f1(rs.rawHorDeg, 2) + '° / ' + f1(rs.rawVerDeg, 2) + '°</td><td class="' + (ok ? 'ok' : 'bad') + '">' + f1(rs.fitHorDeg, 2) + '° / ' + f1(rs.fitVerDeg, 2) + '°</td></tr>');
+        });
+        h.push('</table><div class="' + (okAll ? 'ok' : 'bad') + '">' + (okAll ? 'Sovitus täyttää rajat (vaaka 0,5°, pysty 0,3°).' : 'Sovitus ei täytä rajoja (vaaka 0,5°, pysty 0,3°). Lisää osoituksia tai tarkista kohteen paikka.') + '</div>');
+        h.push('<div><button id="kalSave">Ota käyttöön ja tallenna</button></div>');
+      }
+      h.push('<div><button id="kalReset">Nollaa kalibrointi</button><button id="kalHide">Piilota ristit</button></div>');
+      return h.join('');
+    }
+
+    function bind() {
+      Array.prototype.forEach.call(panel.querySelectorAll('[data-t]'), function (el) { el.addEventListener('change', function () { st.sel = el.getAttribute('data-t'); st.lastTxt = ''; }); });
+      Array.prototype.forEach.call(panel.querySelectorAll('[data-alt]'), function (el) { el.addEventListener('click', function () { adjAlt(parseFloat(el.getAttribute('data-alt'))); }); });
+      Array.prototype.forEach.call(panel.querySelectorAll('[data-vp]'), function (el) { el.addEventListener('click', function () { goTo(el.getAttribute('data-vp')); }); });
+      var q = function (id, fn) { var e = panel.querySelector('#' + id); if (e) e.addEventListener('click', fn); };
+      q('kalPick', function () { st.pick = !st.pick; cv.classList.toggle('pick', st.pick); st.lastTxt = ''; });
+      q('kalTurn', function () { turnTo(st.sel); });
+      q('kalFit', function () { runFit(); });
+      q('kalClr', function () { st.samples = []; st.fit = null; st.lastTxt = ''; });
+      q('kalSave', function () { if (!st.fit) return; var cal = Gg.getCalib(); Gg.setCalib({ dHeadingDeg: st.fit.dHeadingDeg, dPitchDeg: st.fit.dPitchDeg, tanScale: st.fit.tanScale, altOffsetM: cal.altOffsetM }); G.view.setCalib(Gg.getCalib()); st.samples = []; st.fit = null; st.lastTxt = ''; if (ctx.toast) ctx.toast('Kalibrointi tallennettu', 1800); });
+      q('kalReset', function () { Gg.setCalib(null); G.view.setCalib(Gg.getCalib()); st.fit = null; st.lastTxt = ''; });
+      q('kalHide', function () { cv.style.opacity = cv.style.opacity === '0' ? '1' : '0'; });
+    }
+
+    function adjAlt(d) {   // Googlen kameran korkeuskorjaus: siirtää Googlen maisemaa pystysuunnassa oman veden suhteen (rantaviivan korkeus)
+      var cal = Gg.getCalib();
+      Gg.setCalib({ dHeadingDeg: cal.dHeadingDeg, dPitchDeg: cal.dPitchDeg, tanScale: cal.tanScale, altOffsetM: Math.round(((cal.altOffsetM || 0) + d) * 100) / 100 });
+      G.view.setCalib(Gg.getCalib()); st.lastTxt = '';
+    }
+    function goTo(id) {
+      var vp = VIEWPOINTS.filter(function (v) { return v.id === id; })[0], S = G.S; if (!vp) return;
+      var hdgGrid = vp.hdgTrue - S.conv;
+      if (!G.paused) { var pb = doc.getElementById('pauseBtn'); if (pb) pb.click(); }
+      S.x = vp.e - G.origin.e; S.y = vp.n - G.origin.n; S.hdg = hdgGrid; S.orderHdg = hdgGrid; if (S.hmHdg !== undefined) S.hmHdg = hdgGrid; S.v = 0; S.orderSpeedKn = 0;
+      G.view.setGaze(0); st.samples = []; st.fit = null; st.lastTxt = '';
+    }
+
+    function turnTo(id) {   // aluksen kokka suoraan kohti valittua kohdetta (katse 0), jotta risti osuu kuvan keskelle
+      var t = Gg.CAL_TARGETS.filter(function (x) { return x.id === id; })[0], S = G.S; if (!t) return;
+      var a = targetAngles(camera(), t), g = a.az;
+      S.hdg = g; S.orderHdg = g; if (S.hmHdg !== undefined) S.hmHdg = g;
+      G.view.setGaze(0); st.lastTxt = '';
+    }
+    cv.addEventListener('pointerdown', function (ev) {
+      if (!st.pick) return;
+      var r = cv.getBoundingClientRect(), c = camera(), t = Gg.CAL_TARGETS.filter(function (x) { return x.id === st.sel; })[0], a = targetAngles(c, t);
+      st.samples = st.samples.filter(function (s) { return s.id !== t.id; });
+      st.samples.push({ id: t.id, name: t.nimi, az: a.az, el: a.el, heading: c.look, pitch: 0, vfov: c.vfov, w: c.w, h: c.h, u: ev.clientX - r.left, v: ev.clientY - r.top, cur: true });
+      st.pick = false; cv.classList.remove('pick'); st.fit = null; st.lastTxt = '';
+      ev.preventDefault(); ev.stopPropagation();
+    });
+    function runFit() {
+      if (!st.samples.length) return;
+      st.fit = Gg.fitCalibration(st.samples.map(function (s) { return { az: s.az, el: s.el, heading: s.heading, pitch: s.pitch, vfov: s.vfov, w: s.w, h: s.h, u: s.u, v: s.v }; }));
+      st.lastTxt = '';
+    }
+    root.__kal = { state: st, camera: camera, targetAngles: targetAngles, predict: predict, runFit: runFit, goTo: goTo, turnTo: turnTo, adjAlt: adjAlt };
+    setInterval(draw, 120);
+  }
+  root.Kalibrointi = { attach: attach, VIEWPOINTS: VIEWPOINTS };
+})(window);
 
 </script>
 <script>
@@ -11594,7 +12206,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     collision: null, collMs: { n: 0, sum: 0, max: 0 }, lastTorE: 1e9, lastTorN: 1e9,
     boats: null, boatsOn: true, boatGen: 0, boatBusy: 0, boatInit: true, boatStats: null, lastBoatLoad: { x: 1e9, y: 1e9 },
     lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0, gfx: null,
-    ext: 'own', g3: null    // ulkonäkymä (vaihe 3m): 'own' = oma three.js-näkymä, 'google' = Google 3D (testi)
+    ext: 'own', g3: null, fogKm: 0    // ulkonäkymä (vaihe 3m): 'own' = oma three.js-näkymä, 'google' = Google 3D (testi), vaihe 3n: oma kerros Googlen päällä, fogKm = sumukerroksen näkyvyys (0 = pois)
   };
   root.__sim = G;
 
@@ -11607,10 +12219,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       if (o.evOn != null) G.evOn = !!o.evOn;
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
       if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
+      if (o.googleSumu != null && root.Google3D.SETTINGS.fogLevelsKm.indexOf(Number(o.googleSumu)) >= 0) G.fogKm = Number(o.googleSumu);
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm })); } catch (e) {}
   }
   loadPrefs();
   // Grafiikka (vaihe 3j): täysi tai kevyt. Oletus on täysi leveällä näytöllä ja kevyt puhelimessa (lyhyempi sivu alle 700 px). Osoiteparametri laatu=kevyt|täysi ohittaa muistin.
@@ -11764,6 +12377,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     G.pl.setRasterVisible(G.raster); G.pl.setVectorIdx(G.vecIdx); G.pl.setEV(G.evOn, true);
     G.view = root.Nakyma.create($('v3'), { preserve: !!qs.get('preserve'), settings: { hfovDeg: G.fovDeg } });
     G.g3 = root.Google3D.create($('v3'), { onFail: g3Fail, onStatus: g3Status, initial: g3Params });
+    if (qs.get('kalibrointi') === '1' && root.Kalibrointi) root.Kalibrointi.attach({ G: G, P: P, L: L, doc: doc, setExtView: setExtView, toast: toast });
     root.__view = G.view; root.__pl = G.pl;
     G.bridges = root.Sillat3D ? root.Sillat3D.attach(G.view) : null;   // sillat (vaihe 3i): piirto joka kuvalla view.render-kutsun yhteydessä, rebase addExtra-kautta
     G.view.setQuality(gfxNow());
@@ -12225,6 +12839,10 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     $('mOrient').addEventListener('click', function () { G.northUp = !G.northUp; G.pl.setHeadUp(!G.northUp); updateMenuLabels(); savePrefs(); });
     $('mTune').addEventListener('click', function () { setRadarTune(G.radarTune === 'huono' ? 'hyva' : 'huono'); });
     $('mView').addEventListener('click', function () { $('menu').hidden = true; setExtView(G.ext !== 'google'); });
+    $('mVis').addEventListener('click', function () {
+      var lv = root.Google3D.SETTINGS.fogLevelsKm, i = lv.indexOf(G.fogKm); G.fogKm = lv[(i + 1) % lv.length]; if (G.view) G.view.setFogKm(G.fogKm); updateMenuLabels(); savePrefs();
+      if (G.S && G.mode === 'run') logCustom('nakyvyys', G.fogKm);
+    });
     $('g3dBack').addEventListener('click', function () { setExtView(false); });
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
     $('g3dKeyGo').addEventListener('click', function () {
@@ -12398,7 +13016,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   // Aluksen tila Googlen kameralaskentaan: sijainti (WGS84), tosisuunta, katseen kääntö, pystykuvakulma samasta kamerasta kuin oma näkymä ja silmän korkeus (istuen tai seisten).
   function g3Params() {
     var S = G.S, v = G.view, ll = P.worldToLonLat(S.x, S.y), st = v.settings;
-    return { lat: ll.lat, lon: ll.lon, hdgTrue: L.trueHdg(S), lookDeg: v.getGazeNow(), vfovDeg: v.camera.fov, seated: v.isSeated(), eyeFwdM: st.eyeX - st.pivotX, eyeStbdM: st.eyeY };
+    return { lat: ll.lat, lon: ll.lon, hdgTrue: L.trueHdg(S), lookDeg: v.getGazeNow(), vfovDeg: v.vfovRequested(), seated: v.isSeated(), eyeFwdM: st.eyeX - st.pivotX, eyeStbdM: st.eyeY, eyeAboveWaterM: v.eyeAboveWaterM() };
   }
   function g3Status(t) {
     var b = $('g3dBadge'), on = G.ext === 'google' && !!t; b.hidden = !on; if (on) setText($('g3dStatus'), t);
@@ -12421,11 +13039,15 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       G.ext = 'google';
       var r = G.g3.enable();
       if (!r.ok) { G.ext = 'own'; g3Info('Google 3D (testi) tarvitsee avaimen', 'Google 3D -näkymä näyttää Googlen fotorealistisen 3D-kartan oman näkymän tilalla. Se tarvitsee oman Google Maps -avaimen.\n\n' + root.Google3D.HELP_LINES.join('\n'), true); return false; }
-      canvas.style.visibility = 'hidden'; G.view.veil.style.visibility = 'hidden';
+      // vaihe 3n: oma kangas pysyy näkyvissä Googlen kartan päällä (läpinäkyvä tausta), ja Googlen lisenssimerkinnän kohta alareunassa jää vapaaksi
+      G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true);
+      $('v3').classList.add('g3d-over'); canvas.style.clipPath = 'inset(0 0 ' + root.Google3D.SETTINGS.attribClipPx + 'px 0)';
       if (G.S) logCustom('google3d', 1);
     } else {
       if (G.g3) G.g3.disable();
-      G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; G.view.veil.style.visibility = ''; }
+      G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = ''; }
+      if (G.view) G.view.setOverlay(false);
+      $('v3').classList.remove('g3d-over');
       $('g3dBadge').hidden = true;
     }
     updateMenuLabels();
@@ -12551,11 +13173,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     v.terrain.tick(G.mode === 'run' ? 4 : 8);
     // 3D piirretään joka kuvalla, kun se on päänäkymä, ja joka toisella pienenä ikkunana
     var big3d = G.layout.wide || G.main === '3d';
-    var ownEvery = G.ext === 'google' ? 8 : 2;
-    if (G.ext === 'google' && frameN % ownEvery !== 0) v.stepGaze(dtReal);   // oma näkymä piirtyy harvoin, katseen tasoitus kulkee silti joka kuvalla
-    if ((big3d && G.ext !== 'google') || frameN % ownEvery === 0) {
+    var drawOwn = big3d || frameN % 2 === 0;   // vaihe 3n: oma kerros piirtyy Googlen päällä kuten oma näkymä (joka kuvalla pääruutuna, muuten joka toisella)
+    if (G.ext === 'google' && !drawOwn) v.stepGaze(dtReal);   // katseen tasoitus kulkee silti joka kuvalla
+    if (drawOwn) {
       v.render(S, dtReal);
-      adaptPixels(dtReal * 1000, big3d && G.ext !== 'google');
+      adaptPixels(dtReal * 1000, big3d);
     }
     updateGoogle();
     // plotteri ja käyttöliittymä
@@ -12625,6 +13247,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     if (c.kind === 'tutkasuunta') return c.value ? 'Tutka: suunta ylös (H UP)' : 'Tutka: pohjoinen ylös (N UP)';
     if (c.kind === 'tutkaev') return c.value ? 'Tutkan EBL ja VRM päälle' : 'Tutkan EBL ja VRM pois';
     if (c.kind === 'kiikari') return c.value.on ? 'Kiikari päälle, suunta ' + pad3(c.value.suunta) + '°' : 'Kiikari pois, suunta ' + pad3(c.value.suunta) + '°';
+    if (c.kind === 'nakyvyys') return c.value > 0 ? 'Näkyvyys (Google 3D): ' + c.value + ' km' : 'Näkyvyys (Google 3D): ei sumukerrosta';
     if (c.kind === 'google3d') return c.value ? 'Ulkonäkymä: Google 3D (testi)' : 'Ulkonäkymä: oma';
     if (c.kind === 'eblvrm') return c.value ? 'Plotterin EBL ja VRM päälle' : 'Plotterin EBL ja VRM pois';
     return H.cmdText(c);
@@ -12636,6 +13259,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     $('mTune').textContent = 'Tutkan viritys: ' + (G.radarTune === 'huono' ? 'huono' : 'hyvä');
     $('mGfx').textContent = 'Grafiikka: ' + (gfxNow() === 'light' ? 'kevyt' : 'täysi');
     $('mView').textContent = 'Ulkonäkymä: ' + (G.ext === 'google' ? 'Google 3D (testi)' : 'oma');
+    $('mVis').textContent = 'Näkyvyys (Google 3D): ' + (G.fogKm > 0 ? G.fogKm + ' km' : 'ei sumukerrosta');
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }

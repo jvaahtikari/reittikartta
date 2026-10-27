@@ -3,7 +3,11 @@
  * Maailmakoordinaatit: three.js (x, y, z) = (E, ylös, -N) metreinä origon suhteen (Paikka.enToWorld), järven pinta on y = 0.
  * Alus: rig-ryhmä on aluksen kääntö- ja kallistuspiste, ja runkomalli (malli: x keulaan, y SB, z ylös) on sen alla.
  * Kamera on ohjaamon sisällä ruorimiehen silmäpisteessä ja liikkuu rungon mukana, joten trimmi ja kallistus näkyvät.
- * Taivas ja vesi ovat omia varjostimiaan, ja sumu on sama kaava kummassakin kuin maastolla (FogExp2). */
+ * Taivas ja vesi ovat omia varjostimiaan, ja sumu on sama kaava kummassakin kuin maastolla (FogExp2).
+ *
+ * Vaihe 3n, kerrostila (setOverlay): Google 3D on näkymän alin kerros ja tämä kangas on sen päällä läpinäkyvällä taustalla. Silloin taivas, maastoväri, puusto, laiturit, sillat ja maamerkit
+ * eivät piirry (Google näyttää ne), vesi piirretään vain vesipolygoneista (vesimaski3d.js) ja maastoverkko ja rakennukset piirretään vain syvyyspuskuriin (peitto) tai, jos sumukerros on päällä,
+ * sumun värisenä ja etäisyydestä riippuvalla peittävyydellä. Kamera irrotetaan rungon keinunnasta ja asetetaan samaan paikkaan ja suuntaan kuin Googlen kamera. */
 (function (root) {
   'use strict';
   var THREE = root.THREE, P = root.Paikka;
@@ -266,7 +270,7 @@
     var veil = document.createElement('div'); veil.className = 'view3d-veil';
     veil.style.cssText = 'position:absolute;inset:0;pointer-events:none;opacity:0';
     container.appendChild(veil);
-    var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.preserve });
+    var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, alpha: true, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.preserve });   // alpha: kerrostila (vaihe 3n) tarvitsee läpinäkyvän taustan, oma näkymä piirtää kuten ennen (tausta alfa 1)
     renderer.setClearColor(0xcfdce8, 1);
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = S.exposure;
@@ -291,6 +295,8 @@
     var water = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 1, 1), waterFull);
     water.rotation.x = -Math.PI / 2; water.frustumCulled = false; water.renderOrder = -5; scene.add(water);
     scene.fog = new THREE.FogExp2(0xcfe0ee, S.fogDensity);
+    // vaihe 3n: oma vesi vain vesipolygoneista (kerrostila)
+    var wmask = root.Vesimaski3D ? root.Vesimaski3D.create(scene, { material: waterFull }) : null;
     // tuuli: aallot etenevät myötätuuleen, amplitudi kasvaa tuulen voiman mukana (3 m/s = 1)
     function setWind(fromDeg, speed) {
       if (fromDeg != null) S.windFromDeg = fromDeg; if (speed != null) S.windSpeed = speed;
@@ -304,7 +310,7 @@
     function setQuality(q) {
       quality = q === 'light' ? 'light' : 'full';
       var full = quality === 'full';
-      water.material = full ? waterFull : waterLight;
+      water.material = full ? waterFull : waterLight; if (wmask) wmask.setMaterial(water.material);
       U.uCloud.value = full ? S.cloudCover : 0;
       if (terrain && terrain.setQuality) terrain.setQuality(quality);
     }
@@ -371,6 +377,72 @@
     function placeCamera() { camera.position.set(S.eyeX - S.pivotX, eyeZ() - S.waterlineZ, S.eyeY); }
     placeCamera();
 
+    // ---- kerrostila (vaihe 3n) ----
+    // ov.on: Google-kerroksen päällä piirtävä tila. fogKm: sumukerroksen näkyvyys (0 = ei sumukerrosta). cal: kalibrointi (oman kameran korjaukset Googlen todelliseen käytökseen).
+    var horColor = new THREE.Color(0xcfdce8);
+    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.25, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
+    ov.mat = new THREE.ShaderMaterial({
+      uniforms: { uFogColor: { value: U.uFogColor.value }, uInvVis: { value: 0 }, uLower: { value: ov.lower } },
+      blending: THREE.NoBlending, fog: false, toneMapped: false, colorWrite: false,
+      vertexShader: 'varying vec3 vW; uniform float uLower; void main(){ vec4 w0 = modelMatrix * vec4(position, 1.0); float dd = length(w0.xz - cameraPosition.xz); vec3 p = position; if (position.y < -1.0) p.y -= dd * dd * 8.0e-7; p.y -= uLower; vec4 w = modelMatrix * vec4(p, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: 'uniform vec3 uFogColor; uniform float uInvVis; varying vec3 vW; void main(){ float d = length(cameraPosition - vW); float a = 1.0 - exp(-d * uInvVis); gl_FragColor = vec4(uFogColor * a, a); }'
+    });
+    // taivaan sumukupu: kaukana (yli maastoaineiston) horisontin lähellä oleva sumu, kun sumukerros on päällä
+    ov.dome = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), new THREE.ShaderMaterial({
+      uniforms: { uFogColor: { value: U.uFogColor.value }, uFarA: { value: 0 }, uElev: { value: ov.domeElevDeg } },
+      side: THREE.BackSide, transparent: true, depthWrite: false, depthTest: true, fog: false, toneMapped: false,
+      vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }',
+      fragmentShader: 'uniform vec3 uFogColor; uniform float uFarA; uniform float uElev; varying vec3 vDir; void main(){ float el = degrees(asin(clamp(vDir.y, -1.0, 1.0))); float a = uFarA * (1.0 - smoothstep(0.0, uElev, el)); gl_FragColor = vec4(uFogColor, a); }'
+    }));
+    ov.dome.frustumCulled = false; ov.dome.visible = false; ov.dome.renderOrder = 90; scene.add(ov.dome);
+    function applyFog() {
+      var dens = ov.on && ov.fogKm > 0 ? 1 / (ov.fogKm * 1000) : S.fogDensity;
+      scene.fog.density = dens; U.uFogDensity.value = dens;
+      ov.mat.uniforms.uInvVis.value = ov.on && ov.fogKm > 0 ? 1 / (ov.fogKm * 1000) : 0;
+      ov.mat.colorWrite = ov.on && ov.fogKm > 0;
+      ov.dome.material.uniforms.uFarA.value = ov.on && ov.fogKm > 0 ? 1 - Math.exp(-ov.domeDist / (ov.fogKm * 1000)) : 0;
+      ov.dome.visible = ov.on && ov.fogKm > 0;
+    }
+    function layerSet(o, l) { if (o && o.layers) o.layers.set(l); }
+    // kerrostilassa piirrettävät ja piilotettavat: maastoverkko ja rakennukset ovat tasolla 2 (syvyys- ja sumukierros), latvusto ja puut tasolla 3 (ei piirretä)
+    function overlayLayers() {
+      var i;
+      if (terrain && terrain.nodes) terrain.nodes.forEach(function (n) {
+        layerSet(n.mesh, 2); layerSet(n.bmesh, 2); layerSet(n.shell, 3);
+        if (n.tmeshes) for (var q = 0; q < n.tmeshes.length; q++) layerSet(n.tmeshes[q], 3);
+      });
+      for (i = 0; i < scene.children.length; i++) { var o = scene.children[i]; if (ov.hide[o.name] || ov.hidden.indexOf(o) >= 0) layerSet(o, 1); }
+    }
+    function restoreLayers() {
+      if (terrain && terrain.nodes) terrain.nodes.forEach(function (n) {
+        layerSet(n.mesh, 0); layerSet(n.bmesh, 0); layerSet(n.shell, 0);
+        if (n.tmeshes) for (var q = 0; q < n.tmeshes.length; q++) layerSet(n.tmeshes[q], 0);
+      });
+      for (var i = 0; i < scene.children.length; i++) layerSet(scene.children[i], 0);
+    }
+    function overlayCamera() { return ov.on && !freeCam; }
+    function setOverlay(on) {
+      on = !!on; if (on === ov.on) return;
+      ov.on = on;
+      if (on) {
+        layerSet(sky, 1); layerSet(water, 1);
+        if (wmask) { wmask.setMaterial(water.material); wmask.setActive(true); }
+        renderer.setClearColor(0x000000, 0);
+        if (!freeCam) { rig.remove(camera); scene.add(camera); camera.rotation.order = 'YXZ'; }
+        veil.style.display = 'none';
+      } else {
+        if (wmask) wmask.setActive(false);
+        restoreLayers();
+        renderer.setClearColor(horColor, 1);
+        if (!freeCam) { scene.remove(camera); rig.add(camera); camera.rotation.order = 'YXZ'; placeCamera(); }
+        veil.style.display = '';
+      }
+      applyFog(); updateFov();
+    }
+    function setFogKm(km) { ov.fogKm = Math.max(0, +km || 0); applyFog(); }
+    function setCalib(c) { c = c || {}; ov.cal.dHeadingDeg = +c.dHeadingDeg || 0; ov.cal.dPitchDeg = +c.dPitchDeg || 0; ov.cal.tanScale = (+c.tanScale > 0.3 && +c.tanScale < 3) ? +c.tanScale : 1; updateFov(); }
+    function overlayHide(o) { if (ov.hidden.indexOf(o) < 0) ov.hidden.push(o); if (ov.on) layerSet(o, 1); }
+
     // ---- tila ----
     var gaze = 0, gazeCmd = 0, w = 1, h = 1, dpr = Math.min(root.devicePixelRatio || 1, 3), pixelMp = S.pixelBudgetMp;
     var sun = { elevDeg: 45, azDeg: 180 }, sunDirW = new THREE.Vector3(0, 1, 0), simMs = Date.now();
@@ -386,9 +458,9 @@
       camera.position.set(pos[0], pos[1], pos[2]); camera.up.set(0, 1, 0); camera.lookAt(look[0], look[1], look[2]);
       if (fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     }
-    function clearFree() { if (freeCam) { scene.remove(camera); rig.add(camera); camera.rotation.order = 'YXZ'; freeCam = false; placeCamera(); updateFov(); } }
+    function clearFree() { if (freeCam) { scene.remove(camera); camera.rotation.order = 'YXZ'; freeCam = false; if (ov.on) scene.add(camera); else { rig.add(camera); placeCamera(); } updateFov(); } }
 
-    var compact = false;
+    var compact = false, reqVfov = 45;
     function setSize(cw, ch, compactMode) {
       w = Math.max(1, cw); h = Math.max(1, ch); compact = !!compactMode;
       applyPixelRatio();
@@ -404,6 +476,10 @@
       var asp = w / h, v;
       if (bino.on) v = 2 * Math.atan(Math.tan(S.kiikariHfovDeg * RAD / 2) / asp) / RAD;   // kiikarissa vaakakuvakulma on aina kiikariHfovDeg
       else v = baseVfov(asp);
+      // kerrostila: Googlen fov hyväksyy vain 5 ... 80 astetta (pyydetty arvo), ja oma kamera käyttää Googlen todellista kuvakulmaa (kalibroitu tangentin kerroin)
+      if (ov.on) v = Math.min(ov.fovMax, Math.max(ov.fovMin, v));
+      reqVfov = v;
+      if (ov.on) v = 2 * Math.atan(Math.tan(v * RAD / 2) * ov.cal.tanScale) / RAD;
       camera.fov = v; camera.aspect = asp; camera.updateProjectionMatrix();
     }
     function baseVfov(asp) { return asp >= 1 ? 2 * Math.atan(Math.tan((compact ? S.hfovCompactDeg : S.hfovDeg) * RAD / 2) / asp) / RAD : S.portraitVfovDeg; }
@@ -452,7 +528,7 @@
       sunL.intensity = m.sunI * smooth01((e + 2) / 6);
       hemi.color.copy(m.hemiSky); hemi.groundColor.copy(m.hemiGnd); hemi.intensity = m.hemiI;
       scene.fog.color.copy(m.hor);
-      renderer.setClearColor(m.hor, 1);
+      horColor.copy(m.hor); if (!ov.on) renderer.setClearColor(m.hor, 1);
     }
     function sunScreen() {
       // auringon paikka kuvassa ja katseen suunta: päivän sumennus vastavalossa
@@ -483,7 +559,13 @@
       rig.rotation.set((st.roll + bobR) * RAD, yaw, (st.trim + bobP) * RAD);
       // katse
       gaze += (gazeCmd - gaze) * Math.min(1, dt * 8);
-      if (!freeCam) {
+      if (!freeCam && ov.on) {
+        // kerrostila: kamera ei keinu rungon mukana vaan on samassa paikassa ja suunnassa kuin Googlen kamera (silmäpiste aluksen suunnan mukaan, vaakasuora katse, ei kiikarin tärinää)
+        bino.shakeYaw = 0; bino.shakePitch = 0;
+        var hr = st.hdg * RAD, fw = S.eyeX - S.pivotX, sb = S.eyeY;
+        camera.position.set(st.x + Math.sin(hr) * fw + Math.cos(hr) * sb, eyeZ() - S.waterlineZ, -(st.y + Math.cos(hr) * fw - Math.sin(hr) * sb));
+        camera.rotation.set(ov.cal.dPitchDeg * RAD, -(st.hdg + gaze + ov.cal.dHeadingDeg) * RAD, 0);
+      } else if (!freeCam) {
         if (bino.on) {
           rig.updateMatrixWorld(true);
           // käden tärinä kasvaa nopeuden ja aallokon mukana (keskihajonta = puolet asetuksen amplitudista)
@@ -503,7 +585,7 @@
       rig.updateMatrixWorld(true);
       // vesi ja taivas seuraavat kameraa
       var cp = camera.getWorldPosition(new THREE.Vector3());
-      water.position.set(cp.x, 0, cp.z); sky.position.copy(cp);
+      water.position.set(cp.x, 0, cp.z); sky.position.copy(cp); ov.dome.position.copy(cp);
       U.uTime.value += dt;
       terrain.setBoat(st.x, st.y); aids3d.sync(st.x, st.y); if (piers) piers.sync(st.x, st.y);
       var kpx = 2 * Math.tan(camera.fov * RAD / 2);   // kuvapikselin koko: laitepikselinä (css-korkeus x laitepikselisuhde) ja piirtopuskurin pikselinä
@@ -516,10 +598,19 @@
         veil.style.background = 'radial-gradient(circle at ' + ss.x.toFixed(1) + '% ' + ss.y.toFixed(1) + '%, rgba(255,246,222,0.95), rgba(255,246,222,0.35) 45%, rgba(255,246,222,0.12) 100%)';
       } else veil.style.opacity = 0;
       renderer.info.reset();
-      renderer.render(scene, camera);
+      if (ov.on) { overlayLayers(); if (wmask) { wmask.sync(st.x, st.y); wmask.tick(4); } }
+      drawScene();
       var t1 = performance.now();
       frames.push(t1 - t0); if (frames.length > 240) frames.shift();
       return t1 - t0;
+    }
+    // Piirto: tavallisesti yksi kierros. Kerrostilassa ensin maastoverkko ja rakennukset (taso 2) syvyyspuskuriin ja sumun värisinä, sitten muu (vesi, vene, turvalaitteet, sumukupu) syvyystestillä.
+    function drawScene() {
+      if (!ov.on) { renderer.render(scene, camera); return; }
+      var ac = renderer.autoClear;
+      renderer.autoClear = true; camera.layers.set(2); scene.overrideMaterial = ov.mat; renderer.render(scene, camera);
+      scene.overrideMaterial = null; camera.layers.set(0); renderer.autoClear = false; renderer.render(scene, camera);
+      renderer.autoClear = ac;
     }
     function rendererStats() {
       var i = renderer.info;
@@ -531,7 +622,7 @@
       return { median: s[Math.floor(s.length / 2)], p95: s[Math.floor(s.length * 0.95)], n: s.length };
     }
     function resetFrameStats() { frames = []; }
-    function rebase() { terrain.rebase(); aids3d.rebase(); landmarks.rebase(); if (piers) piers.rebase(); extra.forEach(function (e) { if (e.rebase) e.rebase(); }); }
+    function rebase() { if (wmask) wmask.rebase(); terrain.rebase(); aids3d.rebase(); landmarks.rebase(); if (piers) piers.rebase(); extra.forEach(function (e) { if (e.rebase) e.rebase(); }); }
     function addExtra(o) { extra.push(o); return o; }
 
     return {
@@ -540,6 +631,8 @@
       setPixelBudget: setPixelBudget, getPixelBudget: getPixelBudget, rendererStats: rendererStats, frameStats: frameStats, resetFrameStats: resetFrameStats,
       rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; },
       setFree: setFree, clearFree: clearFree,
+      setOverlay: setOverlay, isOverlay: function () { return ov.on; }, setFogKm: setFogKm, getFogKm: function () { return ov.fogKm; }, setCalib: setCalib, getCalib: function () { return { dHeadingDeg: ov.cal.dHeadingDeg, dPitchDeg: ov.cal.dPitchDeg, tanScale: ov.cal.tanScale }; },
+      vfovRequested: function () { return reqVfov; }, eyeAboveWaterM: function () { return eyeZ() - S.waterlineZ; }, overlayHide: overlayHide, wmask: wmask, overlayMat: ov.mat, overlayDome: ov.dome, overlaySettings: ov,
       setCameraPitch: function (d) { camPitchDeg = d; }, isSeated: function () { return seated; },
       setWind: setWind, getWind: function () { return { fromDeg: S.windFromDeg, speed: S.windSpeed }; }, setQuality: setQuality, getQuality: function () { return quality; },
       setBinoculars: setBinoculars, isBino: function () { return bino.on; }, setBinoPitch: setBinoPitch, getBinoPitch: function () { return bino.pitch; },

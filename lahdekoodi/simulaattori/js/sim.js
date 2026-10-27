@@ -26,7 +26,7 @@
     collision: null, collMs: { n: 0, sum: 0, max: 0 }, lastTorE: 1e9, lastTorN: 1e9,
     boats: null, boatsOn: true, boatGen: 0, boatBusy: 0, boatInit: true, boatStats: null, lastBoatLoad: { x: 1e9, y: 1e9 },
     lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0, gfx: null,
-    ext: 'own', g3: null    // ulkonäkymä (vaihe 3m): 'own' = oma three.js-näkymä, 'google' = Google 3D (testi)
+    ext: 'own', g3: null, fogKm: 0    // ulkonäkymä (vaihe 3m): 'own' = oma three.js-näkymä, 'google' = Google 3D (testi), vaihe 3n: oma kerros Googlen päällä, fogKm = sumukerroksen näkyvyys (0 = pois)
   };
   root.__sim = G;
 
@@ -39,10 +39,11 @@
       if (o.evOn != null) G.evOn = !!o.evOn;
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
       if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
+      if (o.googleSumu != null && root.Google3D.SETTINGS.fogLevelsKm.indexOf(Number(o.googleSumu)) >= 0) G.fogKm = Number(o.googleSumu);
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm })); } catch (e) {}
   }
   loadPrefs();
   // Grafiikka (vaihe 3j): täysi tai kevyt. Oletus on täysi leveällä näytöllä ja kevyt puhelimessa (lyhyempi sivu alle 700 px). Osoiteparametri laatu=kevyt|täysi ohittaa muistin.
@@ -196,6 +197,7 @@
     G.pl.setRasterVisible(G.raster); G.pl.setVectorIdx(G.vecIdx); G.pl.setEV(G.evOn, true);
     G.view = root.Nakyma.create($('v3'), { preserve: !!qs.get('preserve'), settings: { hfovDeg: G.fovDeg } });
     G.g3 = root.Google3D.create($('v3'), { onFail: g3Fail, onStatus: g3Status, initial: g3Params });
+    if (qs.get('kalibrointi') === '1' && root.Kalibrointi) root.Kalibrointi.attach({ G: G, P: P, L: L, doc: doc, setExtView: setExtView, toast: toast });
     root.__view = G.view; root.__pl = G.pl;
     G.bridges = root.Sillat3D ? root.Sillat3D.attach(G.view) : null;   // sillat (vaihe 3i): piirto joka kuvalla view.render-kutsun yhteydessä, rebase addExtra-kautta
     G.view.setQuality(gfxNow());
@@ -657,6 +659,10 @@
     $('mOrient').addEventListener('click', function () { G.northUp = !G.northUp; G.pl.setHeadUp(!G.northUp); updateMenuLabels(); savePrefs(); });
     $('mTune').addEventListener('click', function () { setRadarTune(G.radarTune === 'huono' ? 'hyva' : 'huono'); });
     $('mView').addEventListener('click', function () { $('menu').hidden = true; setExtView(G.ext !== 'google'); });
+    $('mVis').addEventListener('click', function () {
+      var lv = root.Google3D.SETTINGS.fogLevelsKm, i = lv.indexOf(G.fogKm); G.fogKm = lv[(i + 1) % lv.length]; if (G.view) G.view.setFogKm(G.fogKm); updateMenuLabels(); savePrefs();
+      if (G.S && G.mode === 'run') logCustom('nakyvyys', G.fogKm);
+    });
     $('g3dBack').addEventListener('click', function () { setExtView(false); });
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
     $('g3dKeyGo').addEventListener('click', function () {
@@ -830,7 +836,7 @@
   // Aluksen tila Googlen kameralaskentaan: sijainti (WGS84), tosisuunta, katseen kääntö, pystykuvakulma samasta kamerasta kuin oma näkymä ja silmän korkeus (istuen tai seisten).
   function g3Params() {
     var S = G.S, v = G.view, ll = P.worldToLonLat(S.x, S.y), st = v.settings;
-    return { lat: ll.lat, lon: ll.lon, hdgTrue: L.trueHdg(S), lookDeg: v.getGazeNow(), vfovDeg: v.camera.fov, seated: v.isSeated(), eyeFwdM: st.eyeX - st.pivotX, eyeStbdM: st.eyeY };
+    return { lat: ll.lat, lon: ll.lon, hdgTrue: L.trueHdg(S), lookDeg: v.getGazeNow(), vfovDeg: v.vfovRequested(), seated: v.isSeated(), eyeFwdM: st.eyeX - st.pivotX, eyeStbdM: st.eyeY, eyeAboveWaterM: v.eyeAboveWaterM() };
   }
   function g3Status(t) {
     var b = $('g3dBadge'), on = G.ext === 'google' && !!t; b.hidden = !on; if (on) setText($('g3dStatus'), t);
@@ -853,11 +859,15 @@
       G.ext = 'google';
       var r = G.g3.enable();
       if (!r.ok) { G.ext = 'own'; g3Info('Google 3D (testi) tarvitsee avaimen', 'Google 3D -näkymä näyttää Googlen fotorealistisen 3D-kartan oman näkymän tilalla. Se tarvitsee oman Google Maps -avaimen.\n\n' + root.Google3D.HELP_LINES.join('\n'), true); return false; }
-      canvas.style.visibility = 'hidden'; G.view.veil.style.visibility = 'hidden';
+      // vaihe 3n: oma kangas pysyy näkyvissä Googlen kartan päällä (läpinäkyvä tausta), ja Googlen lisenssimerkinnän kohta alareunassa jää vapaaksi
+      G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true);
+      $('v3').classList.add('g3d-over'); canvas.style.clipPath = 'inset(0 0 ' + root.Google3D.SETTINGS.attribClipPx + 'px 0)';
       if (G.S) logCustom('google3d', 1);
     } else {
       if (G.g3) G.g3.disable();
-      G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; G.view.veil.style.visibility = ''; }
+      G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = ''; }
+      if (G.view) G.view.setOverlay(false);
+      $('v3').classList.remove('g3d-over');
       $('g3dBadge').hidden = true;
     }
     updateMenuLabels();
@@ -983,11 +993,11 @@
     v.terrain.tick(G.mode === 'run' ? 4 : 8);
     // 3D piirretään joka kuvalla, kun se on päänäkymä, ja joka toisella pienenä ikkunana
     var big3d = G.layout.wide || G.main === '3d';
-    var ownEvery = G.ext === 'google' ? 8 : 2;
-    if (G.ext === 'google' && frameN % ownEvery !== 0) v.stepGaze(dtReal);   // oma näkymä piirtyy harvoin, katseen tasoitus kulkee silti joka kuvalla
-    if ((big3d && G.ext !== 'google') || frameN % ownEvery === 0) {
+    var drawOwn = big3d || frameN % 2 === 0;   // vaihe 3n: oma kerros piirtyy Googlen päällä kuten oma näkymä (joka kuvalla pääruutuna, muuten joka toisella)
+    if (G.ext === 'google' && !drawOwn) v.stepGaze(dtReal);   // katseen tasoitus kulkee silti joka kuvalla
+    if (drawOwn) {
       v.render(S, dtReal);
-      adaptPixels(dtReal * 1000, big3d && G.ext !== 'google');
+      adaptPixels(dtReal * 1000, big3d);
     }
     updateGoogle();
     // plotteri ja käyttöliittymä
@@ -1057,6 +1067,7 @@
     if (c.kind === 'tutkasuunta') return c.value ? 'Tutka: suunta ylös (H UP)' : 'Tutka: pohjoinen ylös (N UP)';
     if (c.kind === 'tutkaev') return c.value ? 'Tutkan EBL ja VRM päälle' : 'Tutkan EBL ja VRM pois';
     if (c.kind === 'kiikari') return c.value.on ? 'Kiikari päälle, suunta ' + pad3(c.value.suunta) + '°' : 'Kiikari pois, suunta ' + pad3(c.value.suunta) + '°';
+    if (c.kind === 'nakyvyys') return c.value > 0 ? 'Näkyvyys (Google 3D): ' + c.value + ' km' : 'Näkyvyys (Google 3D): ei sumukerrosta';
     if (c.kind === 'google3d') return c.value ? 'Ulkonäkymä: Google 3D (testi)' : 'Ulkonäkymä: oma';
     if (c.kind === 'eblvrm') return c.value ? 'Plotterin EBL ja VRM päälle' : 'Plotterin EBL ja VRM pois';
     return H.cmdText(c);
@@ -1068,6 +1079,7 @@
     $('mTune').textContent = 'Tutkan viritys: ' + (G.radarTune === 'huono' ? 'huono' : 'hyvä');
     $('mGfx').textContent = 'Grafiikka: ' + (gfxNow() === 'light' ? 'kevyt' : 'täysi');
     $('mView').textContent = 'Ulkonäkymä: ' + (G.ext === 'google' ? 'Google 3D (testi)' : 'oma');
+    $('mVis').textContent = 'Näkyvyys (Google 3D): ' + (G.fogKm > 0 ? G.fogKm + ' km' : 'ei sumukerrosta');
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }

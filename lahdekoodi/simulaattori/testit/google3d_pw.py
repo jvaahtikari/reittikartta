@@ -89,7 +89,7 @@ with sync_playwright() as pw:
     mode['v'] = 'ok'
     tap('#menuBtn'); p.wait_for_timeout(200); tap('#mView'); p.wait_for_timeout(2500)
     ok(p.evaluate('__sim.ext') == 'google', 'Google 3D valittu')
-    ok(p.evaluate('getComputedStyle(__view.canvas).visibility') == 'hidden', 'oma three.js-näkymä piilotettu')
+    ok(p.evaluate('getComputedStyle(__view.canvas).visibility') == 'visible' and p.evaluate('__view.isOverlay()'), 'vaihe 3n: oma three.js-kangas on Googlen kartan päällä läpinäkyvänä kerroksena')
     ok(p.evaluate('!!document.querySelector("#v3 .g3d-box .fake-map3d")'), 'karttaelementti on #v3-ruudun sisällä')
     ok(p.is_visible('#g3dBadge') or dev != 'desktop', 'tilakilpi näkyy')
     ok(p.evaluate('document.querySelector("#v3 .g3d-box").getBoundingClientRect().width') > 100, 'kartan laatikko täyttää näkymän')
@@ -129,11 +129,13 @@ with sync_playwright() as pw:
     # paluu
     tap('#g3dBack') if dev == 'desktop' else p.evaluate('document.getElementById("g3dBack").click()')
     p.wait_for_timeout(500)
-    ok(p.evaluate('__sim.ext') == 'own' and p.evaluate('getComputedStyle(__view.canvas).visibility') == 'visible' and not p.evaluate('!!document.querySelector(".fake-map3d")'), 'paluu omaan näkymään poistaa kartan ja palauttaa oman')
+    ok(p.evaluate('__sim.ext') == 'own' and p.evaluate('getComputedStyle(__view.canvas).visibility') == 'visible' and p.evaluate('getComputedStyle(document.querySelector(".g3d-box")).display') == 'none' and not p.evaluate('__view.isOverlay()'), 'vaihe 3n: paluu omaan näkymään piilottaa kartan (säilyy elossa) ja palauttaa oman')
     ok(any(x['kind'] == 'google3d' for x in p.evaluate('__sim.S.cmdLog')), 'valinnat kirjautuvat komentolokiin')
     # 5. gmp-error: paluu omaan näkymään
-    p.evaluate('window.__fakeMode="error"')
-    p.evaluate('document.getElementById("menuBtn").click()'); p.wait_for_timeout(200); p.evaluate('document.getElementById("mView").click()'); p.wait_for_timeout(2500)
+    # vaihe 3n: kartta pidetään elossa, joten virhe laukaistaan olemassa olevalle elementille (uuden luonnin virhe on testattu kohdassa 3)
+    p.evaluate('document.getElementById("menuBtn").click()'); p.wait_for_timeout(200); p.evaluate('document.getElementById("mView").click()'); p.wait_for_timeout(1500)
+    ok(p.evaluate('__sim.ext') == 'google', 'paluu Googleen onnistuu ennen virhettä')
+    p.evaluate('window.__fakeMap.dispatchEvent(new Event("gmp-error"))'); p.wait_for_timeout(1500)
     ok(p.evaluate('__sim.ext') == 'own' and p.is_visible('#g3dInfo') and 'gmp-error' in p.inner_text('#g3dInfoText'), 'gmp-error palauttaa omaan näkymään ja kertoo syyn')
     p.evaluate('document.getElementById("g3dInfoClose").click()')
     # 6. peli jatkuu ja purku toimii
@@ -141,7 +143,7 @@ with sync_playwright() as pw:
     p.evaluate('document.getElementById("menuBtn").click()'); p.evaluate('document.getElementById("mAbort").click()'); p.wait_for_timeout(1500)
     ok(p.is_visible('#debrief'), 'purku aukeaa')
     ok('Google' not in p.inner_text('#debrief') or True, 'purku renderöityy')
-    errs = [e for e in errs if 'ERR_FAILED' not in e[1] and 'maps.googleapis' not in e[1]]
+    errs = [e for e in errs if 'ERR_FAILED' not in e[1] and 'maps.googleapis' not in e[1] and 'status of 404' not in e[1]]   # 404: /api/google (palvelimen avain) puuttuu staattiselta testipalvelimelta, sim.js hakee sen jo ennen vaihetta 3n
     ok(not errs, 'ei konsolivirheitä (%s)' % [e for e in errs][:3])
     b.close()
 print('YHTEENSÄ', len(checks), 'tarkistusta,', len([1 for x in checks if not x[0]]), 'virhettä')
