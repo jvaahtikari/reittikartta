@@ -157,13 +157,18 @@
     var has = !!root.Google3D.getKey(), srv = root.Google3D.hasServerKey();
     $('googleKeyHint').textContent = srv && !String($('googleKey').value || '').trim() ? 'Avain tulee palvelimelta (Vercel GOOGLE_API). Google 3D (testi) valitaan ajon valikosta kohdasta Ulkonäkymä.' : has ? 'Avain on tallennettu tähän selaimeen. Google 3D (testi) valitaan ajon valikosta kohdasta Ulkonäkymä.' : 'Ilman avainta Google 3D -testinäkymä ei aukea. Oma näkymä toimii aina ilman avainta.';
   }
+  function updateSceneHint() {
+    var el = $('sceneHint'); if (!el) return;
+    var has = !!(root.Google3D && root.Google3D.getKey());
+    el.textContent = G.scene === 'google' ? (has ? 'Googlen fotorealistinen maisema, oma vesi, vene ja merkit sen päällä. Vaihto ajon valikosta kohdasta Ulkonäkymä.' : 'Avainta ei löytynyt, joten ajo alkaa omalla maisemalla.') : 'Oma maisema avoimesta aineistosta. Toimii myös ilman verkkoa.';
+  }
   function initGoogleKey() {
     var inp = $('googleKey'); try { inp.value = localStorage.getItem('sim.googleKey') || ''; } catch (e) {}
-    root.Google3D.fetchServerKey(function () { updateKeyHint(); });
+    root.Google3D.fetchServerKey(function () { updateKeyHint(); updateSceneHint(); });
     $('gkHelp').innerHTML = root.Google3D.HELP_LINES.map(esc).join('<br>');
     inp.addEventListener('change', function () { root.Google3D.setKey(inp.value); updateKeyHint(); });
-    inp.addEventListener('input', function () { root.Google3D.setKey(inp.value); updateKeyHint(); });
-    updateKeyHint();
+    inp.addEventListener('input', function () { root.Google3D.setKey(inp.value); updateKeyHint(); updateSceneHint(); });
+    updateKeyHint(); updateSceneHint();
   }
   function initStart() {
     segInit('segEx', function (v) { G.ex = v; updateBudgetHint(); });
@@ -174,6 +179,11 @@
     segInit('segSpeed', function (v) { G.targetKn = Number(v); updateBudgetHint(); });
     segInit('segEye', function (v) { G.eye = v; });
     segInit('segDisp', function (v) { G.disp = v; updateDispHint(); });
+    // Maisema (27.10.2026): Google 3D oletuksena, kun avain on saatavilla. Valinta muistetaan (sim.maisema).
+    try { var sc = localStorage.getItem('sim.maisema'); if (sc === 'own' || sc === 'google') G.scene = sc; } catch (e) {}
+    if (!G.scene) G.scene = 'google';
+    Array.prototype.forEach.call($('segScene').children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === G.scene); });
+    segInit('segScene', function (v) { G.scene = v; try { localStorage.setItem('sim.maisema', v); } catch (e) {} updateSceneHint(); });
     G.dateStr = todayHelsinki(); $('dateIn').value = G.dateStr;
     segInit('segClock', function (v) { G.clockMode = v; updateClockHint(); });
     $('clockIn').addEventListener('input', function () { G.clockStr = $('clockIn').value || '12:00'; updateClockHint(); });
@@ -658,7 +668,7 @@
     $('gazeR').addEventListener('click', function () { G.view.setGaze(60); });
     $('mOrient').addEventListener('click', function () { G.northUp = !G.northUp; G.pl.setHeadUp(!G.northUp); updateMenuLabels(); savePrefs(); });
     $('mTune').addEventListener('click', function () { setRadarTune(G.radarTune === 'huono' ? 'hyva' : 'huono'); });
-    $('mView').addEventListener('click', function () { $('menu').hidden = true; setExtView(G.ext !== 'google'); });
+    $('mView').addEventListener('click', function () { $('menu').hidden = true; var ok = setExtView(G.ext !== 'google'); if (ok) { G.scene = G.ext === 'google' ? 'google' : 'own'; try { localStorage.setItem('sim.maisema', G.scene); } catch (e) {} } });
     $('mVis').addEventListener('click', function () {
       var lv = root.Google3D.SETTINGS.fogLevelsKm, i = lv.indexOf(G.fogKm); G.fogKm = lv[(i + 1) % lv.length]; if (G.view) G.view.setFogKm(G.fogKm); updateMenuLabels(); savePrefs();
       if (G.S && G.mode === 'run') logCustom('nakyvyys', G.fogKm);
@@ -981,6 +991,7 @@
         if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.budgetKn * KN)), 2600);
         if (G.rec) G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y));
         applyPanes(); sizeViews();
+        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true);
         loadAids(v.aids.settings.loadRadius);   // loistojen ja linjataulujen näkyvyysrajat ovat kilometrejä, joten kauempana olevat laitteet luetaan taustalla
       }
       return;
