@@ -16,7 +16,7 @@
   var SET = {
     z: 13,                 // maastokuvio-ruutujen zoom (ruutu noin 2,3 km)
     radiusM: 5000,         // vesi ladataan tälle säteelle aluksesta
-    extendM: 1.5,          // vesi ulottuu tämän verran maan puolelle
+    extendM: -1.0,         // negatiivinen: oma vesi päättyy tämän verran ennen rantaviivaa, jotta Googlen ranta, laiturit ja rantamuurit jäävät näkyviin (27.10.2026, käyttäjän palaute: talot näyttivät seisovan vedessä)
     reselectM: 250,        // ruutuvalinta tehdään uudelleen, kun alus on liikkunut tämän verran
     buffer: 80,            // MVT-ruudun puskuri (yksikköä), jonka leikkausreunat pidetään paikallaan
     refE: 327000, refN: 6823500,

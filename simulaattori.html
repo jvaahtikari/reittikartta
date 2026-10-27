@@ -9167,7 +9167,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   var SET = {
     z: 13,                 // maastokuvio-ruutujen zoom (ruutu noin 2,3 km)
     radiusM: 5000,         // vesi ladataan tälle säteelle aluksesta
-    extendM: 1.5,          // vesi ulottuu tämän verran maan puolelle
+    extendM: -1.0,         // negatiivinen: oma vesi päättyy tämän verran ennen rantaviivaa, jotta Googlen ranta, laiturit ja rantamuurit jäävät näkyviin (27.10.2026, käyttäjän palaute: talot näyttivät seisovan vedessä)
     reselectM: 250,        // ruutuvalinta tehdään uudelleen, kun alus on liikkunut tämän verran
     buffer: 80,            // MVT-ruudun puskuri (yksikköä), jonka leikkausreunat pidetään paikallaan
     refE: 327000, refN: 6823500,
@@ -9749,7 +9749,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     // ---- kerrostila (vaihe 3n) ----
     // ov.on: Google-kerroksen päällä piirtävä tila. fogKm: sumukerroksen näkyvyys (0 = ei sumukerrosta). cal: kalibrointi (oman kameran korjaukset Googlen todelliseen käytökseen).
     var horColor = new THREE.Color(0xcfdce8);
-    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.25, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
+    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.1, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
     ov.mat = new THREE.ShaderMaterial({
       uniforms: { uFogColor: { value: U.uFogColor.value }, uInvVis: { value: 0 }, uLower: { value: ov.lower } },
       blending: THREE.NoBlending, fog: false, toneMapped: false, colorWrite: false,

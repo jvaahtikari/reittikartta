@@ -380,7 +380,7 @@
     // ---- kerrostila (vaihe 3n) ----
     // ov.on: Google-kerroksen päällä piirtävä tila. fogKm: sumukerroksen näkyvyys (0 = ei sumukerrosta). cal: kalibrointi (oman kameran korjaukset Googlen todelliseen käytökseen).
     var horColor = new THREE.Color(0xcfdce8);
-    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.25, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
+    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.1, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
     ov.mat = new THREE.ShaderMaterial({
       uniforms: { uFogColor: { value: U.uFogColor.value }, uInvVis: { value: 0 }, uLower: { value: ov.lower } },
       blending: THREE.NoBlending, fog: false, toneMapped: false, colorWrite: false,
