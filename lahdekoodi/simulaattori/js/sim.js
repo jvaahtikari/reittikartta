@@ -5,7 +5,7 @@
  * 1024 px) mittari ja 3D ovat rinnakkain, ja vähintään 1440 px leveällä näytöllä plotteri, 3D ja tutka ovat kolmena ruutuna.
  * Simulaatio etenee 0,1 s:n kiinteillä askelilla, joten tallenne ja automaattiohjaus ovat samat nopeutuksesta riippumatta.
  * URL-parametrit (kehitys ja testit): aineisto (paketin osoite), harjoitus (h1, free, rk1, rk2 ... tai Reittikartan reitin tunniste), suunta=kaanteinen (lähtö viimeisestä pisteestä), auto (automaattiohjauksen tavoitenopeus kn),
- * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö). */
+ * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö), laatu (kevyt tai täysi), veneet=ei (ei laituriveneitä). */
 (function (root) {
   'use strict';
   var P = root.Paikka, L = root.Liike, H = root.Harjoitus, KN = L.KN, RAD = Math.PI / 180;
@@ -24,6 +24,7 @@
     // mittarit: disp = aloitusvalinta (plot, radar, both), instr = näytettävä mittari (plot, radar, both = kolme ruutua)
     disp: 'plot', instr: 'plot', plotShown: true, radar: null, radarOpt: null, radarOn: true, radarShown: false, radarMain: false, radarReady: true,
     collision: null, collMs: { n: 0, sum: 0, max: 0 }, lastTorE: 1e9, lastTorN: 1e9,
+    boats: null, boatsOn: true, boatGen: 0, boatBusy: 0, boatInit: true, boatStats: null, lastBoatLoad: { x: 1e9, y: 1e9 },
     lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0, gfx: null,
     ext: 'own', g3: null    // ulkonäkymä (vaihe 3m): 'own' = oma three.js-näkymä, 'google' = Google 3D (testi)
   };
@@ -198,11 +199,100 @@
     root.__view = G.view; root.__pl = G.pl;
     G.bridges = root.Sillat3D ? root.Sillat3D.attach(G.view) : null;   // sillat (vaihe 3i): piirto joka kuvalla view.render-kutsun yhteydessä, rebase addExtra-kautta
     G.view.setQuality(gfxNow());
+    if (qs.get('vesi') !== 'iso') splitWater(G.view);   // vesitason syvyystarkkuus (vaihe 3l)
+    G.boats = root.Veneet3D && qs.get('veneet') !== 'ei' ? attachBoats(G.view) : null;   // laituriveneet (vaihe 3l)
+    applyBoatsQuality();
     new ResizeObserver(function () { layout(); }).observe($('stage'));
     new ResizeObserver(function () { sizeViews(); }).observe($('pane3d'));
     root.addEventListener('resize', layout);
     root.addEventListener('orientationchange', function () { setTimeout(layout, 200); });
   }
+  // ---------- laituriveneet (vaihe 3l) ----------
+  // Veneet (veneet3d.js) ovat laitureissa. Lataus: vesieste- ja maastokuvio-ruudut aluksen ympäriltä (1 500 m ja yksi ruutu reunaa), uusi lataus 400 m:n askelin ja veneiden sijoitus
+  // asetaLaiturit-kutsulla (noin 0,2 ... 0,4 s, omassa tehtävässään eikä kuvassa). Piirto ja keinunta (paivita) joka kuvalla view.render-kutsun yhteydessä, rebase view.addExtra-kautta.
+  // Laatu: täysi 1 500 m säteellä, lähimallit alle 300 m ja kaukomallit kauempana. Kevyt 600 m säteellä, vain kaukomallit. Täyttöaste 70 %, kausi kesä (talvi myöhemmin).
+  var BOAT = { radius: 1500, margin: 300, stepM: 400, z: 16, full: { vis: 1500, far: 300, buoy: 300 }, light: { vis: 600, far: 0, buoy: 150 } };   // poijut ja köydet (0,4 m) ovat yli 300 m:n päässä alle kuvapisteen kokoisia, joten niitä ei piirretä kauempaa (kolmioita 9 000 vähemmän)
+  // Vesitason syvyystarkkuus: nakyma.js:n 60 000 m:n vesitaso on kaksi kolmiota, ja ohjelmistopiirrossa (SwiftShader) sen syvyysarvo on epätarkka, joten veneiden vedenalaiset osat näkyivät veden läpi
+  // (mitattu magenta-kokeella, testit/veneet3l_pohja_pw.py). Taso pilkotaan ruudukoksi, jonka ruudut ovat kameran kohdalla 10 m ja kasvavat 1,35-kertaisesti reunaa kohti (6 272 kolmiota).
+  // Geometria vaihdetaan sim.js:ssä, koska nakyma.js on pysyvä. Osoiteparametri vesi=iso jättää alkuperäisen kahden kolmion tason (vertailua varten).
+  function splitWater(view) {
+    var w = null;
+    view.scene.children.forEach(function (o) { if (!w && o.isMesh && o.geometry && o.geometry.type === 'PlaneGeometry' && o.geometry.parameters && o.geometry.parameters.width > 50000) w = o; });
+    if (!w) return false;
+    var half = w.geometry.parameters.width / 2, br = [0], r = 10, u = [], i, j;
+    while (r < half) { br.push(r); r *= 1.35; }
+    br.push(half);
+    for (i = br.length - 1; i > 0; i--) u.push(-br[i]);
+    for (i = 0; i < br.length; i++) u.push(br[i]);
+    var n = u.length, pos = [], idx = [];
+    for (j = 0; j < n; j++) for (i = 0; i < n; i++) pos.push(u[i], u[j], 0);   // PlaneGeometry: x ja y, normaali +z (vesitaso kierretään -90 astetta x-akselin ympäri)
+    for (j = 0; j + 1 < n; j++) for (i = 0; i + 1 < n; i++) { var a = j * n + i; idx.push(a, a + 1, a + n + 1, a, a + n + 1, a + n); }
+    var g = new root.THREE.BufferGeometry();
+    g.setAttribute('position', new root.THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+    w.geometry.dispose(); w.geometry = g;
+    return true;
+  }
+  function attachBoats(view) {
+    var b = root.Veneet3D.luoVeneet(view.scene, {}), r0 = view.render, tb = 0;
+    view.render = function (st, dt) {
+      tb += Math.min(0.2, dt || 0.016);
+      if (G.boatsOn) b.paivita(tb, { x: st.x, y: st.y });
+      return r0.apply(view, arguments);
+    };
+    if (view.addExtra) view.addExtra(b);
+    view.boats = b;
+    return b;
+  }
+  function applyBoatsQuality() {
+    if (!G.boats) return;
+    var q = BOAT[gfxNow() === 'light' ? 'light' : 'full'], a = G.boats.asetukset;
+    a.nakyvyysRaja = q.vis; a.kaukoRaja = q.far; a.poijuRaja = q.buoy;
+  }
+  function boatsAt(e, n, r) {   // veneet pisteen (e, n) TM35FIN ympäriltä: törmäystarkistus ja tutka
+    var b = G.boats; if (!b || !G.boatsOn) return null;
+    var o = b.origin(); return b.lahella(e - o.e, n - o.n, r);
+  }
+  function loadBoats() {
+    var b = G.boats; if (!b || G.boatBusy || !G.S) return;
+    var token = ++G.boatGen, o = P.getOrigin(), e0 = G.S.x + o.e, n0 = G.S.y + o.n;
+    G.boatBusy = token; G.lastBoatLoad = { x: G.S.x, y: G.S.y };
+    var ll = P.enToLonLat(e0, n0), tp = P.lonlatToTile(ll.lon, ll.lat, BOAT.z), size = 40075016.686 * Math.cos(ll.lat * RAD) / Math.pow(2, BOAT.z);
+    var reach = BOAT.radius + BOAT.margin, k = Math.ceil(reach / size) + 1, jobs = [], ves = [], kuv = [];
+    for (var dy = -k; dy <= k; dy++) for (var dx = -k; dx <= k; dx++) {
+      var tx = Math.floor(tp.x) + dx, ty = Math.floor(tp.y) + dy;
+      if (Math.hypot(Math.max(0, Math.abs(tx + 0.5 - tp.x) - 0.5) * size, Math.max(0, Math.abs(ty + 0.5 - tp.y) - 0.5) * size) > reach) continue;
+      (function (x, y) {
+        jobs.push(root.Aineisto.layers(BOAT.z, x, y, ['vesieste', 'maastokuvio']).then(function (r) {
+          if (!r) return;
+          if (r.vesieste) ves.push({ z: BOAT.z, x: x, y: y, layer: r.vesieste });
+          if (r.maastokuvio) kuv.push({ z: BOAT.z, x: x, y: y, layer: r.maastokuvio });
+        }, function () {}));
+      })(tx, ty);
+    }
+    Promise.all(jobs).then(function () {
+      setTimeout(function () {
+        if (G.boatBusy === token) G.boatBusy = 0;
+        if (token !== G.boatGen || !G.boats) return;
+        try {
+          var t0 = performance.now(), onVesi = root.Veneet3D.luoVesiTesti(kuv);
+          var st = b.asetaLaiturit(ves, P.getOrigin(), { onVesi: onVesi, rajaus: { e: e0, n: n0, sade: BOAT.radius } });
+          G.boatStats = { ms: performance.now() - t0, ruutuja: ves.length, ketjuja: st.ketjuja, keskenJaaneita: st.keskenJaaneita, paikkoja: st.paikkoja, veneita: st.veneita, luokittain: st.luokittain, hylatty: st.hylatty };
+        } catch (err) { G.boatStats = { virhe: String(err && err.message || err) }; }
+        G.boatInit = true;
+      }, 0);
+    });
+  }
+  function startBoats() {
+    var b = G.boats; if (!b) return;
+    G.boatInit = false; G.boatBusy = 0; G.lastBoatLoad = { x: 1e9, y: 1e9 };
+    try { b.asetaLaiturit([], P.getOrigin(), {}); } catch (e) {}
+    loadBoats();
+  }
+  function maybeLoadBoats() {
+    if (!G.boats || !G.boatInit) return;
+    if (Math.hypot(G.S.x - G.lastBoatLoad.x, G.S.y - G.lastBoatLoad.y) > BOAT.stepM) loadBoats();
+  }
+
   // Asettelut: puhelin (yksi päänäkymä ja pieni ikkuna), puhelimen vaaka-asento (komennot oikealla) ja leveä asettelu (deck):
   // vähintään 1024 px leveä vaaka-asento tai tabletti pystyasennossa (leveys vähintään 700 px). Deckissä ulkonäkymä on ylhäällä
   // koko leveydeltä noin 60 % korkeudesta ja alla rivissä plotteri, tutka ja komentopalsta (tabletilla pystyssä komennot rivin alla).
@@ -344,6 +434,7 @@
     P.setOrigin(G.origin.e, G.origin.n);
     root.Merkit.clear(); root.Pohja.clear(); root.Tormays.clear();
     root.Tormays.setBridgeSource(function () { return G.bridges ? G.bridges.spans() : null; });
+    root.Tormays.setBoatSource(boatsAt);   // veneet esteinä (vaihe 3l)
     G.collision = null; G.collMs = { n: 0, sum: 0, max: 0 }; G.lastTorE = G.lastTorN = 1e9; $('groundGo').hidden = true; $('groundTitle').textContent = 'Pohjakosketus';
     var st = G.route ? { e: G.route.pts[0].e, n: G.route.pts[0].n, brg: G.route.legs[0].brg } : { e: 327184, n: 6823553, brg: 350 };
     var w0 = P.enToWorld(st.e, st.n), ll = P.worldToLonLat(w0.x, w0.y), conv = P.convergenceDeg(ll.lon, ll.lat);
@@ -376,6 +467,7 @@
     root.Pohja.preload(G.S.x, G.S.y, 900);
     root.Tormays.preload(G.S.x, G.S.y, root.Tormays.RADIUS);
     G.view.rebase(); G.pl.rebase();
+    startBoats();
     G.t0load = performance.now(); G.lastT = performance.now();
     requestAnimationFrame(loop);
   }
@@ -408,7 +500,7 @@
     if (G.rec) G.rec.radar = [{ t: 0, on: true }];
     if (G.disp === 'plot') { G.radarOpt = null; return; }
     G.radarOpt = { aineisto: root.Aineisto, alue: 1.5, suuntaYlos: true, ui: true, eblVrm: true, kuvavali: 50, viritys: G.radarTune,
-      ulkoisetNapit: [$('rOffBtn')], onViritys: setRadarTune, onKirjaus: function (kind, value) { onEV('tutka' + kind, value); } };
+      ulkoisetNapit: [$('rOffBtn')], onViritys: setRadarTune, veneet: boatsAt, onKirjaus: function (kind, value) { onEV('tutka' + kind, value); } };
     G.radar = root.Tutka.luoTutka($('radar'), G.radarOpt);
     root.__radar = G.radar;
     applyPanes();
@@ -571,7 +663,7 @@
       var k = root.Google3D.setKey($('g3dKeyIn').value); updateKeyHint();
       if (!k) return; $('g3dInfo').hidden = true; setExtView(true);
     });
-    $('mGfx').addEventListener('click', function () { G.gfx = gfxNow() === 'full' ? 'light' : 'full'; G.view.setQuality(G.gfx); updateMenuLabels(); savePrefs(); });
+    $('mGfx').addEventListener('click', function () { G.gfx = gfxNow() === 'full' ? 'light' : 'full'; G.view.setQuality(G.gfx); applyBoatsQuality(); updateMenuLabels(); savePrefs(); });
     $('mRaster').addEventListener('click', function () { G.raster = !G.raster; G.pl.setRasterVisible(G.raster); updateMenuLabels(); savePrefs(); });
     $('mFov').addEventListener('click', function () {
       var opts = [70, 80, 90, 100, 110], i = opts.indexOf(G.fovDeg); G.fovDeg = opts[(i + 1) % opts.length]; G.view.setHfov(G.fovDeg); updateMenuLabels(); savePrefs();
@@ -855,7 +947,7 @@
     var dx = S.x, dy = S.y;
     G.origin.e += dx; G.origin.n += dy; P.setOrigin(G.origin.e, G.origin.n);
     S.x = 0; S.y = 0; G.trail = []; G.acc = G.acc;
-    root.Merkit.rebase(); G.view.rebase(); G.pl.rebase(); root.Pohja.clear(); G.lastMerkitLoad = { x: 0, y: 0 };
+    root.Merkit.rebase(); G.view.rebase(); G.pl.rebase(); root.Pohja.clear(); G.lastMerkitLoad = { x: 0, y: 0 }; G.lastBoatLoad = { x: 0, y: 0 };
   }
 
   var frameN = 0;
@@ -870,7 +962,7 @@
       var prog = Math.min(0.95, 0.15 + 0.8 * Math.min(1, t / 12));
       if (G.radar && performance.now() - G.lastRadarT >= 100) { G.lastRadarT = performance.now(); feedRadar(); }
       if (G.plotShown && G.plotterOn) G.pl.update(S.x, S.y, S.hdg, cogOf(S), Math.abs(S.v));
-      var idle = v.terrain.idle() && (!v.piers || v.piers.idle()) && (!G.bridges || G.bridges.idle()) && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && root.Tormays.idle() && t > 1.2 && G.radarReady && (!G.plotShown || G.pl.ready());
+      var idle = v.terrain.idle() && (!v.piers || v.piers.idle()) && (!G.bridges || G.bridges.idle()) && (!G.boats || G.boatInit) && G.loadedLandmarks && root.Pohja.ready(S.x, S.y) && root.Tormays.idle() && t > 1.2 && G.radarReady && (!G.plotShown || G.pl.ready());
       setLoad(idle ? 1 : prog, 'Ladataan maastoa ' + (j.jobs + j.queued) + ' ruutua');
       v.render(S, dtReal);
       if (idle || t > 60) {
@@ -886,7 +978,7 @@
     if (G.mode === 'run') {
       if (G.gazeKey) v.setGaze(v.getGaze() + G.gazeKey * 90 * dtReal * v.gazeSens());
       stepSim(dtReal);
-      maybeLoadAids(); maybeRebase();
+      maybeLoadAids(); maybeLoadBoats(); maybeRebase();
     }
     v.terrain.tick(G.mode === 'run' ? 4 : 8);
     // 3D piirretään joka kuvalla, kun se on päänäkymä, ja joka toisella pienenä ikkunana
@@ -1104,7 +1196,8 @@
   function init() {
     initStart(); bindControls();
     root.__sim.startRun = startRun;
-    root.__sim.onCollision = onCollision;   // testikoukku: kutsutaan osumalla { kind, type, kn, x, y }
+    root.__sim.onCollision = onCollision;
+    root.__sim.setBoats = function (on) { G.boatsOn = !!on; if (G.boats) G.boats.nayta(!!on); };   // testikoukku: veneet päälle tai pois (suorituskykymittaus)   // testikoukku: kutsutaan osumalla { kind, type, kn, x, y }
     if (qs.get('alku') === '1') startRun();
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();

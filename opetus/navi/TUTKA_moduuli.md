@@ -33,6 +33,7 @@ const tutka = Tutka.luoTutka(canvas, {
   eblVrm: true,                            // false = ei EBL:ää eikä VRM:ää
   kuvavali: 50,                            // ms, kuinka usein kuva piirretään
   viritys: 'hyva',                         // 'hyva' (oletus) tai 'huono', ks. kohta 4.5a
+  veneet: function (e, n, sade) { return [...]; },   // valinnainen (vaihe 3l): kiinnitetyt veneet pistekaikuina, ks. kohta 4.6
   onMuutos: function (t) {}                // kutsutaan, kun alue, EBL, VRM tai muu asetus muuttuu
 })
 tutka.paivita({ e: 327184, n: 6823800, suunta: 90, nopeus: 8, aika: performance.now() })
@@ -56,7 +57,7 @@ Rajapinta:
 | `valmis()` | Lupaus, joka toteutuu, kun nykyisen alueen ruudukko ja turvalaitteet on ladattu. Esikatselu ja testit käyttävät tätä. |
 | `taytaKierros()` | Laskee koko pyyhkäisyn heti ja palauttaa keston millisekunteina (testeihin ja pysäytettyyn esikatseluun). |
 | `piirra()`, `kaynnista(tilaFn)`, `pysayta()`, `tuhoa()` | Piirto, oma `requestAnimationFrame`-silmukka (valinnainen, `tilaFn` palauttaa `paivita`-olion), pysäytys ja siivous. |
-| `kohteet()`, `tilasto()`, `verkko()` | Ladatut turvalaitteet, mittarit ja verkkopyyntöjen määrät. |
+| `kohteet()`, `tilasto()`, `verkko()` | Ladatut turvalaitteet, mittarit ja verkkopyyntöjen määrät. `tilasto().veneita` on viimeksi haettujen veneiden määrä (kohta 4.6). |
 | `vapautaRuudut()` | Vapauttaa ruudukon muistin (viimeisin kuva jää näkyviin). |
 
 ## 3. Näyttö ja käyttö
@@ -163,6 +164,24 @@ Turvalaite piirtyy pistekaikuna, kun se on säteen kohdalla (±1,35 × puolikeil
 | Muu kiinteä | 2,5 m | 0,50 | 3 800 m | 0,95 |
 | Viitta (kelluva) | 1,2 m | 0,32 | 2 600 m | `max(0,12, min(0,95, 1,25 − r / 2000 m))` |
 
+#### Veneet (vaihe 3l)
+
+Asetus `veneet(e, n, sade)` on valinnainen funktio, joka palauttaa pisteen (`e`, `n`, EPSG:3067) ympäriltä veneet samassa muodossa kuin simulaattorin `Veneet3D.lahella` (`e`, `n`, `luokka`, `masto`, `kaikuTaso`, `kiinnitetty`). Ilman asetusta tutka ei piirrä veneitä eikä sen laskenta muutu. Moduuli ei sijoita veneitä itse. Simulaattori antaa funktion, joka kysyy venemoduulin `lahella`-rajapintaa (`sim.js`, `boatsAt`).
+
+Vene piirtyy pistekaikuna samalla tavalla kuin kiinteä merkki: säteen kohdalla (±1,35 × puolikeilan leveys), näkölinja ei saa jäädä esteen taakse (sama kulmakaava ja 0,0009 rad:n toleranssi) ja etäisyyden vaimennus sekä vahvistus ovat samat. Erot merkkeihin ovat nämä.
+
+| Luokka | Korkeus `hs` | Voimakkuus | Enimmäisetäisyys | Havaintotodennäköisyys |
+|---|---|---|---|---|
+| Purjevene (masto ja runko) | 0,75 × mastonkorkeus (noin 9 m, vähintään 3 m) | 0,60 | 2 500 m | 1,0 |
+| Moottorivene (pieni ja keskikokoinen) | 1,0 m (pieni) tai 2,0 m (keski) | 0,45 | 2 500 m | 1,0 |
+| Soutuvene | 0,6 m | 0,25 | 2 500 m | 1,0 |
+
+- Ei välkyntää: amplitudi on vakio jokaisella pyyhkäisyllä ja havainto on varma (kuten kiinteällä merkillä hyvässä virityksessä). Voimakkuus laskee vain keilan reunaa kohti kuten merkeillä (`1 − d / (1,15 · puolikeila)`).
+- Varjo ja näkyvyys lasketaan kuten merkeille: kaiun korkeus on `max(hs, ympäröivän esteen korkeus)`, ja se jää piiloon, jos kulma on yli 0,0009 rad pienempi kuin säteen suurin aiempi kulma kolme askelta lähempänä. Matala soutuvene laiturin tai rannan takana jää siis helposti varjoon, mutta masto kohoaa varjorajan yli.
+- Lähin 15 m on kuollut alue (sama kuin merkeillä). Pulssin pituus levittää kaiun 12 m:n pituiseksi (painot kuten merkeillä).
+- Tiheässä satamassa kaiut sulautuvat toisiinsa ja laiturien kaikuun, mikä vastaa oikeaa tutkaa: yksittäisiä veneitä ei erota, kun venepaikkoja on 3,5 m:n välein. Laiturien väleissä näkyvät vain ne, joiden masto tai runko erottuu laiturin kaiusta.
+- Veneet haetaan lähteestä 100 m:n tai 1,5 s:n välein (haun säde 2 650 m), ja suhteellinen suunta ja etäisyys lasketaan joka päivityksellä. Vain `kiinnitetty !== false` -veneet huomioidaan. Voimakkuus on kirjattu vakioon `M.veneet`.
+
 Viittojen kaiku on heikko ja välkkyvä: jokaisella pyyhkäisyllä amplitudi arvotaan väliltä 0,55–1,0 ja havainnon todennäköisyys laskee etäisyyden mukana. Kiinteät merkit ovat vakaita (amplitudi 0,9–1,0 huonossa ja vakio hyvässä virityksessä). Näkyvyys testataan samalla kulmakaavalla kuin maalle. Merkin korkeus on luokan `hs` tai ympäröivän maan korkeus sen mukaan, kumpi on suurempi, ja merkki jää piiloon, jos sen kulma on yli 0,0009 rad pienempi kuin säteen suurin aiempi kulma kolme askelta lähempänä.
 
 ### 4.7 Häiriöt
@@ -176,7 +195,7 @@ Viittojen kaiku on heikko ja välkkyvä: jokaisella pyyhkäisyllä amplitudi arv
 - Ei laske hajontaa lehtipuun ja havupuun välillä, ei lumikuormaa, ei jäätä eikä aaltoja.
 - Ei mallinna vertikaalikeilaa (noin 25° pystysuunnassa), joten lähimmän veden kohina on yksinkertaistettu.
 - Ei mallinna sivukeiloja, haamukaikuja (mastot, oma runko) eikä monitiekaikuja.
-- Ei mallinna muiden alusten kaikuja. Niitä ei ole toteutettu, ja `lisaaAidit` on luonteva malli niiden lisäämiselle.
+- Ei mallinna liikkuvien alusten kaikuja. Kiinnitetyt veneet ovat pistekaikuja asetuksella `veneet` (kohta 4.6), ja liikkuva liikenne kelpaisi samaan rajapintaan.
 
 ## 5. Suorituskyky
 

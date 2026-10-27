@@ -354,7 +354,7 @@
   }
 
   // Esteeseen osuminen tekstinä: kosketus (alle 1,0 kn) tai törmäys, kohde, nopeus. value = { kind, kn }
-  var ACC = { laituri: 'laituriin', aallonmurtaja: 'aallonmurtajaan', kivi: 'vesikiveen', pilari: 'sillan pilariin' };
+  var ACC = { laituri: 'laituriin', aallonmurtaja: 'aallonmurtajaan', kivi: 'vesikiveen', pilari: 'sillan pilariin', vene: 'veneeseen' };
   function collisionText(type, v) {
     return (type === 'kosketus' ? 'Kosketus ' : 'Törmäys ') + (ACC[v && v.kind] || 'esteeseen') + ' ' + (Math.round((v ? v.kn : 0) * 10) / 10).toFixed(1).replace('.', ',') + ' kn';
   }

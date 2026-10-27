@@ -6,6 +6,7 @@
  *    alueena piirretyt laiturit ja aallonmurtajat monikulmioina
  *  - vesikivi_pinnassa ja vesikivi_pinnan_ylapuolella ympyränä, jonka halkaisija on 1,5 m
  *  - sillan pilarit 1,5 m neliöinä (sama sijoittelu kuin sillat3d.js:ssä: 25 m välein veden päällä, leveällä kannella 2-3 rinnakkain)
+ *  - laitureihin kiinnitetyt veneet (vaihe 3l): veneen suorakulmio (pituus x leveys, ruutusuunta) Veneet3D.lahella-rajapinnasta, jota kysytään vain aluksen ympäriltä. Veneet eivät liiku törmäyksessä.
  * Esteet luetaan z16-ruuduista (vesieste-kerros, Laiturit3D.tileItems) alle 300 m:n päästä aluksesta ja pidetään TM35FIN-koordinaateissa (E, N), joten maailmakoordinaatiston
  * origon siirto ei vaikuta niihin. Sillat saadaan Sillat3D-moduulilta (spans), jotta vain 3D-näkymässä piirretyt pilarit ovat esteitä.
  *
@@ -16,8 +17,9 @@
   var Z = 16, MAX_TILES = 120, RADIUS = 300, ROCK_R = 0.75, EXT_CUT = 0.05, PIVOT_X = 5.0, TOUCH_KN = 1.0;
   var WIDTH = { narrow: 2, wide: 5, brk: 4 };   // laiturit3d.js:n SET-leveydet, päivitetään moduulista, jos se on ladattu
   var PIER = { w: 1.5, step: 25 };               // sillat3d.js:n pierW ja pierStep
-  var KIND_NAME = { laituri: 'Laituri', aallonmurtaja: 'Aallonmurtaja', kivi: 'Vesikivi', pilari: 'Sillan pilari' };
-  var KIND_ACC = { laituri: 'laituriin', aallonmurtaja: 'aallonmurtajaan', kivi: 'vesikiveen', pilari: 'sillan pilariin' };
+  var KIND_NAME = { laituri: 'Laituri', aallonmurtaja: 'Aallonmurtaja', kivi: 'Vesikivi', pilari: 'Sillan pilari', vene: 'Vene' };
+  var KIND_ACC = { laituri: 'laituriin', aallonmurtaja: 'aallonmurtajaan', kivi: 'vesikiveen', pilari: 'sillan pilariin', vene: 'veneeseen' };
+  var BOAT_MARGIN = 14;   // veneiden haun lisäsäde (m) rungon kehän säteen yli: veneen suorakulmion puolikas lävistäjä on enintään noin 5,3 m
 
   // ---------- runkopolygoni ----------
   // Kansiviivan puolileveys (hull_offsets.json deck_edge, mallin x peräpeilistä keulaan), keulan kärki (stem) ja uimataso (swim_platform). y positiivinen oikealle (SB).
@@ -134,6 +136,16 @@
     return out;
   }
 
+  // Veneet: lahde(e, n, sade) palauttaa Veneet3D.lahella-muotoiset veneet (e, n TM35FIN, suunta ruutusuuntana, pituus, leveys). Veneen suorakulmio on pituus x leveys keskipisteen ympärillä.
+  function boatObstacles(list) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var v = list[i], a = v.suunta * Math.PI / 180, ux = Math.sin(a), uy = Math.cos(a), hl = v.pituus / 2, hw = v.leveys / 2;
+      out.push({ t: 'r', kind: 'vene', cx: v.e, cy: v.n, ux: ux, uy: uy, a: hl, b: hw, rad: Math.hypot(hl, hw) });
+    }
+    return out;
+  }
+
   // ---------- osumatesti ----------
   // Palauttaa null tai { pen, e, n }: pen = suurin tunkeuma metreinä, (e, n) = syvimmin esteessä oleva rungon kärki (tai esteen keskipiste)
   function hitRect(H, ob) {
@@ -220,7 +232,7 @@
   }
 
   // ---------- ruudut ja tila ----------
-  var tiles = new Map(), pending = new Set(), bridgeSrc = null, bridgeCache = { spans: null, obs: [] }, scratch = new Float64Array(NH * 2);
+  var tiles = new Map(), pending = new Set(), bridgeSrc = null, boatSrc = null, bridgeCache = { spans: null, obs: [] }, scratch = new Float64Array(NH * 2);
   function P() { return root.Paikka; }
   function tileOfEN(e, n) {
     var ll = P().enToLonLat(e, n), t = P().lonlatToTile(ll.lon, ll.lat, Z);
@@ -255,6 +267,8 @@
   function clear() { tiles.clear(); pending.clear(); bridgeCache = { spans: null, obs: [] }; }
   // Sillat: lähde palauttaa Sillat3D-kohteen spans()-listan. Pilarit lasketaan uudelleen vain, kun lista vaihtuu.
   function setBridgeSource(fn) { bridgeSrc = fn; }
+  // Veneet (vaihe 3l): lähde palauttaa veneet pisteen (e, n) ympäriltä TM35FIN-koordinaateissa (null = ei veneitä). Veneet haetaan joka tarkistuksella vain rungon ympäriltä.
+  function setBoatSource(fn) { boatSrc = fn; }
   function bridgeObs() {
     var sp = bridgeSrc ? bridgeSrc() : null;
     if (sp !== bridgeCache.spans) {
@@ -275,6 +289,7 @@
     }
     var man = tiles.get('*'); if (man) best = intersectHull(H, e, n, man.obs, best);   // käsin lisätyt (testit)
     var bo = bridgeObs(); if (bo.length) best = intersectHull(H, e, n, bo, best);
+    if (boatSrc) { var bl = boatSrc(e, n, HULL_R + BOAT_MARGIN); if (bl && bl.length) best = intersectHull(H, e, n, boatObstacles(bl), best); }
     if (!best) return null;
     best.x = best.e - o.e; best.y = best.n - o.n; best.kn = Math.abs(S.v) / (1852 / 3600);
     return best;
@@ -293,7 +308,7 @@
     return hit;
   }
   var api = {
-    check: check, resolve: resolve, preload: preload, preloadEN: preloadEN, idle: idle, ready: ready, clear: clear, setBridgeSource: setBridgeSource, addItems: addItems, addObstacles: addObstacles,
+    check: check, resolve: resolve, preload: preload, preloadEN: preloadEN, idle: idle, ready: ready, clear: clear, setBridgeSource: setBridgeSource, setBoatSource: setBoatSource, boatObstacles: boatObstacles, addItems: addItems, addObstacles: addObstacles,
     hullPolygon: hullPolygon, worldHull: worldHull, rectFrom: rectFrom, buildTile: buildTile, pierObstacles: pierObstacles, intersectHull: intersectHull, hitObstacle: hitObstacle,
     TOUCH_KN: TOUCH_KN, RADIUS: RADIUS, ROCK_R: ROCK_R, HULL_R: HULL_R, KIND_NAME: KIND_NAME, KIND_ACC: KIND_ACC, info: function () { return { tiles: tiles.size, pending: pending.size, obstacles: Array.from(tiles.values()).reduce(function (a, t) { return a + t.obs.length; }, 0) }; }
   };

@@ -27,6 +27,7 @@
     maaR: 6371000,
     pulssiM: 12,             // pulssin pituus metreinä (lyhyin pulssi 0,08 µs)
     minEtaisyysM: 15,        // kuollut alue lähellä
+    veneet: { soutu: { v: 0.25, hs: 0.6 }, pieni: { v: 0.45, hs: 1.0 }, keski: { v: 0.45, hs: 2.0 }, purje: { v: 0.6, hs: 0.75 }, maxR: 2500, haku: 2650, paivitysM: 100, paivitysMs: 1500 },   // vaihe 3l: kiinnitetyt veneet pistekaikuina, voimakkuus luokittain, hs = kaiun korkeus vedestä (purjeveneellä kerroin mastoon), ei välkyntää
     keilaAste: 2.0,          // vaakakeilan leveys, 3 dB (avoin antenni, noin 4 jalkaa)
     kierrosMin: 24,          // antennin kierrosnopeus
     ikkunaM: 12,             // rinteen jyrkkyys lasketaan tämän pituiselta matkalta (pulssin pituus)
@@ -386,6 +387,7 @@
     var lukija = opt.lukija || luoLukija(opt.aineistoUrl, opt.aineisto);
     var onMuutos = typeof opt.onMuutos === 'function' ? opt.onMuutos : null;
     var kirjaa = typeof opt.onKirjaus === 'function' ? opt.onKirjaus : null;     // (laji, arvo): evpiste {ebl, vrm}, ebl, vrm, offset, suunta, ev
+    var veneLahde = typeof opt.veneet === 'function' ? opt.veneet : null;      // (e, n, sade): kiinnitetyt veneet TM35FIN-koordinaateissa, kuten Veneet3D.lahella palauttaa (e, n, luokka, kaikuTaso, masto)
 
     // ---------- tila ----------
     var C = {
@@ -398,7 +400,7 @@
     var NR = 360, rangeM = 0, step = 1, cell = 4, TSm = TS * cell, invC = 1 / cell, invTSm = 1 / TSm;
     var raw = null, trail = null, rayT = null, hit = null, firstB = null, mf5 = null, hitI = null, endI = null;
     var Hb = new Float32Array(NB), Sb = new Float32Array(NB), Tb = new Uint8Array(NB), Fb = new Uint8Array(NB), Eb = new Float32Array(NB), Ab = new Float32Array(NB), Mb = new Float32Array(NB);
-    var acc = 0, nextK = 0, rev = 0, lastT = null, tilasto = { kierrosMs: 0, piirtoMs: 0, piirtoMax: 0, piirrot: 0, sateita: 0, ruutuja: 0, rakennusMs: 0 };
+    var acc = 0, nextK = 0, rev = 0, lastT = null, tilasto = { kierrosMs: 0, piirtoMs: 0, piirtoMax: 0, piirrot: 0, sateita: 0, ruutuja: 0, rakennusMs: 0, veneita: 0 };
 
     // ---------- ruudukko ----------
     var ruudut = new Map(), MAX_RUUTUA = 800, odottaa = new Map(), jono = [], rakennetaan = 0, MAXPAR = 6;
@@ -769,6 +771,33 @@
       aidDirty = false;
     }
 
+    // ---------- veneet (vaihe 3l) ----------
+    // Kiinnitetyt veneet haetaan lähteestä (opt.veneet) 100 m:n tai 1,5 s:n välein ja suhteellinen suunta ja etäisyys lasketaan joka päivityksellä.
+    var boatCache = null, boatCacheE = 1e18, boatCacheN = 1e18, boatCacheT = -1e9, boatRel = [];
+    function veneLuokka(v) {
+      var c = M.veneet[v.luokka] || M.veneet.pieni;
+      return { v: c.v, hs: v.luokka === 'purje' ? Math.max(3, (v.masto || 12) * c.hs) : c.hs };
+    }
+    function paivitaVeneRel() {
+      boatRel = [];
+      if (!veneLahde) return;
+      var now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      if (!boatCache || Math.hypot(S.e - boatCacheE, S.n - boatCacheN) > M.veneet.paivitysM || now - boatCacheT > M.veneet.paivitysMs) {
+        var l = null; try { l = veneLahde(S.e, S.n, M.veneet.haku); } catch (e) { l = null; }
+        boatCache = (l || []).filter(function (v) { return v.kiinnitetty !== false; }); boatCacheE = S.e; boatCacheN = S.n; boatCacheT = now;
+        tilasto.veneita = boatCache.length;
+      }
+      var gam = S.conv, rmax = Math.min(M.veneet.maxR, rangeM * 1.01);
+      for (var i = 0; i < boatCache.length; i++) {
+        var v = boatCache[i], dx = v.e - S.e, dy = v.n - S.n, r = Math.hypot(dx, dy);
+        if (r < M.minEtaisyysM || r > rmax) continue;
+        var c = veneLuokka(v);
+        boatRel.push({ r: r, b: norm360(Math.atan2(dx, dy) / RAD + gam), v: c.v * (v.kaikuVahvuus || 1), hs: c.hs });
+      }
+      boatDirty = false;
+    }
+    var boatDirty = true;
+
     // ---------- sädelaskenta ----------
     function haeRuutu(ti, tj) {
       var key = ruutuAvain(cell, ti, tj), t = ruudut.get(key);
@@ -988,6 +1017,25 @@
           if (amp * w > Eb[bb]) Eb[bb] = amp * w;
         }
       }
+      // veneet: pistekaiku kuten kiinteällä merkillä, mutta aina havaittu ja vakiovoimakkuudella (ei välkyntää). Näkyvyys ja varjo samalla kulmakaavalla kuin merkeillä.
+      if (veneLahde) {
+        if (boatDirty) paivitaVeneRel();
+        for (var qb = 0; qb < boatRel.length; qb++) {
+          var bt = boatRel[qb], db = bt.b - th; if (db < 0) db = -db; if (db > 180) db = 360 - db;
+          if (db > hw) continue;
+          var rb = bt.r, bi2 = Math.min(NB - 1, Math.floor(rb / step) - 1); if (bi2 < 0) continue;
+          var ampb = bt.v * (1 - db / (hw * 1.15));
+          var Hab = Math.max(bt.hs, Hb[bi2]), alb = (Hab - C.antenniM) / rb - rb * K2, refb = Mb[Math.max(0, bi2 - 3)];
+          if (alb < refb - 0.0009) continue;
+          ampb *= C.vahvistus * (1 - 0.5 * C.hairio.heikko) / (1 + rb * rb / 49e6);
+          var spanb = Math.max(1, Math.round(M.pulssiM / step));
+          for (var ub = -1; ub <= spanb; ub++) {
+            var bbb = bi2 + ub; if (bbb < 0 || bbb >= NB) continue;
+            var wb = ub < 0 ? 0.45 : (ub === 0 ? 1 : Math.max(0.4, 1 - 0.18 * ub));
+            if (ampb * wb > Eb[bbb]) Eb[bbb] = ampb * wb;
+          }
+        }
+      }
     }
 
     // Tallentaa säteen k tuloksen (Eb) puskureihin
@@ -1041,7 +1089,7 @@
       raw = new Uint8Array(NR * NB); rayT = new Float64Array(NR).fill(-1e9); hit = new Float32Array(NR); hitI = new Int16Array(NR).fill(-1); endI = new Int16Array(NR).fill(-1); firstB = new Uint16Array(NR).fill(NB); mf5 = new Uint16Array(NR).fill(NB);
       trail = JALJET[C.jalkiIdx] > 0 ? new Uint8Array(NR * NB) : null;
       acc = 0; nextK = 0;
-      aidDirty = true; lutDirty = true;
+      aidDirty = true; boatDirty = true; boatCache = null; lutDirty = true;
       viimeVarmistus.cell = 0;
     }
 
@@ -1058,7 +1106,7 @@
         if (Math.hypot(S.e - S.convE, S.n - S.convN) > 300) {
           var ll = K.enToLonLat(S.e, S.n); S.conv = K.convergenceDeg(ll.lon, ll.lat); S.convE = S.e; S.convN = S.n;
         }
-        aidDirty = true;
+        aidDirty = true; boatDirty = true;
       }
       if (!S.onTila) return;
       varmista(false);

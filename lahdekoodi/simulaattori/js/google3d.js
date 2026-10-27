@@ -90,6 +90,9 @@
   function fetchServerKey(cb) {
     if (serverKeyAsked) { if (cb) cb(serverKey); return; }
     serverKeyAsked = true;
+    // Paikallisella testipalvelimella (localhost, 127.0.0.1, file) ei ole reittiä, joten ei turhaa 404-kutsua
+    var hn = String(location.hostname || '');
+    if (location.protocol === 'file:' || hn === 'localhost' || hn === '127.0.0.1' || hn === '') { if (cb) cb(''); return; }
     try {
       fetch('/api/google', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
         serverKey = (j && j.key) ? String(j.key).trim() : '';
