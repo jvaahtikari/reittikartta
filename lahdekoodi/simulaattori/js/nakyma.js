@@ -424,6 +424,7 @@
     function setOverlay(on) {
       on = !!on; if (on === ov.on) return;
       ov.on = on;
+      applyPixelRatio();
       if (on) {
         layerSet(sky, 1); layerSet(water, 1);
         if (wmask) { wmask.setMaterial(water.material); wmask.setActive(true); }
@@ -469,6 +470,9 @@
     function applyPixelRatio() {
       var scale = Math.min(dpr, Math.sqrt(pixelMp * 1e6 / (w * h)));
       scale = Math.max(0.25, scale);
+      // Google-tilassa (vaihe 3n) oma kerros on kevyt, mutta Googlen piirto hidastaa kokonaiskuvaväliä, jolloin mukautuva tarkkuus laskisi
+      // Repan ja merkkien ääriviivat porrastuneiksi. Siksi kerrostilassa tarkkuus on vähintään näytön oma (enintään 2x).
+      if (ov && ov.on) scale = Math.max(scale, Math.min(dpr, 2));
       renderer.setPixelRatio(scale);
       renderer.setSize(w, h, false);
     }
