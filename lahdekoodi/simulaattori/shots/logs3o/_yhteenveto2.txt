@@ -1,0 +1,7 @@
+== google3n_perus_uusi
+google3n_perus_uusi: OK    paluu Googleen ei luo karttaa uudelleen OK    ei konsolivirheitä [] YHTEENSÄ 30 tarkistusta, 4 virhettä exit 0 
+== veneet3o_satama_paketti
+veneet3o_satama_paketti: OK    ei sivun virheitä ([])  26 / 26 tarkistusta läpi exit 0 
+== google3n_perus_vertailu
+google3n_perus_vertailu:    {"ov":{"on":false,"fogKm":0,"cal":{"dHeadingDeg":0,"dPitchDeg":0,"tanScale":1},"fovMin":5,"fovMax":80,"lower":0.1,"domeDist":14000,"domeElevDeg":12,"hide":{"maamerkit":1,"laiturit":1,"sillat":1},"hidden":[],"mat":{"metadata":{"version":4.5,"type":"Material","generator":"Material.toJSON"},"uuid":"
+ALL_DONE2

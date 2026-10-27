@@ -9,6 +9,9 @@
  * Mesh on yksi verkko (kaikki ladatut ruudut yhdistettynä), jonka kärkipisteet ovat TM35FIN-koordinaateissa kiintopisteen (REF) suhteen. Verkon paikka
  * päivitetään rebase()-kutsulla, kun maailman origo siirtyy. Materiaali annetaan ulkopuolelta (nakyma.js:n vesivarjostin), joten ulkoasu on sama kuin omassa näkymässä.
  *
+ * Vaihe 3o: setHoles(alueet) tekee satama-alueista (kapselit laiturisegmenttien ympärillä ja renkaat) läpinäkyviä: reikäverkko kirjoittaa vesimaskin päälle värin ja alfan 0 (ei sekoitusta),
+ * jolloin Googlen oma satama (vesi, laiturit ja veneet) näkyy sellaisenaan. Reikä ei kirjoita syvyyttä, joten myöhemmin piirrettävät kohteet (turvalaitteet) toimivat normaalisti.
+ *
  * Moduuli toimii selaimessa (window.Vesimaski3D) ja Nodessa (module.exports: rengasjako ja siirto, testattavissa ilman three.js:ää). */
 (function (root) {
   'use strict';
@@ -68,6 +71,15 @@
     scene.add(mesh);
     var tiles = new Map(), queue = [], wanted = [], last = { x: 1e9, y: 1e9 }, dirty = false, version = 0, stats = { tiles: 0, loaded: 0, empty: 0, tris: 0, verts: 0, buildMs: 0, maxMs: 0, rings: 0 };
     var active = false, jobs = 0;
+    // reikäverkko (vaihe 3o): kirjoittaa alfan 0 vesimaskin päälle. Sama REF-koordinaatisto kuin vesimaskissa.
+    var holeMat = new THREE.ShaderMaterial({
+      vertexShader: 'void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }',
+      blending: THREE.NoBlending, depthWrite: false, depthTest: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: false, toneMapped: false
+    });
+    var holeMesh = new THREE.Mesh(new THREE.BufferGeometry(), holeMat); holeMesh.name = 'satamareika'; holeMesh.frustumCulled = false; holeMesh.visible = false; holeMesh.renderOrder = -4; holeMesh.matrixAutoUpdate = false;
+    scene.add(holeMesh);
+    var holeOn = false, holeInfo = { kapselit: 0, renkaat: 0, kolmiot: 0 };
 
     function sizeM(z, lat) { return 40075016.686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z); }
     function key(z, x, y) { return z + '/' + x + '/' + y; }
@@ -168,7 +180,28 @@
     function placeMesh() {
       var w = P.enToWorld(set.refE, set.refN);
       mesh.position.set(w.x, 0, -w.y); mesh.updateMatrix(); mesh.matrixWorldNeedsUpdate = true;
+      holeMesh.position.set(w.x, 0.04, -w.y); holeMesh.updateMatrix(); holeMesh.matrixWorldNeedsUpdate = true;
     }
+    function holeVisible() { holeMesh.visible = active && holeOn && holeInfo.kolmiot > 0; }
+    // Satama-alueet: alueet = { kapselit: [[e0, n0, e1, n1], ...], renkaat: [[e, n], ...], sade, veneSade } (TM35FIN). Kapseli = suorakulmio ja kaksi 16-kulmaista kiekkoa, rengas = kiekko.
+    function setHoles(alueet) {
+      var pos = [], R = (alueet && alueet.sade) || 60, rr = (alueet && alueet.veneSade) || 20, SEG = 16, i;
+      function P3(e, n) { pos.push(e - set.refE, 0, -(n - set.refN)); }
+      function disc(e, n, r) { for (var k = 0; k < SEG; k++) { var a0 = k / SEG * 2 * Math.PI, a1 = (k + 1) / SEG * 2 * Math.PI; P3(e, n); P3(e + r * Math.cos(a0), n + r * Math.sin(a0)); P3(e + r * Math.cos(a1), n + r * Math.sin(a1)); } }
+      var kap = (alueet && alueet.kapselit) || [], ren = (alueet && alueet.renkaat) || [];
+      for (i = 0; i < kap.length; i++) {
+        var s0 = kap[i], dx = s0[2] - s0[0], dy = s0[3] - s0[1], l = Math.hypot(dx, dy);
+        if (l > 0.5) { var nx = -dy / l * R, ny = dx / l * R; P3(s0[0] + nx, s0[1] + ny); P3(s0[0] - nx, s0[1] - ny); P3(s0[2] + nx, s0[3] + ny); P3(s0[2] + nx, s0[3] + ny); P3(s0[0] - nx, s0[1] - ny); P3(s0[2] - nx, s0[3] - ny); }
+        disc(s0[0], s0[1], R); disc(s0[2], s0[3], R);
+      }
+      for (i = 0; i < ren.length; i++) disc(ren[i][0], ren[i][1], rr);
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(pos), 3));
+      var old = holeMesh.geometry; holeMesh.geometry = geo; if (old) old.dispose();
+      holeInfo = { kapselit: kap.length, renkaat: ren.length, kolmiot: pos.length / 9 };
+      placeMesh(); holeVisible();
+    }
+    function setHoleActive(on) { holeOn = !!on; holeVisible(); }
 
     // Aikaviipale: lataa ja rakentaa enintään yhden ruudun kerrallaan
     function tick(budgetMs) {
@@ -202,12 +235,13 @@
     function setActive(on) {
       on = !!on; if (on === active) return; active = on;
       if (!on) mesh.visible = false; else { last.x = last.y = 1e9; if (mesh.geometry.index) mesh.visible = true; }
+      holeVisible();
     }
     function rebase() { placeMesh(); last.x = last.y = 1e9; }
     function idle() { return active && !queue.length && jobs === 0 && !wanted.some(function (t) { return t.state === 'built-wait' || t.state === 'loading' || t.state === 'new'; }); }
     function setMaterial(m) { mat = m; mesh.material = m; }
     function info() { return { tiles: tiles.size, wanted: wanted.length, ready: wanted.filter(function (t) { return t.state === 'ready'; }).length, empty: wanted.filter(function (t) { return t.state === 'empty'; }).length, stats: stats, visible: mesh.visible, version: version }; }
-    return { mesh: mesh, sync: sync, tick: tick, setActive: setActive, rebase: rebase, idle: idle, setMaterial: setMaterial, info: info, settings: set };
+    return { mesh: mesh, holeMesh: holeMesh, sync: sync, tick: tick, setActive: setActive, setHoles: setHoles, setHoleActive: setHoleActive, holeInfo: function () { return { on: holeOn, visible: holeMesh.visible, kapselit: holeInfo.kapselit, renkaat: holeInfo.renkaat, kolmiot: holeInfo.kolmiot }; }, rebase: rebase, idle: idle, setMaterial: setMaterial, info: info, settings: set };
   }
 
   var api = { create: create, SETTINGS: SET, groupRings: groupRings, offsetRing: offsetRing, ringArea: ringArea };

@@ -85,7 +85,7 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .hud-zoom button.zm-ctr[aria-pressed=true]{background-color:rgba(15,95,138,.78)}
 .hud-zoom button.zm-ctr[aria-pressed=false]{background-color:rgba(138,90,0,.85);color:#fff}
 .hud-scale{right:8px;bottom:8px;left:auto;padding:0;background:none!important;border:0!important;box-shadow:none!important;font:600 10px ui-monospace,Menlo,Consolas,monospace;color:#1d2b36;text-shadow:0 0 2px #fff,0 0 3px #fff;pointer-events:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px;opacity:.85}  /* 27.10.2026: pieni ja kulmassa, ei laatikkoa */
-.hud-scale .sb-line{display:flex;align-items:flex-end;gap:6px}
+.hud-scale .sb-line{display:flex;align-items:flex-end;gap:6px;white-space:nowrap}
 .hud-scale .sb-bar{display:block;height:4px;border:1.5px solid #1d2b36;border-top:0;min-width:2px;box-shadow:0 0 0 1px rgba(255,255,255,.7)}
 .hud-scale .sb-h{display:none}
 .hud-hdg{left:8px;top:8px;font:600 16px ui-monospace,Menlo,monospace;padding:6px 12px}
@@ -425,6 +425,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
     <button type="button" class="big" id="mFull">Koko näyttö</button>
     <div class="hint" id="fullHint" hidden>iPhonessa selaimen palkit saa pois avaamalla sivun kotivalikosta: Jaa ja sitten Lisää Koti-valikkoon. Kotivalikosta avattuna simulaattori aukeaa koko näytölle.</div>
     <button type="button" class="big" id="mVis">Näkyvyys (Google 3D): ei sumukerrosta</button>
+    <button type="button" class="big" id="mPort">Satamat (Google 3D): omat veneet</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
     <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus ja miinus, hiiren rulla ja kahden sormen nipistys zoomaavat (0,1 ... 12 mpk). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
@@ -6587,7 +6588,20 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     nakyvyysRaja: 2500,           // venettä ei piirretä tätä kauempaa (m)
     kaukoRaja: 300,               // kaukomalli tämän etäisyyden yli (m)
     poijuRaja: 600,               // poijut ja kiinnitysköydet piirretään tätä lähempänä (m)
-    kokoVaihtelu: true            // pituus ja leveys vaihtelevat tunnisteesta
+    kokoVaihtelu: true,           // pituus ja leveys vaihtelevat tunnisteesta
+    // vaihe 3o: veneiden lähde. 'ilmakuva' = paikat veneet.json-tiedostosta (asetaPaikat), laiturialgoritmi vain alueilla, joita tiedosto ei kata. 'laituri' = pelkkä algoritmi.
+    veneLahde: 'ilmakuva',
+    aallonmurtajaEtaisyys: 15,    // algoritmi ei sijoita veneitä aallonmurtajan eikä rakennetun rannan (kapea maakaista) tätä lähemmäs (m)
+    kapeaMaa: { leveys: 40, pituus: 60, solu: 2 },   // kapea maakaista: leveys alle tämän (m), pituus vähintään tämä (m), ruudukon solu (m)
+    ilmakuva: {
+      minVarmuus: 0,              // tätä pienemmän varmuuden havainnot ohitetaan (0 = kaikki)
+      peittoMarginaali: 100,      // sataman peittoalue: havaintojen reunan ulkopuolelle tämä (m), alueella laiturialgoritmi ei sijoita veneitä
+      poijuMaxVali: 3,            // poiju ja köysi vain, jos keula on enintään tämän verran (m) laiturin reunasta ja keula on laituria kohti
+      poijuKulma: 60,             // keula laituria kohti: veneen akselin ja laiturin normaalin välinen kulma enintään tämä (astetta)
+      koko: [0.65, 1.7],          // mallin mittakaava (havaitun pituuden suhde luokan nimellispituuteen) rajataan tälle välille
+      pudotaMaalta: true,         // havainto, jonka keskipiste, keula ja perä ovat kaikki maalla (vesitestin mukaan), ohitetaan
+      suuntaTosi: false           // tosi: tiedoston suunta on tosisuunta ja muunnetaan ruutusuunnaksi (meridiaanikonvergenssi). Epätosi: suunta on jo ruutusuunta (veneet.json 27.10.2026: mitattu, katso raportti)
+    }
   };
   function yhdista(a, oletus) {
     if (!a) return oletus;
@@ -7235,9 +7249,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
 
   // Laitureiden käsittely venepaikoiksi ja veneiksi. vesi(e, n) on vesitesti (TM35FIN), jos puuttuu, kaikki on vettä.
   // Palauttaa { veneet, poijut, tilasto, ketjut }
-  function kiinnitaVeneet(syote, a, vesi, rajaus) {
+  // lisa (vaihe 3o, valinnainen): { peittaa(e, n) -> tosi, kun ilmakuvatiedosto kattaa paikan (laiturialgoritmi ei sijoita siellä veneitä), esto(e, n, r) -> 'aallonmurtaja' | 'kapeaMaa' | null }
+  function kiinnitaVeneet(syote, a, vesi, rajaus, lisa) {
+    lisa = lisa || {};
     var segs = kokoaSegmentit(syote);
-    var tilasto = { laituriKohteita: 0, ketjuja: 0, keskenJaaneita: 0, osuuksia: 0, paikkoja: 0, tyhjia: 0, veneita: 0, luokittain: { soutu: 0, pieni: 0, keski: 0, purje: 0 }, hylatty: { maa: 0, matala: 0, tormays: 0 }, laiturit: { kapea: 0, leveä: 0 }, purjeKelpoisia: 0 };
+    var tilasto = { laituriKohteita: 0, ketjuja: 0, keskenJaaneita: 0, osuuksia: 0, paikkoja: 0, tyhjia: 0, veneita: 0, luokittain: { soutu: 0, pieni: 0, keski: 0, purje: 0 }, hylatty: { maa: 0, matala: 0, tormays: 0, aallonmurtaja: 0, kapeaMaa: 0 }, laiturit: { kapea: 0, leveä: 0 }, purjeKelpoisia: 0, peitettyjaKetjuja: 0 };
     (Array.isArray(syote) ? syote : [syote]).forEach(function (it) { if (it && it.fl) tilasto.laituriKohteita += it.fl.filter(function (f) { return f.k === 'narrow' || f.k === 'wide'; }).length; });
     var kelvolliset = [];
     ketjut(segs).map(valmisteleKetju).forEach(function (k) {
@@ -7274,6 +7290,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     }
     var jakauma = a.luokkajakauma, KJ = LUOKKA_JARJESTYS;
     kelvolliset.forEach(function (k) {
+      if (lisa.peittaa) { var pmk = ketjussa(k, k.pituus / 2); if (lisa.peittaa(pmk.e, pmk.n)) { tilasto.peitettyjaKetjuja++; return; } }   // ilmakuvatiedosto kattaa sataman: ei algoritmia
       var osuudet = jaaKulmista(k, a.kulmaRaja), leveaMaara = 0;
       k.kinds.forEach(function (kk) { if (kk === 'wide') leveaMaara++; });
       var leveaLaituri = leveaMaara * 2 > k.kinds.length;
@@ -7290,6 +7307,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
           var ne = -pos.tn * side, nn = pos.te * side, half = (k.kinds[pos.seg] === 'wide' ? w.wide : w.narrow) / 2;
           var ee = pos.e + ne * half, en = pos.n + nn * half;
           if (!vesiF(ee + ne * 1.5, en + nn * 1.5) || !vesiF(ee + ne * 5, en + nn * 5)) { tilasto.hylatty.maa++; continue; }
+          if (lisa.esto) {   // aallonmurtaja tai rakennettu ranta alle aallonmurtajaEtaisyys metrin päässä veneen alueelta: koetaan laiturin reunalta 9 m ulospäin 3 m:n välein säteellä + 1,5 m, joten veneen keskipiste on vähintään aallonmurtajaEtaisyys metrin päässä
+            var syy = null;
+            for (var eo = 0; eo <= 9 && !syy; eo += 3) syy = lisa.esto(ee + ne * eo, en + nn * eo, a.aallonmurtajaEtaisyys + 1.5);
+            if (syy) { tilasto.hylatty[syy]++; continue; }
+          }
           var r = rng(hash32(hash32(k.tunnus, oi * 4 + (side > 0 ? 1 : 2)), q + a.siemen * 977));
           var p = { ee: ee, en: en, ne: ne, nn: nn, id0: 'L' + k.tunnus.toString(36) + '.' + oi + (side > 0 ? 'v' : 'o') + '.' + q, side: side, uTaytto: r(), uLuokka: r(), purjeKelpaa: false };
           if (leveaLaituri || k.pituus >= a.purje.minLaiturinPituus) {
@@ -7346,7 +7368,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         if (!asetettu) tilasto.tyhjia++;
       });
     });
-    return { veneet: veneet, poijut: poijut, tilasto: tilasto, ketjut: kelvolliset };
+    return { veneet: veneet, poijut: poijut, tilasto: tilasto, ketjut: kelvolliset, segLista: segLista, segsRaaka: segs };
   }
 
   // ---------- vesitesti maastokuvio-kerroksesta ----------
@@ -7395,6 +7417,191 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     return onVesi;
   }
 
+  // ---------- aallonmurtajat ja kapeat niemekkeet (vaihe 3o) ----------
+  // Laiturialgoritmin varakäyttö ei sijoita veneitä aallonmurtajan eikä rakennetun rannan (kapea maa-alue, vettä molemmin puolin) viereen aallonmurtajaEtaisyys metrin säteellä.
+  //  1. Aallonmurtajat: vesieste-kerroksen aallonmurtaja-kohteet (viiva tai alue) janoina. Paketissa niitä ei ole yhtään (vaihe 3f), joten koodi on testattu synteettisellä aineistolla.
+  //  2. Kapea maakaista (esimerkiksi Naistenlahden länsipuolen aallonmurtaja, joka on maastokuviossa noin 30 m leveä niemeke): maastokuvion vesipolygoneista rasteroidaan
+  //     vesi 2 m:n ruudukoksi, ja maan avaus (eroosio ja laajennus leveys/2 metrillä) ei säilytä kaistaa. Kaista hyväksytään, kun sen pituus (rajauslaatikon lävistäjä) on vähintään
+  //     kapeaMaa.pituus metriä. Sama periaate kuin maasto.js:n rakennetun rannan tunnistuksessa (vaihe 3j), mutta ruutujen reunat eivät katkaise kaistaa, koska ruudukko ylittää ruudut.
+  //     Ruudukko lasketaan laiskasti 192 m:n lohkoittain (reunus 80 m), joten vain satamien lähistö laskeutuu.
+  var BLK = 192, BLK_MARGIN = 80, DT_INF = 1e12;
+  // Euklidinen etäisyysmuunnos (Felzenszwalb ja Huttenlocher), yksi ulottuvuus: f on neliöetäisyydet, d tulos
+  function dt1d(f, n, d, v, z) {
+    var k = 0, q, s; v[0] = 0; z[0] = -1e30; z[1] = 1e30;
+    for (q = 1; q < n; q++) {
+      s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+      k++; v[k] = q; z[k] = s; z[k + 1] = 1e30;
+    }
+    k = 0;
+    for (q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
+  }
+  // Etäisyys soluina lähimpään soluun, jossa mask on 1 (ellei sellaista ole, hyvin suuri arvo)
+  function etaisyysSoluun(mask, W, H) {
+    var N = W * H, g = new Float64Array(N), m = Math.max(W, H), f = new Float64Array(m), d = new Float64Array(m), v = new Int32Array(m), z = new Float64Array(m + 2), x, y;
+    for (x = 0; x < W; x++) { for (y = 0; y < H; y++) f[y] = mask[y * W + x] ? 0 : DT_INF; dt1d(f, H, d, v, z); for (y = 0; y < H; y++) g[y * W + x] = d[y]; }
+    var out = new Float32Array(N);
+    for (y = 0; y < H; y++) { for (x = 0; x < W; x++) f[x] = g[y * W + x]; dt1d(f, W, d, v, z); for (x = 0; x < W; x++) out[y * W + x] = Math.sqrt(d[x]); }
+    return out;
+  }
+  // Monikulmion (kaikki renkaat yhdessä, parillinen-pariton-sääntö) täyttö ruudukkoon: edges = [x0, y0, x1, y1, ...] solukoordinaateissa (x sarake, y rivi), solun keskipiste (i + 0,5, j + 0,5)
+  function taytaMonikulmio(grid, W, H, edges) {
+    var ne = edges.length / 4, ymin = 1e30, ymax = -1e30, i, j, k;
+    for (i = 0; i < ne; i++) { var ya = edges[4 * i + 1], yb = edges[4 * i + 3]; if (ya < ymin) ymin = ya; if (yb < ymin) ymin = yb; if (ya > ymax) ymax = ya; if (yb > ymax) ymax = yb; }
+    var j0 = Math.max(0, Math.ceil(ymin - 0.5)), j1 = Math.min(H - 1, Math.floor(ymax - 0.5)), xs = [];
+    for (j = j0; j <= j1; j++) {
+      var yc = j + 0.5; xs.length = 0;
+      for (i = 0; i < ne; i++) {
+        var x0 = edges[4 * i], y0 = edges[4 * i + 1], x1 = edges[4 * i + 2], y1 = edges[4 * i + 3];
+        if ((y0 <= yc) !== (y1 <= yc)) xs.push(x0 + (yc - y0) * (x1 - x0) / (y1 - y0));
+      }
+      xs.sort(function (p, q) { return p - q; });
+      for (k = 0; k + 1 < xs.length; k += 2) {
+        var i0 = Math.max(0, Math.ceil(xs[k] - 0.5)), i1 = Math.min(W - 1, Math.ceil(xs[k + 1] - 0.5) - 1);
+        for (i = i0; i <= i1; i++) grid[j * W + i] = 1;
+      }
+    }
+  }
+  // Kapea maakaista ruudukossa: vesi (1) ja maa (0) -ruudukosta kaistat, jotka eivät säily avauksessa. Palauttaa { narrow, komponentteja, soluja }.
+  function kapeatKaistat(water, W, H, solu, leveys, pituus) {
+    var N = W * H, rr = leveys / 2 / solu, i, land = new Uint8Array(N);
+    for (i = 0; i < N; i++) land[i] = water[i] ? 0 : 1;
+    var dw = etaisyysSoluun(water, W, H), er = new Uint8Array(N);
+    for (i = 0; i < N; i++) if (land[i] && dw[i] > rr) er[i] = 1;
+    var de = etaisyysSoluun(er, W, H), cand = new Uint8Array(N), nc = 0;
+    for (i = 0; i < N; i++) if (land[i] && de[i] > rr + 0.5) { cand[i] = 1; nc++; }   // puolen solun varmuusraja: erillistys (diskretointi) ei tee rannasta kaistaa
+    var narrow = new Uint8Array(N), lab = new Int32Array(N), stack = new Int32Array(N), komp = 0, soluja = 0;
+    if (nc) for (i = 0; i < N; i++) {
+      if (!cand[i] || lab[i]) continue;
+      var id = komp + 1, sp = 0, members = [], minx = 1e9, maxx = -1, miny = 1e9, maxy = -1;
+      stack[sp++] = i; lab[i] = id;
+      while (sp) {
+        var q = stack[--sp], qx = q % W, qy = (q - qx) / W; members.push(q);
+        if (qx < minx) minx = qx; if (qx > maxx) maxx = qx; if (qy < miny) miny = qy; if (qy > maxy) maxy = qy;
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue; var x2 = qx + dx, y2 = qy + dy; if (x2 < 0 || y2 < 0 || x2 >= W || y2 >= H) continue;
+          var q2 = y2 * W + x2; if (cand[q2] && !lab[q2]) { lab[q2] = id; stack[sp++] = q2; }
+        }
+      }
+      var pit = Math.hypot(maxx - minx + 1, maxy - miny + 1) * solu;
+      if (pit >= pituus && members.length * solu * solu >= 200) { komp++; for (var mi = 0; mi < members.length; mi++) narrow[members[mi]] = 1; soluja += members.length; }
+    }
+    return { narrow: narrow, komponentteja: komp, soluja: soluja };
+  }
+  function janaPisteesta(px, py, ax, ay, bx, by) { return pisteJanalla(px, py, ax, ay, bx, by); }
+
+  // vesiSyote: laiturikäsittelyn syöte (raakatiilet { z, x, y, layer } tai Laiturit3D.tileItems-tulokset), kuvioTiilet: maastokuvio-tiilet (kuten luoVesiTesti)
+  function luoEsto(vesiSyote, kuvioTiilet, a) {
+    var R = a.aallonmurtajaEtaisyys, cfg = a.kapeaMaa, solu = cfg.solu, vesiLuokat = { jarvi: 1, virtavesi: 1 }, Z = 16;
+    // 1. aallonmurtajat janoina ja 40 m:n hajautusruudukko
+    var brk = [], bgrid = new Map(), BK = 40;
+    function lisaaJana(e0, n0, e1, n1) { brk.push([e0, n0, e1, n1]); }
+    (Array.isArray(vesiSyote) ? vesiSyote : [vesiSyote]).forEach(function (it) {
+      if (!it) return;
+      if (it.layer && it.layer.features && Paikka) {
+        var ext = it.layer.extent || 4096;
+        var en = function (u, v) { var ll = Paikka.tileLonLat(it.z, it.x, it.y, u / ext, v / ext), q = Paikka.lonlatToEN(ll.lon, ll.lat); return [q.e, q.n]; };
+        it.layer.features.forEach(function (f) {
+          if (!/aallonmurt/.test(String(f.props && f.props.laji || ''))) return;
+          (f.parts || []).forEach(function (r) {
+            var np = r.length / 2, i, p0, p1;
+            for (i = 0; i + 1 < np; i++) { p0 = en(r[2 * i], r[2 * i + 1]); p1 = en(r[2 * i + 2], r[2 * i + 3]); lisaaJana(p0[0], p0[1], p1[0], p1[1]); }
+            if (f.type === 3 && np > 2 && (r[0] !== r[2 * np - 2] || r[1] !== r[2 * np - 1])) { p0 = en(r[2 * np - 2], r[2 * np - 1]); p1 = en(r[0], r[1]); lisaaJana(p0[0], p0[1], p1[0], p1[1]); }
+          });
+        });
+      } else {
+        (it.segs || []).forEach(function (sg) { if (sg.k === 'break') lisaaJana(sg.e0, sg.n0, sg.e1, sg.n1); });
+        (it.polys || []).forEach(function (pg) {
+          if (pg.k !== 'break') return;
+          [pg.outer].concat(pg.holes || []).forEach(function (ring) { for (var i = 0; i < ring.length; i++) { var q = ring[(i + 1) % ring.length]; lisaaJana(ring[i][0], ring[i][1], q[0], q[1]); } });
+        });
+      }
+    });
+    brk.forEach(function (j, idx) {
+      var c0 = Math.floor((Math.min(j[0], j[2]) - R) / BK), c1 = Math.floor((Math.max(j[0], j[2]) + R) / BK), r0 = Math.floor((Math.min(j[1], j[3]) - R) / BK), r1 = Math.floor((Math.max(j[1], j[3]) + R) / BK);
+      for (var cx = c0; cx <= c1; cx++) for (var cy = r0; cy <= r1; cy++) { var key = cx + '/' + cy, l = bgrid.get(key); if (!l) bgrid.set(key, l = []); l.push(idx); }
+    });
+    function lahellaAallonmurtajaa(e, n, r) {
+      var l = bgrid.get(Math.floor(e / BK) + '/' + Math.floor(n / BK)); if (!l) return false;
+      for (var i = 0; i < l.length; i++) { var j = brk[l[i]]; if (janaPisteesta(e, n, j[0], j[1], j[2], j[3]) <= r) return true; }
+      return false;
+    }
+    // 2. kapeat maakaistat lohkoittain
+    var tiilet = new Map(), ikkunat = new Map(), tila = { lohkoja: 0, komponentteja: 0, soluja: 0, ms: 0 };
+    (kuvioTiilet || []).forEach(function (t) { tiilet.set(t.x + '/' + t.y, t); });
+    function tiilenGeo(t) {
+      if (t.geo) return t.geo;
+      var layer = t.layer, ext = (layer && layer.extent) || 4096, N = 8, g = new Float64Array((N + 1) * (N + 1) * 2), u0 = -0.05, du = 1.1 / N, minE = 1e30, maxE = -1e30, minN = 1e30, maxN = -1e30;
+      for (var j = 0; j <= N; j++) for (var i = 0; i <= N; i++) {
+        var c = Paikka.tileLonLat(Z, t.x, t.y, u0 + i * du, u0 + j * du), q = Paikka.lonlatToEN(c.lon, c.lat), k = (j * (N + 1) + i) * 2;
+        g[k] = q.e; g[k + 1] = q.n; if (q.e < minE) minE = q.e; if (q.e > maxE) maxE = q.e; if (q.n < minN) minN = q.n; if (q.n > maxN) maxN = q.n;
+      }
+      function map(u, v) {
+        var fu = (u / ext + 0.05) / 1.1 * N, fv = (v / ext + 0.05) / 1.1 * N, i = Math.max(0, Math.min(N - 1, Math.floor(fu))), j = Math.max(0, Math.min(N - 1, Math.floor(fv))), aa = fu - i, bb = fv - j;
+        var q00 = (j * (N + 1) + i) * 2, q10 = q00 + 2, q01 = q00 + (N + 1) * 2, q11 = q01 + 2;
+        return [g[q00] * (1 - aa) * (1 - bb) + g[q10] * aa * (1 - bb) + g[q01] * (1 - aa) * bb + g[q11] * aa * bb, g[q00 + 1] * (1 - aa) * (1 - bb) + g[q10 + 1] * aa * (1 - bb) + g[q01 + 1] * (1 - aa) * bb + g[q11 + 1] * aa * bb];
+      }
+      var feats = [];
+      ((layer && layer.features) || []).forEach(function (f) {
+        if (f.type !== 3 || !vesiLuokat[f.props && f.props.luokka]) return;
+        var edges = [], ymin = 1e30, ymax = -1e30, xmin = 1e30, xmax = -1e30;
+        f.parts.forEach(function (r) {
+          var np = r.length / 2, pts = [], i;
+          for (i = 0; i < np; i++) pts.push(map(r[2 * i], r[2 * i + 1]));
+          if (np > 1 && (r[0] !== r[2 * np - 2] || r[1] !== r[2 * np - 1])) pts.push(pts[0]);
+          for (i = 0; i + 1 < pts.length; i++) {
+            edges.push(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]);
+            ymin = Math.min(ymin, pts[i][1], pts[i + 1][1]); ymax = Math.max(ymax, pts[i][1], pts[i + 1][1]); xmin = Math.min(xmin, pts[i][0], pts[i + 1][0]); xmax = Math.max(xmax, pts[i][0], pts[i + 1][0]);
+          }
+        });
+        if (edges.length) feats.push({ edges: edges, bb: [xmin, ymin, xmax, ymax] });
+      });
+      t.geo = { bb: [minE, minN, maxE, maxN], feats: feats };
+      return t.geo;
+    }
+    function ikkuna(bx, by) {
+      var key = bx + '/' + by, w = ikkunat.get(key); if (w) return w;
+      var t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      var e0 = bx * BLK - BLK_MARGIN, n0 = by * BLK - BLK_MARGIN, W = Math.round((BLK + 2 * BLK_MARGIN) / solu), H = W, water = new Uint8Array(W * H);
+      tiilet.forEach(function (t) {
+        var g = tiilenGeo(t); if (g.bb[2] < e0 || g.bb[0] > e0 + W * solu || g.bb[3] < n0 || g.bb[1] > n0 + H * solu) return;
+        g.feats.forEach(function (f) {
+          if (f.bb[2] < e0 || f.bb[0] > e0 + W * solu || f.bb[3] < n0 || f.bb[1] > n0 + H * solu) return;
+          var ed = new Float64Array(f.edges.length);
+          for (var i = 0; i < ed.length; i += 2) { ed[i] = (f.edges[i] - e0) / solu; ed[i + 1] = (f.edges[i + 1] - n0) / solu; }
+          taytaMonikulmio(water, W, H, ed);
+        });
+      });
+      var r = kapeatKaistat(water, W, H, solu, cfg.leveys, cfg.pituus);
+      w = { e0: e0, n0: n0, W: W, H: H, narrow: r.narrow, komponentteja: r.komponentteja, soluja: r.soluja };
+      ikkunat.set(key, w); tila.lohkoja++; tila.komponentteja += r.komponentteja; tila.soluja += r.soluja;
+      tila.ms += (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+      return w;
+    }
+    function lahellaKapeaaMaata(e, n, r) {
+      if (!tiilet.size) return false;
+      var bx0 = Math.floor((e - r) / BLK), bx1 = Math.floor((e + r) / BLK), by0 = Math.floor((n - r) / BLK), by1 = Math.floor((n + r) / BLK);
+      for (var bx = bx0; bx <= bx1; bx++) for (var by = by0; by <= by1; by++) {
+        var w = ikkuna(bx, by), i0 = Math.max(0, Math.floor((Math.max(e - r, bx * BLK) - w.e0) / solu)), i1 = Math.min(w.W - 1, Math.ceil((Math.min(e + r, (bx + 1) * BLK) - w.e0) / solu));
+        var j0 = Math.max(0, Math.floor((Math.max(n - r, by * BLK) - w.n0) / solu)), j1 = Math.min(w.H - 1, Math.ceil((Math.min(n + r, (by + 1) * BLK) - w.n0) / solu));
+        for (var j = j0; j <= j1; j++) for (var i = i0; i <= i1; i++) {
+          if (!w.narrow[j * w.W + i]) continue;
+          if (Math.hypot(w.e0 + (i + 0.5) * solu - e, w.n0 + (j + 0.5) * solu - n) <= r) return true;
+        }
+      }
+      return false;
+    }
+    // Esto: 'aallonmurtaja' (vesieste-kohde), 'kapeaMaa' (rakennettu ranta maastokuviossa) tai null
+    function esto(e, n, r) {
+      r = r || R;
+      if (lahellaAallonmurtajaa(e, n, r)) return 'aallonmurtaja';
+      if (lahellaKapeaaMaata(e, n, r)) return 'kapeaMaa';
+      return null;
+    }
+    esto.aallonmurtajajanoja = brk.length; esto.tila = tila; esto.kapeaMaa = lahellaKapeaaMaata; esto.aallonmurtaja = lahellaAallonmurtajaa; esto.ikkuna = ikkuna;
+    return esto;
+  }
+
   // ---------- instanssimatriisi ----------
   // Rakentaa 4x4-matriisin (sarakkeittain) paikasta, ruutusuunnasta (rad), nyökkäyksestä, kallistuksesta ja mittakaavasta
   function kirjoitaMatriisi(arr, o, x, y, z, bearingRad, pitch, roll, s) {
@@ -7417,6 +7624,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var viim = { paikkoja: 0, tilasto: null };
     var indeksi = null;     // lahella-ruudukko (kiinnitetyt)
     var laskuriTyo = {}, listaTyo = [];   // paivita-funktion työtaulukot
+    var skaala = 1;         // piirtomittakaava (vaihe 3o: Google-tilassa veneet piirretään suurempina, jotta ne peittävät Googlen veneiden reunat). Ei vaikuta lahella-tuloksiin.
+    var ilmakuvaLista = [], peitto = [], ilmakuvaTilasto = null, satamaAlue = { kapselit: [], renkaat: [], sade: 60, veneSade: 20 };   // vaihe 3o
 
     function annaMesh(id, taso, tarvittu) {
       var key = id + '/' + taso, m = meshit[key];
@@ -7456,6 +7665,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     }
     function siirra(id, e, n, suunta) { var v = byId.get(String(id)); if (!v) return false; v.e = e; v.n = n; if (suunta !== undefined) v.suunta = suunta; if (v.kiinnitetty) indeksi = null; return true; }
 
+    // Laituriveneet (varakäyttö) ja ilmakuvan veneiden poijut. valinnat: { onVesi, rajaus: { e, n, sade }, kuvio: maastokuvio-tiilet (kapea maa -esto) }.
+    // Kun veneLahde on 'ilmakuva' ja asetaPaikat on antanut paikat, algoritmi ohittaa sataman peittoalueella olevat laiturit.
     function asetaLaiturit(syote, orig, valinnat) {
       valinnat = valinnat || {};
       if (orig) origin = { e: orig.e, n: orig.n };
@@ -7463,12 +7674,133 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       for (var i = veneet.length - 1; i >= 0; i--) if (veneet[i].lahde === 'laituri') { byId.delete(veneet[i].id); veneet.splice(i, 1); }
       poijut = []; poijuMap.clear();
       var t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      var r = kiinnitaVeneet(syote, a, valinnat.onVesi || null, valinnat.rajaus || null);
+      var esto = null, lisa = {};
+      if (valinnat.esto !== false && (valinnat.kuvio || syote)) {   // esto rakennetaan laiskasti: tiilet luetaan vasta, kun ensimmäinen paikka tarvitsee sitä
+        var estoVal = null;
+        esto = function (e, n, r) { if (!estoVal) estoVal = luoEsto(syote, valinnat.kuvio || [], a); esto.val = estoVal; return estoVal(e, n, r); };
+        lisa.esto = esto;
+      }
+      if (ilmakuvaAktiivinen()) lisa.peittaa = function (e, n) { return peittaaPaikan(e, n); };
+      var r = kiinnitaVeneet(syote, a, valinnat.onVesi || null, valinnat.rajaus || null, lisa);
       r.veneet.forEach(function (v) { veneet.push(v); byId.set(v.id, v); });
       poijut = r.poijut; indeksi = null;
+      if (esto && esto.val) { r.tilasto.esto = { aallonmurtajajanoja: esto.val.aallonmurtajajanoja, lohkoja: esto.val.tila.lohkoja, kapeitaKaistoja: esto.val.tila.komponentteja, kapeaaMaaSoluja: esto.val.tila.soluja, ms: esto.val.tila.ms }; }
+      // ilmakuvan veneet: poiju ja köysi vain laiturin viereen (alle poijuMaxVali, keula laituria kohti), maalla olevat havainnot pois, sataman alueet (läpinäkyvä alue Google-tilassa)
+      viim.segLista = r.segLista; viim.segsRaaka = r.segsRaaka;
+      ilmakuvaPoijutJaTarkistus(r.segLista, valinnat);
+      laskeSatamaAlue(r.segsRaaka);
+      r.tilasto.ilmakuva = ilmakuvaTilasto;
       r.tilasto.ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
       viim.tilasto = r.tilasto;
       return r.tilasto;
+    }
+    function ilmakuvaAktiivinen() { return a.veneLahde === 'ilmakuva' && ilmakuvaLista.length > 0; }
+    function peittaaPaikan(e, n) {
+      for (var i = 0; i < peitto.length; i++) { var p = peitto[i]; if (e >= p.e0 && e <= p.e1 && n >= p.n0 && n <= p.n1) return true; }
+      return false;
+    }
+    // Ilmakuvan veneet (veneet.json): lista { e, n, suunta (keulan tosisuunta), pituus, leveys, luokka, varmuus, satama }. Veneet sijoitetaan annettuun paikkaan, suuntaan ja pituuteen
+    // (malli luokan mallista, mittakaava pituuden mukaan, leveys suhteessa). Suunta on oletuksena ruutusuunta (tietoputken veneet.json: kuvan akselien mukainen, mitattu 27.10.2026), ja valinnat.suuntaTosi = tosi muuntaa tosuunnasta ruutusuunnaksi (meridiaanikonvergenssi). valinnat.alueet: [{ nimi, e0, n0, e1, n1 }] tiedoston ilmoittamat tunnistusalueet (peittoalueet). Tämä korvaa laiturialgoritmin niillä satamilla,
+    // jotka tiedosto kattaa (peittoalue: satamittain havaintojen reunat + peittoMarginaali, lisäksi havaintojen ryppäät). Poijut ja köydet tulevat asetaLaiturit-kutsussa.
+    function asetaPaikat(lista, orig, valinnat) {
+      valinnat = valinnat || {};
+      if (orig) origin = { e: orig.e, n: orig.n };
+      var i, v;
+      for (i = veneet.length - 1; i >= 0; i--) if (veneet[i].lahde === 'ilmakuva') { byId.delete(veneet[i].id); veneet.splice(i, 1); }
+      poijut = poijut.filter(function (p) { return p.lahde !== 'ilmakuva'; }); indeksi = null;
+      ilmakuvaLista = []; peitto = [];
+      var ik = a.ilmakuva, tosi = valinnat.suuntaTosi !== undefined ? !!valinnat.suuntaTosi : !!ik.suuntaTosi, tl = { saatu: lista ? lista.length : 0, luotu: 0, ohitettuVarmuus: 0, ohitettuVirheellinen: 0, luokittain: { soutu: 0, pieni: 0, keski: 0, purje: 0 }, satamittain: {}, peittoalueita: 0, lahde: a.veneLahde, maalta: 0, poijuja: 0, laituriin: 0, poijukentalla: 0 };
+      ilmakuvaTilasto = tl;
+      if (!lista || !lista.length || a.veneLahde !== 'ilmakuva') return tl;
+      var ryhmat = {};
+      lista.forEach(function (it, idx) {
+        if (!it || !isFinite(it.e) || !isFinite(it.n) || !LUOKAT[it.luokka] || !(it.pituus > 0)) { tl.ohitettuVirheellinen++; return; }
+        if (it.varmuus !== undefined && it.varmuus < ik.minVarmuus) { tl.ohitettuVarmuus++; return; }
+        var lk = LUOKAT[it.luokka], k = clamp(it.pituus / lk.nom, ik.koko[0], ik.koko[1]);
+        var ll = Paikka.enToLonLat(it.e, it.n), conv = Paikka.convergenceDeg(ll.lon, ll.lat);
+        v = { id: 'I' + Math.round(it.e * 10) + '_' + Math.round(it.n * 10), luokka: it.luokka, lahde: 'ilmakuva', kiinnitetty: true, e: it.e, n: it.n, suunta: ((((it.suunta || 0) - (tosi ? conv : 0)) % 360) + 360) % 360, pituus: lk.nom * k, satama: it.satama || '', varmuus: it.varmuus, havaittuPituus: it.pituus, havaittuLeveys: it.leveys };
+        tayta(v, a);
+        if (byId.has(v.id)) { v.id += '_' + idx; }
+        veneet.push(v); byId.set(v.id, v); ilmakuvaLista.push(v);
+        tl.luotu++; tl.luokittain[v.luokka]++;
+        var nimi = v.satama || '?', r = ryhmat[nimi] || (ryhmat[nimi] = { e0: 1e30, n0: 1e30, e1: -1e30, n1: -1e30, n: 0 });
+        r.e0 = Math.min(r.e0, v.e); r.n0 = Math.min(r.n0, v.n); r.e1 = Math.max(r.e1, v.e); r.n1 = Math.max(r.n1, v.n); r.n++;
+        tl.satamittain[nimi] = (tl.satamittain[nimi] || 0) + 1;
+      });
+      // peittoalueet: satamittain (jos laatikko ei ole yli 3 km) ja lisäksi 150 m:n yhteenliittyvät rypäät (nimettömät tai liian laajat satamat)
+      var m = ik.peittoMarginaali, annetut = {};
+      (valinnat.alueet || []).forEach(function (al) { if (al && isFinite(al.e0) && isFinite(al.n0) && isFinite(al.e1) && isFinite(al.n1)) { peitto.push({ e0: al.e0 - 10, n0: al.n0 - 10, e1: al.e1 + 10, n1: al.n1 + 10, nimi: al.nimi || 'alue', n: 0, annettu: true }); annetut[al.nimi] = true; } });
+      Object.keys(ryhmat).forEach(function (nimi) { var r = ryhmat[nimi]; if (!annetut[nimi] && nimi !== '?' && r.e1 - r.e0 < 3000 && r.n1 - r.n0 < 3000) peitto.push({ e0: r.e0 - m, n0: r.n0 - m, e1: r.e1 + m, n1: r.n1 + m, nimi: nimi, n: r.n }); });
+      var ruutu = new Map(), CL = 150, par = [];
+      ilmakuvaLista.forEach(function (b, idx) { par[idx] = idx; var key = Math.floor(b.e / CL) + '/' + Math.floor(b.n / CL), l = ruutu.get(key); if (!l) ruutu.set(key, l = []); l.push(idx); });
+      function juuri(x) { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; }
+      ilmakuvaLista.forEach(function (b, idx) {
+        var cx = Math.floor(b.e / CL), cy = Math.floor(b.n / CL);
+        for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) { var l = ruutu.get((cx + dx) + '/' + (cy + dy)); if (!l) continue; for (var q = 0; q < l.length; q++) { var o = ilmakuvaLista[l[q]]; if (Math.hypot(o.e - b.e, o.n - b.n) <= CL) par[juuri(idx)] = juuri(l[q]); } }
+      });
+      var rypaat = {};
+      ilmakuvaLista.forEach(function (b, idx) { var j = juuri(idx), r = rypaat[j] || (rypaat[j] = { e0: 1e30, n0: 1e30, e1: -1e30, n1: -1e30, n: 0 }); r.e0 = Math.min(r.e0, b.e); r.n0 = Math.min(r.n0, b.n); r.e1 = Math.max(r.e1, b.e); r.n1 = Math.max(r.n1, b.n); r.n++; });
+      Object.keys(rypaat).forEach(function (j) { var r = rypaat[j]; peitto.push({ e0: r.e0 - m, n0: r.n0 - m, e1: r.e1 + m, n1: r.n1 + m, nimi: 'rypas', n: r.n }); });
+      tl.peittoalueita = peitto.length;
+      return tl;
+    }
+    // Laituriin kiinnitetyt ilmakuvaveneet: poiju (köyden pää) perän taakse, kun keula on enintään poijuMaxVali metrin päässä laiturin reunasta ja osoittaa laituria kohti. Poijukentällä ei poijua eikä köyttä.
+    function ilmakuvaPoijutJaTarkistus(segLista, valinnat) {
+      var ik = a.ilmakuva, tl = ilmakuvaTilasto; if (!tl) return;
+      tl.laituriin = 0; tl.poijukentalla = 0; tl.poijuja = 0; tl.maalta = 0;
+      poijut = poijut.filter(function (p) { return p.lahde !== 'ilmakuva'; });
+      var raj = valinnat.rajaus, onVesi = valinnat.onVesi || null, cosK = Math.cos(ik.poijuKulma * RAD), i, j;
+      var ruutu = new Map(), SK = 20;
+      (segLista || []).forEach(function (sg, idx) {
+        var c0 = Math.floor((Math.min(sg.e0, sg.e1) - 6) / SK), c1 = Math.floor((Math.max(sg.e0, sg.e1) + 6) / SK), r0 = Math.floor((Math.min(sg.n0, sg.n1) - 6) / SK), r1 = Math.floor((Math.max(sg.n0, sg.n1) + 6) / SK);
+        for (var cx = c0; cx <= c1; cx++) for (var cy = r0; cy <= r1; cy++) { var key = cx + '/' + cy, l = ruutu.get(key); if (!l) ruutu.set(key, l = []); l.push(idx); }
+      });
+      ilmakuvaLista.forEach(function (v) {
+        if (raj && Math.hypot(v.e - raj.e, v.n - raj.n) > raj.sade) return;
+        var h = v.suunta * RAD, ux = Math.sin(h), uy = Math.cos(h), L = v.pituus, bowE = v.e + ux * L / 2, bowN = v.n + uy * L / 2, sternE = v.e - ux * L / 2, sternN = v.n - uy * L / 2;
+        if (onVesi && ik.pudotaMaalta) {
+          var maalla = !onVesi(v.e, v.n) && !onVesi(bowE, bowN) && !onVesi(sternE, sternN);
+          if (maalla !== !!v.maalla) { v.maalla = maalla; indeksi = null; }
+          if (maalla) { tl.maalta++; return; }
+        }
+        if (v.maalla) return;
+        // lähin laituri keulasta: reunan etäisyys (keskilinja miinus puolikas leveys), puoli ja kulma
+        var l = ruutu.get(Math.floor(bowE / SK) + '/' + Math.floor(bowN / SK)), best = null, bd = 1e9;
+        if (l) for (i = 0; i < l.length; i++) {
+          var sg = segLista[l[i]], dd = pisteJanalla(bowE, bowN, sg.e0, sg.n0, sg.e1, sg.n1) - sg.w / 2;
+          if (dd < bd) { bd = dd; best = sg; }
+        }
+        var kiinni = false;
+        if (best && bd < ik.poijuMaxVali) {
+          var dx = best.e1 - best.e0, dy = best.n1 - best.n0, ll = Math.hypot(dx, dy) || 1, tx = dx / ll, ty = dy / ll, nx = -ty, ny = tx;
+          var side = (v.e - best.e0) * nx + (v.n - best.n0) * ny;           // veneen keskipiste laiturin vasemmalla (+) tai oikealla (-) puolella
+          if (Math.abs(side) > 1e-6) { var sg2 = side > 0 ? 1 : -1; kiinni = (ux * -nx * sg2 + uy * -ny * sg2) >= cosK; }
+        }
+        v.laituriin = kiinni;
+        if (kiinni) {
+          tl.laituriin++;
+          var rope = Math.max(1.5, 0.5 * L), pE = sternE - ux * rope, pN = sternN - uy * rope;
+          if (!onVesi || onVesi(pE, pN)) { poijut.push({ id: v.id, e: pE, n: pN, pe: sternE, pn: sternN, ph: LUOKAT[v.luokka].perakorkeus, L: L, lahde: 'ilmakuva' }); tl.poijuja++; }
+        } else tl.poijukentalla++;
+      });
+    }
+    // Satama-alueet (läpinäkyvä alue Google-tilassa, googleSatama = 'google'): kapselit jokaisen laiturisegmentin ympärille (sade 60 m) ja pienet renkaat niiden ilmakuvaveneiden ympärille,
+    // jotka ovat yli sadan metrin päässä laiturista (poijukentät)
+    function laskeSatamaAlue(segs) {
+      var R = satamaAlue.sade, kap = [], ren = [], SK = 100, ruutu = new Map();
+      (segs || []).forEach(function (sg) {
+        if (sg.k !== 'narrow' && sg.k !== 'wide') return;
+        kap.push([sg.e0, sg.n0, sg.e1, sg.n1]);
+        var c0 = Math.floor((Math.min(sg.e0, sg.e1) - R) / SK), c1 = Math.floor((Math.max(sg.e0, sg.e1) + R) / SK), r0 = Math.floor((Math.min(sg.n0, sg.n1) - R) / SK), r1 = Math.floor((Math.max(sg.n0, sg.n1) + R) / SK);
+        for (var cx = c0; cx <= c1; cx++) for (var cy = r0; cy <= r1; cy++) { var key = cx + '/' + cy, l = ruutu.get(key); if (!l) ruutu.set(key, l = []); l.push(kap.length - 1); }
+      });
+      ilmakuvaLista.forEach(function (v) {
+        if (v.maalla) return;
+        var l = ruutu.get(Math.floor(v.e / SK) + '/' + Math.floor(v.n / SK)), sisalla = false;
+        if (l) for (var i = 0; i < l.length && !sisalla; i++) { var k = kap[l[i]]; if (pisteJanalla(v.e, v.n, k[0], k[1], k[2], k[3]) <= R) sisalla = true; }
+        if (!sisalla) ren.push([v.e, v.n]);
+      });
+      satamaAlue = { kapselit: kap, renkaat: ren, sade: R, veneSade: satamaAlue.veneSade };
     }
     function rebase(orig) { if (!orig && Paikka && Paikka.getOrigin) orig = Paikka.getOrigin(); if (orig) origin = { e: orig.e, n: orig.n }; }
 
@@ -7484,6 +7816,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       for (var lk0 in laskuri) laskuri[lk0] = 0;
       for (i = 0; i < n; i++) {
         v = veneet[i];
+        if (v.maalla) continue;
         var wx = v.e - oe, wy = v.n - on, dx = wx - ox, dy = wy - oy, d2 = dx * dx + dy * dy;
         if (hasOma && d2 > raja2) continue;
         var kauko = hasOma && d2 > kauko2;
@@ -7503,7 +7836,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
           roll = amp * v.amp * RAD * Math.sin(2 * PI * aika / v.jakso + v.vaihe);
           pitch = amp * v.nyokAmp * RAD * Math.sin(2 * PI * aika / v.nyokJakso + v.nyokVaihe);
         }
-        kirjoitaMatriisi(m.mesh.instanceMatrix.array, idx * 16, wx2, 0.0, -wy2, v.suunta * RAD, pitch, roll, v.kerroin);
+        kirjoitaMatriisi(m.mesh.instanceMatrix.array, idx * 16, wx2, 0.0, -wy2, v.suunta * RAD, pitch, roll, v.kerroin * skaala);
         var vr = v.vari, o3 = idx * 3;
         m.ih.array[o3] = vr.runko[0]; m.ih.array[o3 + 1] = vr.runko[1]; m.ih.array[o3 + 2] = vr.runko[2];
         m.idk.array[o3] = vr.kansi[0]; m.idk.array[o3 + 1] = vr.kansi[1]; m.idk.array[o3 + 2] = vr.kansi[2];
@@ -7552,6 +7885,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     function rakennaIndeksi() {
       indeksi = { ruudut: new Map(), liikkuvat: [], koko: 100 };
       veneet.forEach(function (v) {
+        if (v.maalla) return;
         if (!v.kiinnitetty) { indeksi.liikkuvat.push(v); return; }
         var key = Math.floor(v.e / indeksi.koko) + '/' + Math.floor(v.n / indeksi.koko);
         var l = indeksi.ruudut.get(key); if (!l) indeksi.ruudut.set(key, l = []); l.push(v);
@@ -7563,7 +7897,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var oe = origin.e, on = origin.n, E = x + oe, N = y + on, out = [], K = indeksi.koko;
       function ota(v) {
         var dx = v.e - E, dy = v.n - N, d = Math.hypot(dx, dy); if (d > sade) return;
-        out.push({ id: v.id, x: v.e - oe, y: v.n - on, e: v.e, n: v.n, suunta: v.suunta, pituus: v.pituus, leveys: v.leveys, luokka: v.luokka, malli: v.malli, etaisyys: d, kiinnitetty: !!v.kiinnitetty, kaiku: v.kaiku, kaikuTaso: Math.min(1, Math.log10(1 + v.kaiku) / 1.3), masto: v.masto });
+        out.push({ id: v.id, x: v.e - oe, y: v.n - on, e: v.e, n: v.n, suunta: v.suunta, pituus: v.pituus, leveys: v.leveys, luokka: v.luokka, malli: v.malli, etaisyys: d, kiinnitetty: !!v.kiinnitetty, kaiku: v.kaiku, kaikuTaso: Math.min(1, Math.log10(1 + v.kaiku) / 1.3), masto: v.masto, lahde: v.lahde });
       }
       var c0 = Math.floor((E - sade) / K), c1 = Math.floor((E + sade) / K), r0 = Math.floor((N - sade) / K), r1 = Math.floor((N + sade) / K);
       for (var cx = c0; cx <= c1; cx++) for (var cy = r0; cy <= r1; cy++) { var l = indeksi.ruudut.get(cx + '/' + cy); if (l) l.forEach(ota); }
@@ -7585,13 +7919,18 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       meshit = {}; if (scene) scene.remove(ryhma);
     }
     return {
-      ryhma: ryhma, asetaLaiturit: asetaLaiturit, lisaa: lisaa, poista: poista, siirra: siirra, hae: hae, paivita: paivita, lahella: lahella, tilasto: tilasto, rebase: rebase, nayta: nayta, pura: pura,
-      veneet: veneet, asetukset: a, origin: function () { return origin; }
+      ryhma: ryhma, asetaLaiturit: asetaLaiturit, asetaPaikat: asetaPaikat, lisaa: lisaa, poista: poista, siirra: siirra, hae: hae, paivita: paivita, lahella: lahella, tilasto: tilasto, rebase: rebase, nayta: nayta, pura: pura,
+      veneet: veneet, asetukset: a, origin: function () { return origin; },
+      // vaihe 3o: piirtomittakaava (Google-tila), satama-alueet (läpinäkyvä alue), ilmakuvan tilasto ja peittoalueet (testit ja raportti)
+      asetaSkaala: function (k) { skaala = k > 0 ? +k : 1; }, skaala: function () { return skaala; },
+      satamaAlueet: function () { return satamaAlue; }, ilmakuvaTilasto: function () { return ilmakuvaTilasto; }, peittoalueet: function () { return peitto; },
+      ilmakuvaAktiivinen: ilmakuvaAktiivinen, ilmakuvaVeneet: function () { return ilmakuvaLista; }, poijut: function () { return poijut; }, laiturisegmentit: function () { return viim.segLista || []; }
     };
   }
 
   var api = {
     VERSIO: VERSIO, luoVeneet: luoVeneet, luoVesiTesti: luoVesiTesti, kiinnitaVeneet: kiinnitaVeneet, ketjut: ketjut, ruudunSegmentit: ruudunSegmentit,
+    luoEsto: luoEsto, kapeatKaistat: kapeatKaistat, taytaMonikulmio: taytaMonikulmio, etaisyysSoluun: etaisyysSoluun,
     mallinGeometria: mallinGeometria, kolmiotaulukko: kolmiotaulukko, poijuGeometria: poijuGeometria, annaMateriaali: annaMateriaali,
     LUOKAT: LUOKAT, MALLI_IDT: MALLI_IDT, ASETUKSET: ASETUKSET, hashStr: hashStr, rng: rng, tayta: tayta, kirjoitaMatriisi: kirjoitaMatriisi, Rak: Rak
   };
@@ -9176,6 +9515,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
  * Mesh on yksi verkko (kaikki ladatut ruudut yhdistettynä), jonka kärkipisteet ovat TM35FIN-koordinaateissa kiintopisteen (REF) suhteen. Verkon paikka
  * päivitetään rebase()-kutsulla, kun maailman origo siirtyy. Materiaali annetaan ulkopuolelta (nakyma.js:n vesivarjostin), joten ulkoasu on sama kuin omassa näkymässä.
  *
+ * Vaihe 3o: setHoles(alueet) tekee satama-alueista (kapselit laiturisegmenttien ympärillä ja renkaat) läpinäkyviä: reikäverkko kirjoittaa vesimaskin päälle värin ja alfan 0 (ei sekoitusta),
+ * jolloin Googlen oma satama (vesi, laiturit ja veneet) näkyy sellaisenaan. Reikä ei kirjoita syvyyttä, joten myöhemmin piirrettävät kohteet (turvalaitteet) toimivat normaalisti.
+ *
  * Moduuli toimii selaimessa (window.Vesimaski3D) ja Nodessa (module.exports: rengasjako ja siirto, testattavissa ilman three.js:ää). */
 (function (root) {
   'use strict';
@@ -9235,6 +9577,15 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     scene.add(mesh);
     var tiles = new Map(), queue = [], wanted = [], last = { x: 1e9, y: 1e9 }, dirty = false, version = 0, stats = { tiles: 0, loaded: 0, empty: 0, tris: 0, verts: 0, buildMs: 0, maxMs: 0, rings: 0 };
     var active = false, jobs = 0;
+    // reikäverkko (vaihe 3o): kirjoittaa alfan 0 vesimaskin päälle. Sama REF-koordinaatisto kuin vesimaskissa.
+    var holeMat = new THREE.ShaderMaterial({
+      vertexShader: 'void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }',
+      blending: THREE.NoBlending, depthWrite: false, depthTest: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: false, toneMapped: false
+    });
+    var holeMesh = new THREE.Mesh(new THREE.BufferGeometry(), holeMat); holeMesh.name = 'satamareika'; holeMesh.frustumCulled = false; holeMesh.visible = false; holeMesh.renderOrder = -4; holeMesh.matrixAutoUpdate = false;
+    scene.add(holeMesh);
+    var holeOn = false, holeInfo = { kapselit: 0, renkaat: 0, kolmiot: 0 };
 
     function sizeM(z, lat) { return 40075016.686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z); }
     function key(z, x, y) { return z + '/' + x + '/' + y; }
@@ -9335,7 +9686,28 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     function placeMesh() {
       var w = P.enToWorld(set.refE, set.refN);
       mesh.position.set(w.x, 0, -w.y); mesh.updateMatrix(); mesh.matrixWorldNeedsUpdate = true;
+      holeMesh.position.set(w.x, 0.04, -w.y); holeMesh.updateMatrix(); holeMesh.matrixWorldNeedsUpdate = true;
     }
+    function holeVisible() { holeMesh.visible = active && holeOn && holeInfo.kolmiot > 0; }
+    // Satama-alueet: alueet = { kapselit: [[e0, n0, e1, n1], ...], renkaat: [[e, n], ...], sade, veneSade } (TM35FIN). Kapseli = suorakulmio ja kaksi 16-kulmaista kiekkoa, rengas = kiekko.
+    function setHoles(alueet) {
+      var pos = [], R = (alueet && alueet.sade) || 60, rr = (alueet && alueet.veneSade) || 20, SEG = 16, i;
+      function P3(e, n) { pos.push(e - set.refE, 0, -(n - set.refN)); }
+      function disc(e, n, r) { for (var k = 0; k < SEG; k++) { var a0 = k / SEG * 2 * Math.PI, a1 = (k + 1) / SEG * 2 * Math.PI; P3(e, n); P3(e + r * Math.cos(a0), n + r * Math.sin(a0)); P3(e + r * Math.cos(a1), n + r * Math.sin(a1)); } }
+      var kap = (alueet && alueet.kapselit) || [], ren = (alueet && alueet.renkaat) || [];
+      for (i = 0; i < kap.length; i++) {
+        var s0 = kap[i], dx = s0[2] - s0[0], dy = s0[3] - s0[1], l = Math.hypot(dx, dy);
+        if (l > 0.5) { var nx = -dy / l * R, ny = dx / l * R; P3(s0[0] + nx, s0[1] + ny); P3(s0[0] - nx, s0[1] - ny); P3(s0[2] + nx, s0[3] + ny); P3(s0[2] + nx, s0[3] + ny); P3(s0[0] - nx, s0[1] - ny); P3(s0[2] - nx, s0[3] - ny); }
+        disc(s0[0], s0[1], R); disc(s0[2], s0[3], R);
+      }
+      for (i = 0; i < ren.length; i++) disc(ren[i][0], ren[i][1], rr);
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(pos), 3));
+      var old = holeMesh.geometry; holeMesh.geometry = geo; if (old) old.dispose();
+      holeInfo = { kapselit: kap.length, renkaat: ren.length, kolmiot: pos.length / 9 };
+      placeMesh(); holeVisible();
+    }
+    function setHoleActive(on) { holeOn = !!on; holeVisible(); }
 
     // Aikaviipale: lataa ja rakentaa enintään yhden ruudun kerrallaan
     function tick(budgetMs) {
@@ -9369,12 +9741,13 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     function setActive(on) {
       on = !!on; if (on === active) return; active = on;
       if (!on) mesh.visible = false; else { last.x = last.y = 1e9; if (mesh.geometry.index) mesh.visible = true; }
+      holeVisible();
     }
     function rebase() { placeMesh(); last.x = last.y = 1e9; }
     function idle() { return active && !queue.length && jobs === 0 && !wanted.some(function (t) { return t.state === 'built-wait' || t.state === 'loading' || t.state === 'new'; }); }
     function setMaterial(m) { mat = m; mesh.material = m; }
     function info() { return { tiles: tiles.size, wanted: wanted.length, ready: wanted.filter(function (t) { return t.state === 'ready'; }).length, empty: wanted.filter(function (t) { return t.state === 'empty'; }).length, stats: stats, visible: mesh.visible, version: version }; }
-    return { mesh: mesh, sync: sync, tick: tick, setActive: setActive, rebase: rebase, idle: idle, setMaterial: setMaterial, info: info, settings: set };
+    return { mesh: mesh, holeMesh: holeMesh, sync: sync, tick: tick, setActive: setActive, setHoles: setHoles, setHoleActive: setHoleActive, holeInfo: function () { return { on: holeOn, visible: holeMesh.visible, kapselit: holeInfo.kapselit, renkaat: holeInfo.renkaat, kolmiot: holeInfo.kolmiot }; }, rebase: rebase, idle: idle, setMaterial: setMaterial, info: info, settings: set };
   }
 
   var api = { create: create, SETTINGS: SET, groupRings: groupRings, offsetRing: offsetRing, ringArea: ringArea };
@@ -9765,7 +10138,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     // ---- kerrostila (vaihe 3n) ----
     // ov.on: Google-kerroksen päällä piirtävä tila. fogKm: sumukerroksen näkyvyys (0 = ei sumukerrosta). cal: kalibrointi (oman kameran korjaukset Googlen todelliseen käytökseen).
     var horColor = new THREE.Color(0xcfdce8);
-    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.1, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
+    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.1, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 0, sillat: 1 }, hidden: [] };
     ov.mat = new THREE.ShaderMaterial({
       uniforms: { uFogColor: { value: U.uFogColor.value }, uInvVis: { value: 0 }, uLower: { value: ov.lower } },
       blending: THREE.NoBlending, fog: false, toneMapped: false, colorWrite: false,
@@ -9796,7 +10169,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         layerSet(n.mesh, 2); layerSet(n.bmesh, 2); layerSet(n.shell, 3);
         if (n.tmeshes) for (var q = 0; q < n.tmeshes.length; q++) layerSet(n.tmeshes[q], 3);
       });
-      for (i = 0; i < scene.children.length; i++) { var o = scene.children[i]; if (ov.hide[o.name] || ov.hidden.indexOf(o) >= 0) layerSet(o, 1); }
+      for (i = 0; i < scene.children.length; i++) { var o = scene.children[i]; if (ov.hide[o.name] || ov.hidden.indexOf(o) >= 0) layerSet(o, 1); else if (o.name && ov.hide[o.name] === 0) layerSet(o, 0); }
     }
     function restoreLayers() {
       if (terrain && terrain.nodes) terrain.nodes.forEach(function (n) {
@@ -10132,7 +10505,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     calibStore: 'sim.googleKalib',
     attribClipPx: 26, attribClipW: 170,   // vain vasemman alakulman lovi (logo ja tietolähteet), ei koko alareunan kaistaa (27.10.2026)
     attribClipPxOld: 24,         // oman kankaan alareunasta rajataan tämän verran pois, jotta Googlen lähdemerkintä (logo ja tietolähteet) jää näkyviin
-    fogLevelsKm: [0, 20, 10, 5, 2, 1]   // sumukerroksen näkyvyys (km), 0 = ei sumukerrosta
+    fogLevelsKm: [0, 20, 10, 5, 2, 1],  // sumukerroksen näkyvyys (km), 0 = ei sumukerrosta
+    googleVeneSkaala: 1.08,   // vaihe 3o: omat veneet piirretään kerrostilassa näin paljon suurempina, jotta ne peittävät Googlen veneiden reunat
+    googleSatama: 'oma'       // vaihe 3o: 'oma' = omat laiturit ja veneet Googlen päällä, 'google' = satama-alueilla (laitureista 60 m) oma vesi läpinäkyvä ja Googlen oma satama näkyy sellaisenaan
   };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -12215,7 +12590,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
  * 1024 px) mittari ja 3D ovat rinnakkain, ja vähintään 1440 px leveällä näytöllä plotteri, 3D ja tutka ovat kolmena ruutuna.
  * Simulaatio etenee 0,1 s:n kiinteillä askelilla, joten tallenne ja automaattiohjaus ovat samat nopeutuksesta riippumatta.
  * URL-parametrit (kehitys ja testit): aineisto (paketin osoite), harjoitus (h1, free, rk1, rk2 ... tai Reittikartan reitin tunniste), suunta=kaanteinen (lähtö viimeisestä pisteestä), auto (automaattiohjauksen tavoitenopeus kn),
- * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö), laatu (kevyt tai täysi), veneet=ei (ei laituriveneitä). */
+ * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö), laatu (kevyt tai täysi), veneet=ei (ei laituriveneitä),
+ * venelahde=laituri (ei ilmakuvan veneitä, vain laiturialgoritmi), veneettiedosto (veneet.json-tiedoston osoite, ohittaa paketin), googlesatama (oma tai google, vaihe 3o). */
 (function (root) {
   'use strict';
   var P = root.Paikka, L = root.Liike, H = root.Harjoitus, KN = L.KN, RAD = Math.PI / 180;
@@ -12236,6 +12612,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     collision: null, collMs: { n: 0, sum: 0, max: 0 }, lastTorE: 1e9, lastTorN: 1e9,
     boats: null, boatsOn: true, boatGen: 0, boatBusy: 0, boatInit: true, boatStats: null, lastBoatLoad: { x: 1e9, y: 1e9 },
     lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0, gfx: null,
+    satama: 'oma', boatFileP: null, boatFile: null,   // vaihe 3o: satamat Google-tilassa (oma tai google), veneet.json-tiedoston lataus ja tiedot
     ext: 'own', g3: null, fogKm: 0    // ulkonäkymä (vaihe 3m): 'own' = oma three.js-näkymä, 'google' = Google 3D (testi), vaihe 3n: oma kerros Googlen päällä, fogKm = sumukerroksen näkyvyys (0 = pois)
   };
   root.__sim = G;
@@ -12250,12 +12627,15 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
       if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
       if (o.googleSumu != null && root.Google3D.SETTINGS.fogLevelsKm.indexOf(Number(o.googleSumu)) >= 0) G.fogKm = Number(o.googleSumu);
+      if (o.googleSatama === 'oma' || o.googleSatama === 'google') G.satama = o.googleSatama;
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm, googleSatama: G.satama })); } catch (e) {}
   }
+  G.satama = root.Google3D.SETTINGS.googleSatama === 'google' ? 'google' : 'oma';
   loadPrefs();
+  if (qs.get('googlesatama') === 'oma' || qs.get('googlesatama') === 'google') G.satama = qs.get('googlesatama');
   // Grafiikka (vaihe 3j): täysi tai kevyt. Oletus on täysi leveällä näytöllä ja kevyt puhelimessa (lyhyempi sivu alle 700 px). Osoiteparametri laatu=kevyt|täysi ohittaa muistin.
   function gfxNow() {
     var q = qs.get('laatu'); if (q === 'kevyt' || q === 'light') return 'light'; if (q === 'täysi' || q === 'full') return 'full';
@@ -12407,7 +12787,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       Array.prototype.forEach.call($('segDisp').children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === dq); });
     }
     updateDispHint();
-    root.Aineisto.meta().then(function (m) { if (m && m.lahdemerkinta_yhteensa) $('srcText').textContent = m.lahdemerkinta_yhteensa; }, function () {});
+    root.Aineisto.meta().then(function (m) { if (m && m.lahdemerkinta_yhteensa) $('srcText').textContent = m.lahdemerkinta_yhteensa; }, function () {}).then(loadBoatFile).then(addBoatSource);   // vaihe 3o: ilmakuvan veneiden lähdemerkintä
   }
 
   // ---------- peli: rakennus ----------
@@ -12458,7 +12838,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var b = root.Veneet3D.luoVeneet(view.scene, {}), r0 = view.render, tb = 0;
     view.render = function (st, dt) {
       tb += Math.min(0.2, dt || 0.016);
-      if (G.boatsOn) b.paivita(tb, { x: st.x, y: st.y });
+      if (G.boatsOn && !portGoogle()) b.paivita(tb, { x: st.x, y: st.y });   // Googlen satamatilassa omia veneitä ei piirretä (vaihe 3o)
       return r0.apply(view, arguments);
     };
     if (view.addExtra) view.addExtra(b);
@@ -12473,6 +12853,49 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   function boatsAt(e, n, r) {   // veneet pisteen (e, n) TM35FIN ympäriltä: törmäystarkistus ja tutka
     var b = G.boats; if (!b || !G.boatsOn) return null;
     var o = b.origin(); return b.lahella(e - o.e, n - o.n, r);
+  }
+  // ---------- ilmakuvan veneet (vaihe 3o) ----------
+  // veneet.json (tietoputken vaihe 1d, veneet Maanmittauslaitoksen ortokuvasta) ladataan kerran: paketin aineisto.json mainitsee tiedoston (ei turhaa 404-pyyntöä, kun tiedostoa ei ole),
+  // osoiteparametri veneettiedosto ohittaa osoitteen ja venelahde=laituri ohittaa koko tiedoston. Lista annetaan veneet3d.js:lle valmiina paikkoina (asetaPaikat), ja laiturialgoritmi jää
+  // varaksi alueille, joita tiedosto ei kata. Palauttaa lupauksen, joka täyttyy tiedoston sisällöllä tai arvolla null.
+  function loadBoatFile() {
+    if (G.boatFileP) return G.boatFileP;
+    var url = qs.get('veneettiedosto');
+    if (qs.get('venelahde') === 'laituri') return (G.boatFileP = Promise.resolve(null));
+    var addr = url ? Promise.resolve(url) : root.Aineisto.meta().then(function (m) {
+      var f = m && m.tiedostot && m.tiedostot.filter(function (t) { return t && t.nimi === 'veneet.json'; })[0];
+      return f ? root.Aineisto.getBase() + 'veneet.json' : null;
+    }, function () { return null; });
+    G.boatFileP = addr.then(function (u) {
+      if (!u) return null;
+      return fetch(u).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) {
+        if (!d || !Array.isArray(d.veneet) || !d.veneet.length || (d.koordinaatisto && d.koordinaatisto !== 'EPSG:3067')) { G.boatFile = { virhe: 'tiedoston rakenne ei kelpaa' }; return null; }
+        G.boatFile = { url: u, lahde: d.lahde || '', lahdemerkinta: d.lahdemerkinta || '', lisenssi: d.lisenssi || '', veneita: d.veneet.length };
+        return d;
+      });
+    }).catch(function (e) { G.boatFile = { virhe: String(e && e.message || e) }; return null; });
+    return G.boatFileP;
+  }
+  function boatFileAreas(d) {   // tiedoston ilmoittamat tunnistusalueet (satamat[].tunnistusalue_bbox = [e0, n0, e1, n1]): laiturialgoritmi ei sijoita niillä veneitä
+    return (d.satamat || []).filter(function (s) { return s && s.tunnistusalue_bbox && s.tunnistusalue_bbox.length === 4; }).map(function (s) { var q = s.tunnistusalue_bbox; return { nimi: s.nimi, e0: q[0], n0: q[1], e1: q[2], n1: q[3] }; });
+  }
+  function addBoatSource(d) {
+    var el = $('srcText'); if (!d || !d.lahdemerkinta || !el) return;
+    if (el.textContent.indexOf(d.lahdemerkinta) < 0) el.textContent = (el.textContent ? el.textContent + ' ' : '') + d.lahdemerkinta;
+  }
+  // Veneiden ja laitureiden piirto Google-kerroksessa (vaihe 3o): veneet 8 % suurempina (googleVeneSkaala), ja asetuksella googleSatama = 'google' satama-alueet ovat omassa vedessä läpinäkyviä
+  // (reikäverkko vesimaskissa), omat laiturit ja veneet jätetään piirtämättä, jolloin Googlen oma satama näkyy sellaisenaan. Tutka ja törmäys käyttävät omia veneitä (boatsAt) kummassakin tilassa.
+  function googleLayer() { return !!(G.view && G.view.isOverlay && G.view.isOverlay()); }
+  function portGoogle() { return G.satama === 'google' && googleLayer(); }
+  function applyBoatMode() {
+    var v = G.view, b = G.boats, pg = portGoogle();
+    if (b) { b.asetaSkaala(googleLayer() ? root.Google3D.SETTINGS.googleVeneSkaala : 1); b.nayta(G.boatsOn && !pg); }
+    if (v && v.overlaySettings) v.overlaySettings.hide.laiturit = pg ? 1 : 0;
+    if (v && v.wmask && v.wmask.setHoleActive) v.wmask.setHoleActive(pg);
+  }
+  function applyPortHoles() {
+    var b = G.boats, v = G.view; if (!b || !v || !v.wmask || !v.wmask.setHoles) return;
+    v.wmask.setHoles(b.satamaAlueet());
   }
   function loadBoats() {
     var b = G.boats; if (!b || G.boatBusy || !G.S) return;
@@ -12497,8 +12920,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         if (token !== G.boatGen || !G.boats) return;
         try {
           var t0 = performance.now(), onVesi = root.Veneet3D.luoVesiTesti(kuv);
-          var st = b.asetaLaiturit(ves, P.getOrigin(), { onVesi: onVesi, rajaus: { e: e0, n: n0, sade: BOAT.radius } });
-          G.boatStats = { ms: performance.now() - t0, ruutuja: ves.length, ketjuja: st.ketjuja, keskenJaaneita: st.keskenJaaneita, paikkoja: st.paikkoja, veneita: st.veneita, luokittain: st.luokittain, hylatty: st.hylatty };
+          var st = b.asetaLaiturit(ves, P.getOrigin(), { onVesi: onVesi, rajaus: { e: e0, n: n0, sade: BOAT.radius }, kuvio: kuv });
+          G.boatStats = { ms: performance.now() - t0, ruutuja: ves.length, ketjuja: st.ketjuja, keskenJaaneita: st.keskenJaaneita, paikkoja: st.paikkoja, veneita: st.veneita, luokittain: st.luokittain, hylatty: st.hylatty, esto: st.esto, ilmakuva: st.ilmakuva };
+          applyPortHoles(); applyBoatMode();
         } catch (err) { G.boatStats = { virhe: String(err && err.message || err) }; }
         G.boatInit = true;
       }, 0);
@@ -12508,7 +12932,12 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var b = G.boats; if (!b) return;
     G.boatInit = false; G.boatBusy = 0; G.lastBoatLoad = { x: 1e9, y: 1e9 };
     try { b.asetaLaiturit([], P.getOrigin(), {}); } catch (e) {}
-    loadBoats();
+    var token = ++G.boatGen;
+    loadBoatFile().then(function (d) {   // ilmakuvan veneet ensin, jotta laiturialgoritmi ohittaa niiden kattamat satamat
+      if (token !== G.boatGen || !G.boats) return;
+      try { if (d) b.asetaPaikat(d.veneet, P.getOrigin(), { suuntaTosi: d.suunta_viite === 'tosi', alueet: boatFileAreas(d) }); } catch (e) { G.boatFile = { virhe: String(e && e.message || e) }; }
+      loadBoats();
+    });
   }
   function maybeLoadBoats() {
     if (!G.boats || !G.boatInit) return;
@@ -12895,6 +13324,10 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var lv = root.Google3D.SETTINGS.fogLevelsKm, i = lv.indexOf(G.fogKm); G.fogKm = lv[(i + 1) % lv.length]; if (G.view) G.view.setFogKm(G.fogKm); updateMenuLabels(); savePrefs();
       if (G.S && G.mode === 'run') logCustom('nakyvyys', G.fogKm);
     });
+    $('mPort').addEventListener('click', function () {
+      G.satama = G.satama === 'google' ? 'oma' : 'google'; applyBoatMode(); updateMenuLabels(); savePrefs();
+      if (G.S && G.mode === 'run') logCustom('googlesatama', G.satama === 'google' ? 1 : 0);
+    });
     $('g3dBack').addEventListener('click', function () { setExtView(false); });
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
     $('g3dKeyGo').addEventListener('click', function () {
@@ -13109,13 +13542,13 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var r = G.g3.enable();
       if (!r.ok) { G.ext = 'own'; g3Info('Google 3D (testi) tarvitsee avaimen', 'Google 3D -näkymä näyttää Googlen fotorealistisen 3D-kartan oman näkymän tilalla. Se tarvitsee oman Google Maps -avaimen.\n\n' + root.Google3D.HELP_LINES.join('\n'), true); return false; }
       // vaihe 3n: oma kangas pysyy näkyvissä Googlen kartan päällä (läpinäkyvä tausta), ja Googlen lisenssimerkinnän kohta alareunassa jää vapaaksi
-      G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true);
+      G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true); applyBoatMode();
       $('v3').classList.add('g3d-over'); var gS = root.Google3D.SETTINGS; canvas.style.clipPath = 'polygon(0 0, 100% 0, 100% 100%, ' + gS.attribClipW + 'px 100%, ' + gS.attribClipW + 'px calc(100% - ' + gS.attribClipPx + 'px), 0 calc(100% - ' + gS.attribClipPx + 'px))'; $('pane3d').classList.add('g3d');
       if (G.S) logCustom('google3d', 1);
     } else {
       if (G.g3) G.g3.disable();
       G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = ''; }
-      if (G.view) G.view.setOverlay(false);
+      if (G.view) { G.view.setOverlay(false); applyBoatMode(); }
       $('v3').classList.remove('g3d-over'); $('pane3d').classList.remove('g3d');
       $('g3dBadge').hidden = true;
     }
@@ -13319,6 +13752,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     if (c.kind === 'kiikari') return c.value.on ? 'Kiikari päälle, suunta ' + pad3(c.value.suunta) + '°' : 'Kiikari pois, suunta ' + pad3(c.value.suunta) + '°';
     if (c.kind === 'nakyvyys') return c.value > 0 ? 'Näkyvyys (Google 3D): ' + c.value + ' km' : 'Näkyvyys (Google 3D): ei sumukerrosta';
     if (c.kind === 'google3d') return c.value ? 'Ulkonäkymä: Google 3D (testi)' : 'Ulkonäkymä: oma';
+    if (c.kind === 'googlesatama') return c.value ? 'Satamat (Google 3D): Googlen omat' : 'Satamat (Google 3D): omat veneet';
     if (c.kind === 'eblvrm') return c.value ? 'Plotterin EBL ja VRM päälle' : 'Plotterin EBL ja VRM pois';
     return H.cmdText(c);
   }
@@ -13330,6 +13764,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     $('mGfx').textContent = 'Grafiikka: ' + (gfxNow() === 'light' ? 'kevyt' : 'täysi');
     $('mView').textContent = 'Ulkonäkymä: ' + (G.ext === 'google' ? 'Google 3D (testi)' : 'oma');
     $('mVis').textContent = 'Näkyvyys (Google 3D): ' + (G.fogKm > 0 ? G.fogKm + ' km' : 'ei sumukerrosta');
+    $('mPort').textContent = 'Satamat (Google 3D): ' + (G.satama === 'google' ? 'Googlen omat' : 'omat veneet');
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -13459,7 +13894,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     initStart(); bindControls();
     root.__sim.startRun = startRun;
     root.__sim.onCollision = onCollision;
-    root.__sim.setBoats = function (on) { G.boatsOn = !!on; if (G.boats) G.boats.nayta(!!on); };   // testikoukku: veneet päälle tai pois (suorituskykymittaus)   // testikoukku: kutsutaan osumalla { kind, type, kn, x, y }
+    root.__sim.applyBoatMode = applyBoatMode;   // testikoukku (vaihe 3o): satamat Google-tilassa
+    root.__sim.boatsAt = boatsAt; root.__sim.loadBoats = loadBoats;
+    root.__sim.setBoats = function (on) { G.boatsOn = !!on; applyBoatMode(); };   // testikoukku: veneet päälle tai pois (suorituskykymittaus)   // testikoukku: kutsutaan osumalla { kind, type, kn, x, y }
     if (qs.get('alku') === '1') startRun();
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();

@@ -1,0 +1,20 @@
+valmis True
+kierros 0 veneet False mediaani   583.3 ms keskiarvo   590.5 ms kutsut 139 kolmiot 191492
+kierros 0 veneet True  mediaani   600.0 ms keskiarvo   632.2 ms kutsut 151 kolmiot 254430
+kierros 1 veneet True  mediaani   633.3 ms keskiarvo   643.3 ms kutsut 151 kolmiot 254430
+kierros 1 veneet False mediaani   600.0 ms keskiarvo   616.1 ms kutsut 139 kolmiot 191492
+kierros 2 veneet False mediaani   583.2 ms keskiarvo   570.0 ms kutsut 139 kolmiot 191492
+kierros 2 veneet True  mediaani   650.1 ms keskiarvo   661.1 ms kutsut 151 kolmiot 254430
+kierros 3 veneet True  mediaani   649.9 ms keskiarvo   643.9 ms kutsut 151 kolmiot 254430
+kierros 3 veneet False mediaani   599.9 ms keskiarvo   635.0 ms kutsut 139 kolmiot 191492
+kierros 4 veneet False mediaani   500.0 ms keskiarvo   577.2 ms kutsut 139 kolmiot 191492
+kierros 4 veneet True  mediaani   650.0 ms keskiarvo   657.8 ms kutsut 151 kolmiot 254430
+kierros 5 veneet True  mediaani   633.3 ms keskiarvo   645.5 ms kutsut 151 kolmiot 254430
+kierros 5 veneet False mediaani   549.9 ms keskiarvo   541.1 ms kutsut 139 kolmiot 191492
+kierros 6 veneet False mediaani   583.3 ms keskiarvo   575.5 ms kutsut 139 kolmiot 191492
+kierros 6 veneet True  mediaani   633.2 ms keskiarvo   647.8 ms kutsut 151 kolmiot 254430
+kierros 7 veneet True  mediaani   699.9 ms keskiarvo   683.3 ms kutsut 151 kolmiot 254430
+kierros 7 veneet False mediaani   600.0 ms keskiarvo   610.0 ms kutsut 139 kolmiot 191492
+suhde (pienin lohko, kuormasta vähiten häiriintynyt) 1.168, suhde (kaikkien lohkojen keskiarvo) 1.106, suhde (mediaani) 1.100, suhde (keskiarvo) 1.108, kutsut 151 (ilman veneitä 139), kolmiot 254430 (ilman 191492)
+virheet []
+exit 0

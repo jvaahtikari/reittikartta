@@ -5,7 +5,8 @@
  * 1024 px) mittari ja 3D ovat rinnakkain, ja vähintään 1440 px leveällä näytöllä plotteri, 3D ja tutka ovat kolmena ruutuna.
  * Simulaatio etenee 0,1 s:n kiinteillä askelilla, joten tallenne ja automaattiohjaus ovat samat nopeutuksesta riippumatta.
  * URL-parametrit (kehitys ja testit): aineisto (paketin osoite), harjoitus (h1, free, rk1, rk2 ... tai Reittikartan reitin tunniste), suunta=kaanteinen (lähtö viimeisestä pisteestä), auto (automaattiohjauksen tavoitenopeus kn),
- * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö), laatu (kevyt tai täysi), veneet=ei (ei laituriveneitä). */
+ * ff (aikakerroin), t (alkuhetki ISO-muodossa), nopeus (tavoitenopeus), naytot (plot, radar tai both), alku=1 (ohita aloitusnäyttö), laatu (kevyt tai täysi), veneet=ei (ei laituriveneitä),
+ * venelahde=laituri (ei ilmakuvan veneitä, vain laiturialgoritmi), veneettiedosto (veneet.json-tiedoston osoite, ohittaa paketin), googlesatama (oma tai google, vaihe 3o). */
 (function (root) {
   'use strict';
   var P = root.Paikka, L = root.Liike, H = root.Harjoitus, KN = L.KN, RAD = Math.PI / 180;
@@ -26,6 +27,7 @@
     collision: null, collMs: { n: 0, sum: 0, max: 0 }, lastTorE: 1e9, lastTorN: 1e9,
     boats: null, boatsOn: true, boatGen: 0, boatBusy: 0, boatInit: true, boatStats: null, lastBoatLoad: { x: 1e9, y: 1e9 },
     lastRadarT: 0, radarSec: 0, radarMainSec: 0, northUp: false, raster: false, radarTune: 'hyva', vecIdx: 1, fovDeg: 100, evOn: true, lastTapT: 0, gfx: null,
+    satama: 'oma', boatFileP: null, boatFile: null,   // vaihe 3o: satamat Google-tilassa (oma tai google), veneet.json-tiedoston lataus ja tiedot
     ext: 'own', g3: null, fogKm: 0    // ulkonäkymä (vaihe 3m): 'own' = oma three.js-näkymä, 'google' = Google 3D (testi), vaihe 3n: oma kerros Googlen päällä, fogKm = sumukerroksen näkyvyys (0 = pois)
   };
   root.__sim = G;
@@ -40,12 +42,15 @@
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
       if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
       if (o.googleSumu != null && root.Google3D.SETTINGS.fogLevelsKm.indexOf(Number(o.googleSumu)) >= 0) G.fogKm = Number(o.googleSumu);
+      if (o.googleSatama === 'oma' || o.googleSatama === 'google') G.satama = o.googleSatama;
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm, googleSatama: G.satama })); } catch (e) {}
   }
+  G.satama = root.Google3D.SETTINGS.googleSatama === 'google' ? 'google' : 'oma';
   loadPrefs();
+  if (qs.get('googlesatama') === 'oma' || qs.get('googlesatama') === 'google') G.satama = qs.get('googlesatama');
   // Grafiikka (vaihe 3j): täysi tai kevyt. Oletus on täysi leveällä näytöllä ja kevyt puhelimessa (lyhyempi sivu alle 700 px). Osoiteparametri laatu=kevyt|täysi ohittaa muistin.
   function gfxNow() {
     var q = qs.get('laatu'); if (q === 'kevyt' || q === 'light') return 'light'; if (q === 'täysi' || q === 'full') return 'full';
@@ -197,7 +202,7 @@
       Array.prototype.forEach.call($('segDisp').children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === dq); });
     }
     updateDispHint();
-    root.Aineisto.meta().then(function (m) { if (m && m.lahdemerkinta_yhteensa) $('srcText').textContent = m.lahdemerkinta_yhteensa; }, function () {});
+    root.Aineisto.meta().then(function (m) { if (m && m.lahdemerkinta_yhteensa) $('srcText').textContent = m.lahdemerkinta_yhteensa; }, function () {}).then(loadBoatFile).then(addBoatSource);   // vaihe 3o: ilmakuvan veneiden lähdemerkintä
   }
 
   // ---------- peli: rakennus ----------
@@ -248,7 +253,7 @@
     var b = root.Veneet3D.luoVeneet(view.scene, {}), r0 = view.render, tb = 0;
     view.render = function (st, dt) {
       tb += Math.min(0.2, dt || 0.016);
-      if (G.boatsOn) b.paivita(tb, { x: st.x, y: st.y });
+      if (G.boatsOn && !portGoogle()) b.paivita(tb, { x: st.x, y: st.y });   // Googlen satamatilassa omia veneitä ei piirretä (vaihe 3o)
       return r0.apply(view, arguments);
     };
     if (view.addExtra) view.addExtra(b);
@@ -263,6 +268,49 @@
   function boatsAt(e, n, r) {   // veneet pisteen (e, n) TM35FIN ympäriltä: törmäystarkistus ja tutka
     var b = G.boats; if (!b || !G.boatsOn) return null;
     var o = b.origin(); return b.lahella(e - o.e, n - o.n, r);
+  }
+  // ---------- ilmakuvan veneet (vaihe 3o) ----------
+  // veneet.json (tietoputken vaihe 1d, veneet Maanmittauslaitoksen ortokuvasta) ladataan kerran: paketin aineisto.json mainitsee tiedoston (ei turhaa 404-pyyntöä, kun tiedostoa ei ole),
+  // osoiteparametri veneettiedosto ohittaa osoitteen ja venelahde=laituri ohittaa koko tiedoston. Lista annetaan veneet3d.js:lle valmiina paikkoina (asetaPaikat), ja laiturialgoritmi jää
+  // varaksi alueille, joita tiedosto ei kata. Palauttaa lupauksen, joka täyttyy tiedoston sisällöllä tai arvolla null.
+  function loadBoatFile() {
+    if (G.boatFileP) return G.boatFileP;
+    var url = qs.get('veneettiedosto');
+    if (qs.get('venelahde') === 'laituri') return (G.boatFileP = Promise.resolve(null));
+    var addr = url ? Promise.resolve(url) : root.Aineisto.meta().then(function (m) {
+      var f = m && m.tiedostot && m.tiedostot.filter(function (t) { return t && t.nimi === 'veneet.json'; })[0];
+      return f ? root.Aineisto.getBase() + 'veneet.json' : null;
+    }, function () { return null; });
+    G.boatFileP = addr.then(function (u) {
+      if (!u) return null;
+      return fetch(u).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) {
+        if (!d || !Array.isArray(d.veneet) || !d.veneet.length || (d.koordinaatisto && d.koordinaatisto !== 'EPSG:3067')) { G.boatFile = { virhe: 'tiedoston rakenne ei kelpaa' }; return null; }
+        G.boatFile = { url: u, lahde: d.lahde || '', lahdemerkinta: d.lahdemerkinta || '', lisenssi: d.lisenssi || '', veneita: d.veneet.length };
+        return d;
+      });
+    }).catch(function (e) { G.boatFile = { virhe: String(e && e.message || e) }; return null; });
+    return G.boatFileP;
+  }
+  function boatFileAreas(d) {   // tiedoston ilmoittamat tunnistusalueet (satamat[].tunnistusalue_bbox = [e0, n0, e1, n1]): laiturialgoritmi ei sijoita niillä veneitä
+    return (d.satamat || []).filter(function (s) { return s && s.tunnistusalue_bbox && s.tunnistusalue_bbox.length === 4; }).map(function (s) { var q = s.tunnistusalue_bbox; return { nimi: s.nimi, e0: q[0], n0: q[1], e1: q[2], n1: q[3] }; });
+  }
+  function addBoatSource(d) {
+    var el = $('srcText'); if (!d || !d.lahdemerkinta || !el) return;
+    if (el.textContent.indexOf(d.lahdemerkinta) < 0) el.textContent = (el.textContent ? el.textContent + ' ' : '') + d.lahdemerkinta;
+  }
+  // Veneiden ja laitureiden piirto Google-kerroksessa (vaihe 3o): veneet 8 % suurempina (googleVeneSkaala), ja asetuksella googleSatama = 'google' satama-alueet ovat omassa vedessä läpinäkyviä
+  // (reikäverkko vesimaskissa), omat laiturit ja veneet jätetään piirtämättä, jolloin Googlen oma satama näkyy sellaisenaan. Tutka ja törmäys käyttävät omia veneitä (boatsAt) kummassakin tilassa.
+  function googleLayer() { return !!(G.view && G.view.isOverlay && G.view.isOverlay()); }
+  function portGoogle() { return G.satama === 'google' && googleLayer(); }
+  function applyBoatMode() {
+    var v = G.view, b = G.boats, pg = portGoogle();
+    if (b) { b.asetaSkaala(googleLayer() ? root.Google3D.SETTINGS.googleVeneSkaala : 1); b.nayta(G.boatsOn && !pg); }
+    if (v && v.overlaySettings) v.overlaySettings.hide.laiturit = pg ? 1 : 0;
+    if (v && v.wmask && v.wmask.setHoleActive) v.wmask.setHoleActive(pg);
+  }
+  function applyPortHoles() {
+    var b = G.boats, v = G.view; if (!b || !v || !v.wmask || !v.wmask.setHoles) return;
+    v.wmask.setHoles(b.satamaAlueet());
   }
   function loadBoats() {
     var b = G.boats; if (!b || G.boatBusy || !G.S) return;
@@ -287,8 +335,9 @@
         if (token !== G.boatGen || !G.boats) return;
         try {
           var t0 = performance.now(), onVesi = root.Veneet3D.luoVesiTesti(kuv);
-          var st = b.asetaLaiturit(ves, P.getOrigin(), { onVesi: onVesi, rajaus: { e: e0, n: n0, sade: BOAT.radius } });
-          G.boatStats = { ms: performance.now() - t0, ruutuja: ves.length, ketjuja: st.ketjuja, keskenJaaneita: st.keskenJaaneita, paikkoja: st.paikkoja, veneita: st.veneita, luokittain: st.luokittain, hylatty: st.hylatty };
+          var st = b.asetaLaiturit(ves, P.getOrigin(), { onVesi: onVesi, rajaus: { e: e0, n: n0, sade: BOAT.radius }, kuvio: kuv });
+          G.boatStats = { ms: performance.now() - t0, ruutuja: ves.length, ketjuja: st.ketjuja, keskenJaaneita: st.keskenJaaneita, paikkoja: st.paikkoja, veneita: st.veneita, luokittain: st.luokittain, hylatty: st.hylatty, esto: st.esto, ilmakuva: st.ilmakuva };
+          applyPortHoles(); applyBoatMode();
         } catch (err) { G.boatStats = { virhe: String(err && err.message || err) }; }
         G.boatInit = true;
       }, 0);
@@ -298,7 +347,12 @@
     var b = G.boats; if (!b) return;
     G.boatInit = false; G.boatBusy = 0; G.lastBoatLoad = { x: 1e9, y: 1e9 };
     try { b.asetaLaiturit([], P.getOrigin(), {}); } catch (e) {}
-    loadBoats();
+    var token = ++G.boatGen;
+    loadBoatFile().then(function (d) {   // ilmakuvan veneet ensin, jotta laiturialgoritmi ohittaa niiden kattamat satamat
+      if (token !== G.boatGen || !G.boats) return;
+      try { if (d) b.asetaPaikat(d.veneet, P.getOrigin(), { suuntaTosi: d.suunta_viite === 'tosi', alueet: boatFileAreas(d) }); } catch (e) { G.boatFile = { virhe: String(e && e.message || e) }; }
+      loadBoats();
+    });
   }
   function maybeLoadBoats() {
     if (!G.boats || !G.boatInit) return;
@@ -685,6 +739,10 @@
       var lv = root.Google3D.SETTINGS.fogLevelsKm, i = lv.indexOf(G.fogKm); G.fogKm = lv[(i + 1) % lv.length]; if (G.view) G.view.setFogKm(G.fogKm); updateMenuLabels(); savePrefs();
       if (G.S && G.mode === 'run') logCustom('nakyvyys', G.fogKm);
     });
+    $('mPort').addEventListener('click', function () {
+      G.satama = G.satama === 'google' ? 'oma' : 'google'; applyBoatMode(); updateMenuLabels(); savePrefs();
+      if (G.S && G.mode === 'run') logCustom('googlesatama', G.satama === 'google' ? 1 : 0);
+    });
     $('g3dBack').addEventListener('click', function () { setExtView(false); });
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
     $('g3dKeyGo').addEventListener('click', function () {
@@ -899,13 +957,13 @@
       var r = G.g3.enable();
       if (!r.ok) { G.ext = 'own'; g3Info('Google 3D (testi) tarvitsee avaimen', 'Google 3D -näkymä näyttää Googlen fotorealistisen 3D-kartan oman näkymän tilalla. Se tarvitsee oman Google Maps -avaimen.\n\n' + root.Google3D.HELP_LINES.join('\n'), true); return false; }
       // vaihe 3n: oma kangas pysyy näkyvissä Googlen kartan päällä (läpinäkyvä tausta), ja Googlen lisenssimerkinnän kohta alareunassa jää vapaaksi
-      G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true);
+      G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true); applyBoatMode();
       $('v3').classList.add('g3d-over'); var gS = root.Google3D.SETTINGS; canvas.style.clipPath = 'polygon(0 0, 100% 0, 100% 100%, ' + gS.attribClipW + 'px 100%, ' + gS.attribClipW + 'px calc(100% - ' + gS.attribClipPx + 'px), 0 calc(100% - ' + gS.attribClipPx + 'px))'; $('pane3d').classList.add('g3d');
       if (G.S) logCustom('google3d', 1);
     } else {
       if (G.g3) G.g3.disable();
       G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = ''; }
-      if (G.view) G.view.setOverlay(false);
+      if (G.view) { G.view.setOverlay(false); applyBoatMode(); }
       $('v3').classList.remove('g3d-over'); $('pane3d').classList.remove('g3d');
       $('g3dBadge').hidden = true;
     }
@@ -1109,6 +1167,7 @@
     if (c.kind === 'kiikari') return c.value.on ? 'Kiikari päälle, suunta ' + pad3(c.value.suunta) + '°' : 'Kiikari pois, suunta ' + pad3(c.value.suunta) + '°';
     if (c.kind === 'nakyvyys') return c.value > 0 ? 'Näkyvyys (Google 3D): ' + c.value + ' km' : 'Näkyvyys (Google 3D): ei sumukerrosta';
     if (c.kind === 'google3d') return c.value ? 'Ulkonäkymä: Google 3D (testi)' : 'Ulkonäkymä: oma';
+    if (c.kind === 'googlesatama') return c.value ? 'Satamat (Google 3D): Googlen omat' : 'Satamat (Google 3D): omat veneet';
     if (c.kind === 'eblvrm') return c.value ? 'Plotterin EBL ja VRM päälle' : 'Plotterin EBL ja VRM pois';
     return H.cmdText(c);
   }
@@ -1120,6 +1179,7 @@
     $('mGfx').textContent = 'Grafiikka: ' + (gfxNow() === 'light' ? 'kevyt' : 'täysi');
     $('mView').textContent = 'Ulkonäkymä: ' + (G.ext === 'google' ? 'Google 3D (testi)' : 'oma');
     $('mVis').textContent = 'Näkyvyys (Google 3D): ' + (G.fogKm > 0 ? G.fogKm + ' km' : 'ei sumukerrosta');
+    $('mPort').textContent = 'Satamat (Google 3D): ' + (G.satama === 'google' ? 'Googlen omat' : 'omat veneet');
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -1249,7 +1309,9 @@
     initStart(); bindControls();
     root.__sim.startRun = startRun;
     root.__sim.onCollision = onCollision;
-    root.__sim.setBoats = function (on) { G.boatsOn = !!on; if (G.boats) G.boats.nayta(!!on); };   // testikoukku: veneet päälle tai pois (suorituskykymittaus)   // testikoukku: kutsutaan osumalla { kind, type, kn, x, y }
+    root.__sim.applyBoatMode = applyBoatMode;   // testikoukku (vaihe 3o): satamat Google-tilassa
+    root.__sim.boatsAt = boatsAt; root.__sim.loadBoats = loadBoats;
+    root.__sim.setBoats = function (on) { G.boatsOn = !!on; applyBoatMode(); };   // testikoukku: veneet päälle tai pois (suorituskykymittaus)   // testikoukku: kutsutaan osumalla { kind, type, kn, x, y }
     if (qs.get('alku') === '1') startRun();
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();

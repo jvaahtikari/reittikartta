@@ -42,7 +42,9 @@
     calibStore: 'sim.googleKalib',
     attribClipPx: 26, attribClipW: 170,   // vain vasemman alakulman lovi (logo ja tietolähteet), ei koko alareunan kaistaa (27.10.2026)
     attribClipPxOld: 24,         // oman kankaan alareunasta rajataan tämän verran pois, jotta Googlen lähdemerkintä (logo ja tietolähteet) jää näkyviin
-    fogLevelsKm: [0, 20, 10, 5, 2, 1]   // sumukerroksen näkyvyys (km), 0 = ei sumukerrosta
+    fogLevelsKm: [0, 20, 10, 5, 2, 1],  // sumukerroksen näkyvyys (km), 0 = ei sumukerrosta
+    googleVeneSkaala: 1.08,   // vaihe 3o: omat veneet piirretään kerrostilassa näin paljon suurempina, jotta ne peittävät Googlen veneiden reunat
+    googleSatama: 'oma'       // vaihe 3o: 'oma' = omat laiturit ja veneet Googlen päällä, 'google' = satama-alueilla (laitureista 60 m) oma vesi läpinäkyvä ja Googlen oma satama näkyy sellaisenaan
   };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }

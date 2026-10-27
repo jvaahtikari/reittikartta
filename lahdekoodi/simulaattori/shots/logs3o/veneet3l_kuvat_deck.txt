@@ -1,0 +1,11 @@
+boatStats {"ms": 355, "ruutuja": 147, "ketjuja": 44, "keskenJaaneita": 0, "paikkoja": 1168, "veneita": 738, "luokittain": {"soutu": 117, "pieni": 243, "keski": 235, "purje": 143}, "hylatty": {"maa": 98, "matala": 5, "tormays": 63, "aallonmurtaja": 0, "kapeaMaa": 42}, "esto": {"aallonmurtajajanoja": 0, "lohkoja": 16, "kapeitaKaistoja": 13, "kapeaaMaaSoluja": 3975, "ms": 150.79999999701977}, "ilmakuva": null}
+Naistenlahti {"veneita": 629, "luokittain": {"soutu": 101, "pieni": 208, "keski": 201, "purje": 119}, "keski": {"e": 328261.1036806398, "n": 6823800.655704595}, "avoin": 290, "avoinMatka": 1200, "reuna": 202.31493124655242}
+Mustalahti {"veneita": 11, "luokittain": {"soutu": 2, "pieni": 5, "keski": 4, "purje": 0}, "keski": {"e": 326936.9574838966, "n": 6823418.885750287}, "avoin": 100, "avoinMatka": 175, "reuna": 13.637746143354729}
+NL150 valmis True
+NL150 vapaa {"kutsut": 119, "kolmiot": 195639, "laatu": "full", "lahi": 188, "kauko": 488, "poijut": 181, "boatKolmiot": 62938}
+laituri {"pos": [328272.8267138461, 6823805.989935239], "keski": [328253.141016174, 6823863.751989129], "suunta": 271.4541114084553, "n": 41, "reuna": [328253.1376701422, 6823818.493597024]}
+laituri valmis True
+lahikuva vene {'e': 328320.27120889013, 'n': 6823895.87678198, 's': 88.16368644382442, 'l': 6.27524394961074, 'id': 'L9c3vu.0o.4'}
+ML valmis True
+virheet []
+exit 0

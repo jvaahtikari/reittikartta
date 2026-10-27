@@ -380,7 +380,7 @@
     // ---- kerrostila (vaihe 3n) ----
     // ov.on: Google-kerroksen päällä piirtävä tila. fogKm: sumukerroksen näkyvyys (0 = ei sumukerrosta). cal: kalibrointi (oman kameran korjaukset Googlen todelliseen käytökseen).
     var horColor = new THREE.Color(0xcfdce8);
-    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.1, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 1, sillat: 1 }, hidden: [] };
+    var ov = { on: false, fogKm: 0, cal: { dHeadingDeg: 0, dPitchDeg: 0, tanScale: 1 }, fovMin: 5, fovMax: 80, lower: 0.1, domeDist: 14000, domeElevDeg: 12, hide: { maamerkit: 1, laiturit: 0, sillat: 1 }, hidden: [] };
     ov.mat = new THREE.ShaderMaterial({
       uniforms: { uFogColor: { value: U.uFogColor.value }, uInvVis: { value: 0 }, uLower: { value: ov.lower } },
       blending: THREE.NoBlending, fog: false, toneMapped: false, colorWrite: false,
@@ -411,7 +411,7 @@
         layerSet(n.mesh, 2); layerSet(n.bmesh, 2); layerSet(n.shell, 3);
         if (n.tmeshes) for (var q = 0; q < n.tmeshes.length; q++) layerSet(n.tmeshes[q], 3);
       });
-      for (i = 0; i < scene.children.length; i++) { var o = scene.children[i]; if (ov.hide[o.name] || ov.hidden.indexOf(o) >= 0) layerSet(o, 1); }
+      for (i = 0; i < scene.children.length; i++) { var o = scene.children[i]; if (ov.hide[o.name] || ov.hidden.indexOf(o) >= 0) layerSet(o, 1); else if (o.name && ov.hide[o.name] === 0) layerSet(o, 0); }
     }
     function restoreLayers() {
       if (terrain && terrain.nodes) terrain.nodes.forEach(function (n) {

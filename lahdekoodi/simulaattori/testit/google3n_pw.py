@@ -74,7 +74,7 @@ with sync_playwright() as pw:
     p = c.new_page(); errs = []; collect(p, errs)
     p.add_init_script('try{localStorage.setItem("sim.googleKey","%s")}catch(e){}' % KEY)
     c.route('https://maps.googleapis.com/**', handler)
-    p.goto(SIM + 'simulaattori.html?aineisto=' + PAKETTI + '&alku=1&harjoitus=free&preserve=1&naytot=both&kalibrointi=1&t=2026-07-15T09:00:00Z')
+    p.goto(SIM + 'simulaattori.html?aineisto=' + PAKETTI + '&alku=1&harjoitus=free&preserve=1&naytot=both&kalibrointi=1&maisema=oma&t=2026-07-15T09:00:00Z')   # maisema=oma: sivu alkaa omalla maisemalla, vaikka avain on tallennettu (Google 3D on oletus, kun avain löytyy)
     p.wait_for_function('window.__sim && window.__sim.mode==="run"', timeout=300000)
     p.evaluate(HELPERS)
     p.evaluate('window.__adaptOff=true')

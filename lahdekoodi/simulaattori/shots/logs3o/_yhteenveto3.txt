@@ -1,0 +1,5 @@
+== mobiili_chromium_yksitiedosto
+mobiili_chromium_yksitiedosto: OK    ei konsolivirheitä  chromium: 44 tarkistusta, 0 virhettä exit 0 
+== mobiili_webkit_yksitiedosto
+mobiili_webkit_yksitiedosto: OK    ei konsolivirheitä  webkit: 44 tarkistusta, 0 virhettä exit 0 
+ALL_DONE3

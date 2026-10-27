@@ -1,0 +1,38 @@
+== satama ==
+OK    ladattu
+OK    googleSatama on oletuksena oma
+OK    oletuksena satama-aluetta ei tehdä läpinäkyväksi
+  välipisteitä kuvassa 755 (poimittu 60), avoimen veden pisteitä poimittu 30
+OK    testipisteitä riittävästi (välissä 60, avoin 30)
+OK    oma satama: laiturien välin pisteistä peittäviä (alfa 255) 51 / 60
+OK    valikon painike vaihtaa asetuksen googleSatama = google
+OK    painikkeen teksti: Satamat (Google 3D): Googlen omat
+OK    asetus tallentuu selaimen muistiin
+  reikäverkko {"on": true, "visible": true, "kapselit": 101, "renkaat": 586, "kolmiot": 12808}
+OK    reikäverkko on päällä (kapseleita 101, renkaita 586, kolmioita 12808)
+OK    omia veneitä ei piirretä Google-tilassa (veneryhmä piilossa)
+OK    omia laitureita ei piirretä Googlen satamatilassa
+OK    alfa 0 laiturien välissä: 51 / 51 pisteestä, jotka olivat omassa tilassa peittäviä
+OK    avoin vesi (yli 75 m laitureista) pysyy peittävänä: 30 / 30 pisteestä
+OK    lahella-rajapinta (tutka ja törmäys) antaa omat veneet googleSatama-tilassa (299 venettä 400 m:n säteellä)
+OK    paluu omaan satamaan palauttaa veneet, laiturit ja veden
+OK    laiturien välinen vesi peittää taas
+OK    omassa näkymässä veneet piirtyvät, vaikka googleSatama = google
+OK    ei sivun virheitä ([])
+== tutka ==
+OK    ladattu
+  altaan piste {"e": 328235.6900237527, "n": 6823790.01116389, "d": 0, "cl": 33.305397639494394}
+OK    sataman altaasta löytyi vapaa piste
+OK    googleSatama = google ja Google-kerros päällä
+  tutkan venehaku: 537
+OK    tutka hakee omat veneet googleSatama-tilassa (537 venettä)
+  tutkakuvan ero pikseleinä: päällä/pois 800, päällä/päällä 0, pois/pois 0
+OK    veneet näkyvät tutkakuvassa googleSatama-tilassa (ero 800, kohina 0 ja 0)
+OK    setBoats(true) ei tuo omia veneitä näkyviin googleSatama-tilassa
+  poijukentän veneitä kokeeseen 3
+    I3370420_68249180 {"kind": "vene", "pen": 1.4380706717680578, "e": 337041.130348639, "n": 6824916.041224237, "x": 9857.13034863898, "y": 1363.0412242366, "kn": 0}
+OK    törmäystarkistus (Tormays.check) osuu ilmakuvan veneeseen googleSatama-tilassa
+OK    ei sivun virheitä ([])
+
+26 / 26 tarkistusta läpi
+exit 0

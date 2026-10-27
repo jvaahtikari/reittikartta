@@ -1,0 +1,47 @@
+OK    avainkenttä näkyy aloitusnäytössä
+OK    avainkenttä on salasanatyyppinen
+OK    ilman avainta vihje kertoo, ettei Google 3D aukea
+OK    avaimen luontiohje kolmella rivillä (3 riviä)
+OK    avainkentän korkeus 48 px (vähintään 44)
+OK    avainta ei ole tallennettu ennen syöttöä
+OK    valikossa Ulkonäkymä: oma
+OK    valikkonapin korkeus 52 px
+OK    ilman avainta ohje avautuu
+OK    ohje sisältää API:n ja viittaajarajauksen
+OK    oma näkymä pysyy käytössä ilman avainta
+OK    ilman avainta ei pyydetä Googlen kirjastoa
+OK    #g3dKeyIn korkeus 48 px
+OK    #g3dKeyGo korkeus 52 px
+OK    #g3dInfoClose korkeus 52 px
+OK    ohje sulkeutuu
+OK    avain tallentui selaimen muistiin (sim.googleKey)
+OK    lataus epäonnistui: ilmoitus näkyy (Googlen Maps JavaScript API -kirjasto ei latautunut (verkko tai selaimen esto).  Oma näkym)
+OK    virheteksti kertoo syyn (kirjasto ei latautunut)
+OK    epäonnistumisen jälkeen oma näkymä on käytössä
+OK    Googlen kirjastoa yritettiin ladata vasta avaimen annon jälkeen
+OK    Google 3D valittu
+OK    vaihe 3n: oma three.js-kangas on Googlen kartan päällä läpinäkyvänä kerroksena
+OK    karttaelementti on #v3-ruudun sisällä
+OK    tilakilpi näkyy
+OK    kartan laatikko täyttää näkymän
+OK    heading = tosisuunta + katse: 49.92 (odotus 49.92)
+OK    tilt 90 (vaakasuoraan): 90
+OK    korkeus 98.22 m (odotus 98,22)
+OK    keskipiste aluksen lähellä (61.50702, 23.75233)
+OK    fov = oman näkymän pystykuvakulma: 80.00 (oma 80.00)
+OK    range 25 m
+OK    katse 60° vasemmalle kääntää Google-kameraa: -60.0° (odotus -60)
+OK    kiikarissa fov = oman näkymän pystykulma rajattuna 5 ... 80° (oma 7.91, Google 7.91)
+  sim-silmukan kuvat 46, päivityksiä 46, rAF-kuvia 46, tilasto {"updates": 189, "calls": 189, "throttled": 0, "loads": 1, "shows": 2}
+OK    kameran päivitystiheys 7.7 / s (enintään 60 / s), simulaattorin kuvataajuus 7.7 / s, jokaisella kuvalla yritys
+OK    avain ei ole osoitteessa eikä komentolokissa
+OK    avain ei ole konsolissa (selaimen oma latausvirheloki, jossa on pyynnön osoite, ohitetaan)
+OK    vaihe 3n: paluu omaan näkymään piilottaa kartan (säilyy elossa) ja palauttaa oman
+OK    valinnat kirjautuvat komentolokiin
+OK    paluu Googleen onnistuu ennen virhettä
+OK    gmp-error palauttaa omaan näkymään ja kertoo syyn
+OK    purku aukeaa
+OK    purku renderöityy
+OK    ei konsolivirheitä ([])
+YHTEENSÄ 44 tarkistusta, 0 virhettä
+exit 0
