@@ -85,7 +85,20 @@
   }
 
   // ---------- avain (selaimen muisti) ----------
-  function getKey() { try { return String(localStorage.getItem(SETTINGS.keyStore) || '').trim(); } catch (e) { return ''; } }
+  // Palvelimen avain (Vercelin ympäristömuuttuja GOOGLE_API, polku /api/google): haetaan kerran, pidetään vain muistissa
+  var serverKey = '', serverKeyAsked = false;
+  function fetchServerKey(cb) {
+    if (serverKeyAsked) { if (cb) cb(serverKey); return; }
+    serverKeyAsked = true;
+    try {
+      fetch('/api/google', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        serverKey = (j && j.key) ? String(j.key).trim() : '';
+        if (cb) cb(serverKey);
+      }).catch(function () { if (cb) cb(''); });
+    } catch (e) { if (cb) cb(''); }
+  }
+  function getKey() { try { return String(localStorage.getItem(SETTINGS.keyStore) || '').trim() || serverKey; } catch (e) { return serverKey; } }
+  function hasServerKey() { return !!serverKey; }
   function setKey(k) {
     k = String(k || '').trim();
     try { if (k) localStorage.setItem(SETTINGS.keyStore, k); else localStorage.removeItem(SETTINGS.keyStore); } catch (e) {}
@@ -183,7 +196,7 @@
 
   var api = {
     SETTINGS: SETTINGS, HELP_LINES: HELP_LINES, camera: camera, vfovFromHfov: vfovFromHfov, metersPerDegLat: metersPerDegLat, metersPerDegLon: metersPerDegLon,
-    offsetLatLon: offsetLatLon, moveAlong: moveAlong, getKey: getKey, setKey: setKey, create: create
+    offsetLatLon: offsetLatLon, moveAlong: moveAlong, getKey: getKey, fetchServerKey: fetchServerKey, hasServerKey: hasServerKey, setKey: setKey, create: create
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Google3D = api;
 })(typeof window !== 'undefined' ? window : globalThis);

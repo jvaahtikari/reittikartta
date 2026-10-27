@@ -152,11 +152,12 @@
   }
   // Google Maps -avain (testi, vaihe 3m): tallennetaan vain selaimen muistiin (sim.googleKey), ei koskaan lokiin, osoitteeseen tai palvelimelle
   function updateKeyHint() {
-    var has = !!root.Google3D.getKey();
-    $('googleKeyHint').textContent = has ? 'Avain on tallennettu tähän selaimeen. Google 3D (testi) valitaan ajon valikosta kohdasta Ulkonäkymä.' : 'Ilman avainta Google 3D -testinäkymä ei aukea. Oma näkymä toimii aina ilman avainta.';
+    var has = !!root.Google3D.getKey(), srv = root.Google3D.hasServerKey();
+    $('googleKeyHint').textContent = srv && !String($('googleKey').value || '').trim() ? 'Avain tulee palvelimelta (Vercel GOOGLE_API). Google 3D (testi) valitaan ajon valikosta kohdasta Ulkonäkymä.' : has ? 'Avain on tallennettu tähän selaimeen. Google 3D (testi) valitaan ajon valikosta kohdasta Ulkonäkymä.' : 'Ilman avainta Google 3D -testinäkymä ei aukea. Oma näkymä toimii aina ilman avainta.';
   }
   function initGoogleKey() {
-    var inp = $('googleKey'); inp.value = root.Google3D.getKey();
+    var inp = $('googleKey'); try { inp.value = localStorage.getItem('sim.googleKey') || ''; } catch (e) {}
+    root.Google3D.fetchServerKey(function () { updateKeyHint(); });
     $('gkHelp').innerHTML = root.Google3D.HELP_LINES.map(esc).join('<br>');
     inp.addEventListener('change', function () { root.Google3D.setKey(inp.value); updateKeyHint(); });
     inp.addEventListener('input', function () { root.Google3D.setKey(inp.value); updateKeyHint(); });
