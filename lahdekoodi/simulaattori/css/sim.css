@@ -88,7 +88,7 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .cb.crash{background:#9a1f1f;border-color:#d44}.cb.crash:active{background:#c02828}
 .cb .ar{font-size:12px;opacity:.9}
 .sheet{position:fixed;inset:0;z-index:90;background:rgba(5,10,16,.7);display:flex;align-items:flex-end;justify-content:center}
-.sheet-box{width:min(480px,100%);background:#15324a;border-radius:16px 16px 0 0;padding:8px 14px calc(14px + env(safe-area-inset-bottom))}
+.sheet-box{max-height:100%;overflow-y:auto;width:min(480px,100%);background:#15324a;border-radius:16px 16px 0 0;padding:8px 14px calc(14px + env(safe-area-inset-bottom))}
 
 /* tabletti ja vaakanäkymä: komennot oikeassa reunassa */
 #game.land{display:grid;grid-template-columns:minmax(0,1fr) 250px;grid-template-rows:auto minmax(0,1fr)}
@@ -175,3 +175,14 @@ table.db td.n{text-align:right}
 .clockrow{display:flex;gap:8px;flex-wrap:wrap}
 input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:#fff}
 .start-night{color:#ffd9a0}
+
+/* Google 3D -testinäkymä (vaihe 3m): kartta on #v3-ruudun päällä, oma näkymä piilotetaan (ei tuhota) */
+.g3d-box{position:absolute;inset:0;z-index:2;pointer-events:none;background:#0d1b27}
+.g3d-box > *{pointer-events:none}
+.keyin{margin-top:8px;width:100%;box-sizing:border-box;min-height:48px;font-size:16px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:#fff}
+.g3d-badge{right:8px;top:36px;display:flex;align-items:center;gap:8px;padding:4px 4px 4px 10px;font-size:13px;max-width:70%}
+.g3d-badge[hidden]{display:none}
+.g3d-badge button{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(14,28,40,.9);color:#fff;font-weight:600;font-size:13px}
+.pane.small .g3d-badge{display:none}
+#g3dInfo .sheet-box{display:flex;flex-direction:column;gap:8px}
+#g3dInfo .hint{white-space:pre-line}

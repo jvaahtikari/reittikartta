@@ -464,6 +464,8 @@
     // ---- kuvan päivitys ----
     function setGaze(deg) { gazeCmd = Math.max(-90, Math.min(90, deg)); }
     function getGaze() { return gazeCmd; }
+    // Katseen tasoitus ilman piirtoa (vaihe 3m): kun ulkonäkymänä on Google 3D, oma näkymä piirretään harvoin, mutta kompassikaista ja Google-kamera tarvitsevat tasoitetun katseen joka kuvalla.
+    function stepGaze(dtReal) { var dt = Math.min(0.2, dtReal || 0.016); gaze += (gazeCmd - gaze) * Math.min(1, dt * 8); }
     function setSeat(sit) { seated = !!sit; placeCamera(); }
     function setEye(x, y) { S.eyeX = x; S.eyeY = y; placeCamera(); }
 
@@ -534,7 +536,7 @@
 
     return {
       scene: scene, camera: camera, renderer: renderer, rig: rig, boat: runko, terrain: terrain, aids: aids3d, landmarks: landmarks, piers: piers, canvas: canvas, settings: S, uniforms: U, veil: veil,
-      setSize: setSize, render: render, setSimTime: setSimTime, setGaze: setGaze, getGaze: getGaze, getGazeNow: function () { return gaze; }, hfov: function () { return 2 * Math.atan(Math.tan(camera.fov * RAD / 2) * camera.aspect) / RAD; }, setHfov: function (d) { S.hfovDeg = d; updateFov(); }, setSeat: setSeat, setEye: setEye,
+      setSize: setSize, render: render, setSimTime: setSimTime, setGaze: setGaze, getGaze: getGaze, stepGaze: stepGaze, getGazeNow: function () { return gaze; }, hfov: function () { return 2 * Math.atan(Math.tan(camera.fov * RAD / 2) * camera.aspect) / RAD; }, setHfov: function (d) { S.hfovDeg = d; updateFov(); }, setSeat: setSeat, setEye: setEye,
       setPixelBudget: setPixelBudget, getPixelBudget: getPixelBudget, rendererStats: rendererStats, frameStats: frameStats, resetFrameStats: resetFrameStats,
       rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; },
       setFree: setFree, clearFree: clearFree,

@@ -79,6 +79,15 @@
       <div class="hint" id="clockHint"></div>
     </div>
 
+    <div class="field" role="group" aria-labelledby="lblGk">
+      <div class="lbl" id="lblGk">Google Maps -avain (testi)</div>
+      <input type="password" id="googleKey" class="keyin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Valinnainen, Google 3D -testinäkymää varten" aria-label="Google Maps -avain">
+      <div class="hint" id="googleKeyHint"></div>
+      <details class="src"><summary>Näin saat avaimen</summary>
+        <p id="gkHelp"></p>
+      </details>
+    </div>
+
     <button type="button" id="startBtn" class="big primary">Aloita</button>
     <div class="warn"><b>Ei navigointikäyttöön.</b> Aineistot ovat avointa dataa, eikä ohjelma täytä asianmukaisen merikartan vaatimuksia.</div>
     <details class="src"><summary>Lähteet ja käyttöehdot</summary>
@@ -136,6 +145,7 @@
       <button type="button" class="hud gz gz-r" id="gazeR" aria-label="Katse oikealle 60 astetta">60° &#9654;</button>
       <button type="button" class="hud hud-gaze" id="gazeBtn" hidden>Katse suoraan</button>
       <button type="button" class="hud bino" id="binoBtn" aria-pressed="false" aria-label="Kiikari (näppäin B)">Kiikari</button>
+      <div class="hud g3d-badge" id="g3dBadge" hidden><span id="g3dStatus">Google 3D (testi)</span><button type="button" id="g3dBack">Oma näkymä</button></div>
     </div>
     <!-- tutka -->
     <div id="paneR" class="pane" hidden>
@@ -195,9 +205,21 @@
     <button type="button" class="big" id="mFov">Kuvakulma: 100°</button>
     <button type="button" class="big" id="mTune">Tutkan viritys: hyvä</button>
     <button type="button" class="big" id="mGfx">Grafiikka: täysi</button>
+    <button type="button" class="big" id="mView">Ulkonäkymä: oma</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
     <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus ja miinus, hiiren rulla ja kahden sormen nipistys zoomaavat (0,1 ... 12 mpk). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
+  </div>
+</div>
+
+<!-- Google 3D -ohje (testi) -->
+<div id="g3dInfo" class="sheet" hidden>
+  <div class="sheet-box" role="dialog" aria-label="Google 3D (testi)">
+    <b id="g3dInfoTitle">Google 3D (testi) tarvitsee avaimen</b>
+    <p class="hint" id="g3dInfoText"></p>
+    <input type="password" id="g3dKeyIn" class="keyin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Google Maps -avain" aria-label="Google Maps -avain">
+    <button type="button" class="big primary" id="g3dKeyGo">Tallenna ja avaa</button>
+    <button type="button" class="big" id="g3dInfoClose">Sulje</button>
   </div>
 </div>
 
@@ -235,6 +257,7 @@
 <script src="simulaattori/js/sillat3d.js"></script>
 <script src="simulaattori/js/maasto.js"></script>
 <script src="simulaattori/js/nakyma.js"></script>
+<script src="simulaattori/js/google3d.js"></script>
 <script src="simulaattori/js/plotteri.js"></script>
 <script src="simulaattori/js/pohja.js"></script>
 <script src="simulaattori/js/tormays.js"></script>
