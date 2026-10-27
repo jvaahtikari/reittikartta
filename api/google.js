@@ -8,6 +8,6 @@ module.exports = async function handler(req, res) {
   if (!key) { res.status(503).json({ error: 'GOOGLE_API puuttuu Vercelin asetuksista' }); return; }
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '');
   const ref = String(req.headers.referer || req.headers.origin || '');
-  if (!host || (ref && ref.indexOf('://' + host) < 0)) { res.status(403).json({ error: 'vain oman sivuston käyttöön' }); return; }
+  if (!host || !ref || ref.indexOf('://' + host) < 0) { res.status(403).json({ error: 'vain oman sivuston käyttöön' }); return; }
   res.status(200).json({ key: key });
 };
