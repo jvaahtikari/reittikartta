@@ -13608,7 +13608,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     el.classList.toggle('start-night', night);
     if (night) {
       var hr = new Date(ms + helsinkiOffsetMin(ms) * 60000).getUTCHours(), after = hr >= 12;
-      el.textContent = (after ? 'Auringonlaskun jälkeen' : 'Ennen auringonnousua') + (sun.elevDeg < -6 ? ', yö. ' : ', hämärä. ') + 'Loistot palavat valotunnustensa mukaan, plotteri on yönäytöllä ja valonheitin on käytettävissä (auringon korkeus ' + Math.round(sun.elevDeg) + '°).';
+      el.textContent = (after ? 'Auringonlaskun jälkeen' : 'Ennen auringonnousua') + (sun.elevDeg < -6 ? ', yö. ' : ', hämärä. ') + 'Loistot palavat valotunnustensa mukaan, plotteri on yönäytöllä ja valonheittimet ovat käytettävissä (auringon korkeus ' + Math.round(sun.elevDeg) + '°). Ajo alkaa omalla näkymällä, koska Google 3D on päivänvalokuva.';
     } else el.textContent = (sun.elevDeg < 3 ? 'Hämärä alkaa, loistot syttyvät. ' : 'Päivänäkymä. ') + 'Auringon korkeus ' + Math.round(sun.elevDeg) + '°. Näkymä seuraa kelloa: yö tulee ajon aikana, kun aurinko laskee.';
   }
   // Google Maps -avain: luetaan vain Vercelin ympäristömuuttujasta (GOOGLE_API, reitti /api/google), aloitusnäytössä ei ole avainkenttää (28.10.2026)
@@ -14005,6 +14005,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     G.auto = qs.get('auto') ? H.createAuto(G.route, Number(qs.get('auto')), G.origin) : null;
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setSimTime(G.S.clockMs);
+    G.nightG3 = false; G.nightOff = false;
     G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; G.spotSel = null; if (G.valot) { ['helm', 'nav'].forEach(function (id) { G.valot.asetaHeitin(id, false); G.valot.asetaSuunta(id, 0); }); spotUi(); }
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
     G.view.setGaze(0); if (G.view.isBino()) { G.view.setBinoculars(false); binoUi(false); }
@@ -14231,7 +14232,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     $('gazeR').addEventListener('click', function () { G.view.setGaze(60); });
     $('mOrient').addEventListener('click', function () { G.northUp = !G.northUp; G.pl.setHeadUp(!G.northUp); updateMenuLabels(); savePrefs(); });
     $('mTune').addEventListener('click', function () { setRadarTune(G.radarTune === 'huono' ? 'hyva' : 'huono'); });
-    $('mView').addEventListener('click', function () { $('menu').hidden = true; var ok = setExtView(G.ext !== 'google'); if (ok) { G.scene = G.ext === 'google' ? 'google' : 'own'; try { localStorage.setItem('sim.maisema', G.scene); } catch (e) {} } });
+    $('mView').addEventListener('click', function () { $('menu').hidden = true; var ok = setExtView(G.ext !== 'google'); if (ok && G.ext === 'google' && G.night.dusk) G.nightG3 = true; if (ok) { G.scene = G.ext === 'google' ? 'google' : 'own'; try { localStorage.setItem('sim.maisema', G.scene); } catch (e) {} } });
     $('mVis').addEventListener('click', function () {
       var lv = root.Google3D.SETTINGS.fogLevelsKm, i = lv.indexOf(G.fogKm); G.fogKm = lv[(i + 1) % lv.length]; if (G.view) G.view.setFogKm(G.fogKm); updateMenuLabels(); savePrefs();
       if (G.S && G.mode === 'run') logCustom('nakyvyys', G.fogKm);
@@ -14244,7 +14245,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
     $('g3dNoteX').addEventListener('click', function () { $('g3dNote').hidden = true; });
     $('g3dGo').addEventListener('click', function () {
-      if (setExtView(true)) { G.scene = 'google'; try { localStorage.setItem('sim.maisema', 'google'); } catch (e) {} }
+      if (setExtView(true)) { if (G.night.dusk) G.nightG3 = true; G.scene = 'google'; try { localStorage.setItem('sim.maisema', 'google'); } catch (e) {} }
     });
     // Koko näyttö (27.10.2026): Fullscreen API, kun selain tukee sitä (tietokone, Android, iPad). iPhonessa ohje kotivalikkoon lisäämisestä.
     (function () {
@@ -14632,7 +14633,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.budgetKn * KN)), 2600);
         if (G.rec) G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y));
         applyPanes(); sizeViews();
-        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true);
+        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma' && v.sun().elevDeg < 1) { G.nightOff = true; updateG3Badge(); toast(NIGHT_G3, 4000); }
+        else if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true);
         else { updateG3Badge(); if (G.scene === 'google' && qs.get('maisema') !== 'oma' && root.Google3D && !root.Google3D.getKey()) g3Note('eiavainta'); }
         loadAids(v.aids.settings.loadRadius);   // loistojen ja linjataulujen näkyvyysrajat ovat kilometrejä, joten kauempana olevat laitteet luetaan taustalla
       }
@@ -14687,6 +14689,13 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   // auringon korkeudesta (0 yli 3°, 1 alle -6°). Hämärässä (alle 1°) loistot syttyvät, valonheitin tulee käyttöön ja plotteri vaihtuu yönäytölle
   // auringon ollessa alle -2°. Google 3D -kuva on päivänvalossa otettu, joten sitä himmennetään pimeyden mukaan.
   G.night = { dark: 0, elev: 45, lastT: -1e9, dusk: false, plotNight: false };
+  // Google 3D on päivänvalossa kuvattu, joten hämärässä ja yöllä oletus on oma näkymä (28.10.2026). Google 3D:n saa silti päälle napista;
+  // käyttäjän oma valinta pysyy, kunnes ajo päättyy. Jos näkymä vaihdettiin yön takia, aamun valjetessa palataan Google 3D:hen.
+  var NIGHT_G3 = 'Hämärässä ja yöllä käytössä oma näkymä, koska Google 3D on päivänvalokuva. Google 3D:n saa päälle oikean yläkulman napista.';
+  function nightGoogle(dusk) {
+    if (dusk && G.ext === 'google' && !G.nightG3) { setExtView(false); G.nightOff = true; toast(NIGHT_G3, 4000); }
+    else if (!dusk && G.nightOff && G.ext !== 'google' && G.scene === 'google' && root.Google3D && root.Google3D.getKey()) { G.nightOff = false; setExtView(true); }
+  }
   function smooth01(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
   function updateNight(now) {
     var S = G.S, v = G.view; if (!S || !v) return;
@@ -14695,6 +14704,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var e = v.sun().elevDeg, n = G.night;
       n.elev = e; n.dark = smooth01((3 - e) / 9);
       var dusk = e < 1;
+      if (dusk !== n.dusk && n.dusk !== null && G.mode === 'run') nightGoogle(dusk);
       if (dusk !== n.dusk) { n.dusk = dusk; $('spotBox').hidden = !dusk; if (!dusk && G.valot) { setSpot(false, spotOwn()); if (G.crew.role === 'solo') setSpot(false, spotOwn() === 'helm' ? 'nav' : 'helm'); } }
       var pn = e < -2; if (pn !== n.plotNight) { n.plotNight = pn; $('paneP').classList.toggle('yo', pn); }
       if (G.valot) G.valot.asetaNakyvyys(G.ext === 'google' ? G.fogKm * 1000 : 0);   // sumukerros on vain Google 3D -näkymässä
