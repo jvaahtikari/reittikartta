@@ -286,6 +286,11 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .sn-panel:not(.harp) .sn-tot{display:none}
 .sn-panel.short .sn-tool .sn-pos{display:none}   /* matalassa ruudussa kursorin koordinaatit pois, jotta kello mahtuu */
 
+/* Google 3D:n vikailmoitus (28.10.2026): ei estä ajoa, näkyy ruudun yläreunassa myös silloin, kun 3D on pikkukuvana */
+.g3d-note{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:55;width:max-content;max-width:min(560px,calc(100% - 24px));display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:10px;background:rgba(120,72,0,.94);border:1px solid #e0a040;color:#fff;font-size:13px;line-height:1.3;box-shadow:0 2px 10px rgba(0,0,0,.45)}
+.g3d-note[hidden]{display:none}
+.g3d-note button{flex:none;width:36px;height:36px;border:0;border-radius:8px;background:rgba(0,0,0,.25);color:#fff;font-size:22px;line-height:1}
+
 </style>
 </head>
 <body>
@@ -388,6 +393,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
   </header>
 
   <div id="stage">
+    <div id="g3dNote" class="g3d-note" role="status" hidden><span id="g3dNoteText"></span><button type="button" id="g3dNoteX" aria-label="Sulje ilmoitus">&times;</button></div>
     <!-- plotteri -->
     <div id="paneP" class="pane">
       <div id="plot" class="plot-view">
@@ -10875,6 +10881,30 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     'Google Cloudissa avaimella pitää olla Maps JavaScript API käytössä, laskutus päällä ja viittaajarajaus, joka sallii tämän osoitteen.'
   ];
   var authFailCb = null;   // aktiivisen ohjaimen virhekäsittelijä: Google voi hylätä avaimen vasta kirjaston latauksen jälkeen
+  var apiErrCb = null;     // aktiivisen ohjaimen käsittelijä Googlen konsoliin kirjoittamille virheille (esim. OverQuotaMapError)
+
+  // Googlen Maps JavaScript API kertoo kiintiön täyttymisen, avainvirheet ja laskutusvirheet vain konsoliin ("Google Maps JavaScript API error: XxxMapError").
+  // Virheen nimi luokitellaan syyksi: 'kiintio' (päivä- tai minuuttiraja täynnä), 'avain' (avain, rajaus tai API pois päältä), 'laskutus' tai 'muu'.
+  function classifyMapError(name) {
+    if (/OverQuota|OverDailyLimit|RateLimit/i.test(name)) return 'kiintio';
+    if (/Billing/i.test(name)) return 'laskutus';
+    if (/Key|Referer|ApiNotActivated|ApiTargetBlocked|ProjectDenied|Auth/i.test(name)) return 'avain';
+    return 'muu';
+  }
+  var consoleHooked = false;
+  function hookConsole() {
+    if (consoleHooked || typeof console === 'undefined' || !console.error) return;
+    consoleHooked = true;
+    var orig = console.error;
+    console.error = function () {
+      try {
+        var txt = Array.prototype.map.call(arguments, function (a) { return a && a.message ? a.message : String(a); }).join(' ');
+        var m = /([A-Za-z]+MapError)/.exec(txt) || (/Google Maps JavaScript API (?:error|warning)/i.test(txt) ? [null, 'MapError'] : null);
+        if (m && apiErrCb) apiErrCb(m[1], classifyMapError(m[1]));
+      } catch (e) {}
+      return orig.apply(console, arguments);
+    };
+  }
 
   // ---------- kirjaston lataus ----------
   var libPromise = null;
@@ -10884,6 +10914,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     libPromise = new Promise(function (resolve, reject) {
       var cb = '__googleMapsReady' + Date.now(), s = document.createElement('script');
       root[cb] = function () { try { delete root[cb]; } catch (e) { root[cb] = undefined; } resolve(); };
+      hookConsole();
       root.gm_authFailure = function () {
         libPromise = null;
         if (authFailCb) authFailCb();
@@ -10906,8 +10937,10 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var stats = { updates: 0, calls: 0, throttled: 0, last: null, loads: 0, shows: 0 };
 
     function status(t) { if (opts.onStatus) opts.onStatus(t); }
-    function fail(msg) { var wasActive = active; active = false; destroy(); status(''); if (wasActive && opts.onFail) opts.onFail(msg); }
-    authFailCb = function () { if (map || building) fail('Google hylkäsi avaimen (gm_authFailure). Tarkista Vercelin GOOGLE_API-avain, Maps JavaScript API, laskutus ja viittaajarajaus.'); };
+    // Epäonnistuminen: kartta hylätään ja kutsuja palaa omaan näkymään. syy: 'kiintio', 'avain', 'laskutus', 'verkko' tai 'muu'.
+    function fail(msg, syy) { var wasActive = active; active = false; destroy(); status(''); if (wasActive && opts.onFail) opts.onFail(msg, syy || 'muu'); }
+    authFailCb = function () { if (map || building) fail('Google hylkäsi avaimen (gm_authFailure). Tarkista Vercelin GOOGLE_API-avain, Maps JavaScript API, laskutus ja viittaajarajaus.', 'avain'); };
+    apiErrCb = function (name, syy) { if (map || building) fail('Google Maps -virhe ' + name + '.', syy); };
 
     function enable() {
       var key = getKey();
@@ -10932,7 +10965,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         stats.loads++; building = false;
         try { map.maxTilt = 90; } catch (e) {}
         map.style.cssText = 'display:block;width:100%;height:100%';
-        map.addEventListener('gmp-error', function (ev) { if (my === seq) { var em = ev && ((ev.error && ev.error.message) || ev.message); fail('Google 3D -kartta ei alustunut' + (em ? ': ' + em : ' (gmp-error). Syynä voi olla avain, laskutus tai alue.')); } });
+        map.addEventListener('gmp-error', function (ev) { if (my === seq) { var em = ev && ((ev.error && ev.error.message) || ev.message) || ''; var nm = /([A-Za-z]+MapError)/.exec(em); fail('Google 3D -kartta ei alustunut' + (em ? ': ' + em : ' (gmp-error).'), nm ? classifyMapError(nm[1]) : (/quota|limit/i.test(em) ? 'kiintio' : 'muu')); } });
         map.addEventListener('gmp-steadychange', function (ev) { if (my === seq && ev && ev.isSteady) { ready = true; clearTimeout(steadyTimer); if (active) status('Google 3D (testi)'); } });
         box.appendChild(map);
         if (!active) box.style.display = 'none';
@@ -10940,7 +10973,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         steadyTimer = setTimeout(function () { if (my === seq && active && !ready) status('Google ei vastaa (25 s)'); }, SETTINGS.steadyTimeoutMs);
       }).catch(function (e) {
         building = false;
-        if (my === seq) fail((e && e.message) ? e.message : 'Google 3D -näkymän lataus epäonnistui.');
+        if (my === seq) { var em = (e && e.message) || ''; fail(em || 'Google 3D -näkymän lataus epäonnistui.', /gm_authFailure|avaimen/.test(em) ? 'avain' : /verkko|latautunut/.test(em) ? 'verkko' : 'muu'); }
       });
       return { ok: true };
     }
@@ -10976,7 +11009,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
 
   var api = {
     SETTINGS: SETTINGS, HELP_LINES: HELP_LINES, CAL_TARGETS: CAL_TARGETS, camera: camera, getCalib: getCalib, setCalib: setCalib, viewAngles: viewAngles, projectRay: projectRay, fitCalibration: fitCalibration, vfovFromHfov: vfovFromHfov, metersPerDegLat: metersPerDegLat, metersPerDegLon: metersPerDegLon,
-    offsetLatLon: offsetLatLon, moveAlong: moveAlong, getKey: getKey, fetchServerKey: fetchServerKey, hasServerKey: hasServerKey, setKey: setKey, create: create
+    offsetLatLon: offsetLatLon, moveAlong: moveAlong, classifyMapError: classifyMapError, getKey: getKey, fetchServerKey: fetchServerKey, hasServerKey: hasServerKey, setKey: setKey, create: create
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Google3D = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -13753,6 +13786,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     });
     $('g3dBack').addEventListener('click', function () { setExtView(false); G.scene = 'own'; try { localStorage.setItem('sim.maisema', 'own'); } catch (e) {} });
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
+    $('g3dNoteX').addEventListener('click', function () { $('g3dNote').hidden = true; });
     $('g3dGo').addEventListener('click', function () {
       if (setExtView(true)) { G.scene = 'google'; try { localStorage.setItem('sim.maisema', 'google'); } catch (e) {} }
     });
@@ -13960,10 +13994,26 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     $('g3dInfoTitle').textContent = title; $('g3dInfoText').textContent = text;
     $('g3dInfo').hidden = false;
   }
-  // Epäonnistuminen: palataan omaan näkymään ja kerrotaan syy
-  function g3Fail(msg) {
+  // Ilmoitusbanneri (28.10.2026): Google 3D:n vika ei pysäytä ajoa. Simulaattori vaihtaa omaan näkymään ja kertoo syyn ruudun yläreunassa.
+  // Banneri sulkeutuu itsestään 15 sekunnissa tai ×-napista. Syyt: 'kiintio', 'avain', 'laskutus', 'verkko', 'eiavainta' ja 'muu'.
+  var G3_NOTE = {
+    kiintio: 'Google 3D:n käyttöraja täyttyi, käytössä oma maisema. Päiväraja nollautuu noin klo 10 Suomen aikaa.',
+    avain: 'Google hylkäsi avaimen, käytössä oma maisema. Tarkista GOOGLE_API-avain ja sen rajaukset.',
+    laskutus: 'Google 3D:n laskutus ei ole käytössä, käytössä oma maisema. Tarkista laskutustili Google Cloudissa.',
+    verkko: 'Google 3D ei latautunut (verkkoyhteys), käytössä oma maisema.',
+    eiavainta: 'Google 3D -avainta ei saatu palvelimelta, käytössä oma maisema.',
+    muu: 'Google 3D:ssä oli vika, käytössä oma maisema.'
+  };
+  function g3Note(syy, detail) {
+    var el = $('g3dNote'); if (!el) return;
+    setText($('g3dNoteText'), (G3_NOTE[syy] || G3_NOTE.muu) + ((syy === 'verkko' || syy === 'muu') && G.ext !== 'google' ? ' Voit yrittää uudelleen Google 3D -napista.' : ''));
+    el.title = detail || ''; el.hidden = false;
+    clearTimeout(g3Note._t); g3Note._t = setTimeout(function () { el.hidden = true; }, 15000);
+  }
+  // Epäonnistuminen: palataan omaan näkymään ja kerrotaan syy bannerissa (ei estä ajoa)
+  function g3Fail(msg, syy) {
     setExtView(false);
-    g3Info('Google 3D ei auennut', msg + '\n\nOma näkymä on käytössä. Voit yrittää uudelleen oikean yläkulman Google 3D -napista.');
+    g3Note(syy || 'muu', msg);
     if (G.S && G.mode === 'run') logCustom('google3d', 0);
   }
   // Googlen kerros näkyviin tai pois (vain kuvan kerrostus, G.ext ei muutu)
@@ -13991,7 +14041,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   function setExtView(google) {
     if (google) {
       if (G.mode !== 'run') return false;
-      if (!root.Google3D.getKey() && !G.g3.hasMap()) { updateG3Badge(); g3Info('Google 3D -avainta ei saatu', 'Google 3D -näkymä tarvitsee palvelimen Google Maps -avaimen, eikä sitä nyt saatu.\n\n' + root.Google3D.HELP_LINES.join('\n')); return false; }
+      if (!root.Google3D.getKey() && !G.g3.hasMap()) { updateG3Badge(); g3Note('eiavainta'); return false; }
       G.ext = 'google';
       if (!g3Small() && G.g3.enable().ok) g3Layer(true);
       if (G.S) logCustom('google3d', 1);
@@ -14111,7 +14161,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.budgetKn * KN)), 2600);
         if (G.rec) G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y));
         applyPanes(); sizeViews();
-        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true); else updateG3Badge();
+        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true);
+        else { updateG3Badge(); if (G.scene === 'google' && qs.get('maisema') !== 'oma' && root.Google3D && !root.Google3D.getKey()) g3Note('eiavainta'); }
         loadAids(v.aids.settings.loadRadius);   // loistojen ja linjataulujen näkyvyysrajat ovat kilometrejä, joten kauempana olevat laitteet luetaan taustalla
       }
       return;

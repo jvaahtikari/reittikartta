@@ -246,6 +246,30 @@
     'Google Cloudissa avaimella pitää olla Maps JavaScript API käytössä, laskutus päällä ja viittaajarajaus, joka sallii tämän osoitteen.'
   ];
   var authFailCb = null;   // aktiivisen ohjaimen virhekäsittelijä: Google voi hylätä avaimen vasta kirjaston latauksen jälkeen
+  var apiErrCb = null;     // aktiivisen ohjaimen käsittelijä Googlen konsoliin kirjoittamille virheille (esim. OverQuotaMapError)
+
+  // Googlen Maps JavaScript API kertoo kiintiön täyttymisen, avainvirheet ja laskutusvirheet vain konsoliin ("Google Maps JavaScript API error: XxxMapError").
+  // Virheen nimi luokitellaan syyksi: 'kiintio' (päivä- tai minuuttiraja täynnä), 'avain' (avain, rajaus tai API pois päältä), 'laskutus' tai 'muu'.
+  function classifyMapError(name) {
+    if (/OverQuota|OverDailyLimit|RateLimit/i.test(name)) return 'kiintio';
+    if (/Billing/i.test(name)) return 'laskutus';
+    if (/Key|Referer|ApiNotActivated|ApiTargetBlocked|ProjectDenied|Auth/i.test(name)) return 'avain';
+    return 'muu';
+  }
+  var consoleHooked = false;
+  function hookConsole() {
+    if (consoleHooked || typeof console === 'undefined' || !console.error) return;
+    consoleHooked = true;
+    var orig = console.error;
+    console.error = function () {
+      try {
+        var txt = Array.prototype.map.call(arguments, function (a) { return a && a.message ? a.message : String(a); }).join(' ');
+        var m = /([A-Za-z]+MapError)/.exec(txt) || (/Google Maps JavaScript API (?:error|warning)/i.test(txt) ? [null, 'MapError'] : null);
+        if (m && apiErrCb) apiErrCb(m[1], classifyMapError(m[1]));
+      } catch (e) {}
+      return orig.apply(console, arguments);
+    };
+  }
 
   // ---------- kirjaston lataus ----------
   var libPromise = null;
@@ -255,6 +279,7 @@
     libPromise = new Promise(function (resolve, reject) {
       var cb = '__googleMapsReady' + Date.now(), s = document.createElement('script');
       root[cb] = function () { try { delete root[cb]; } catch (e) { root[cb] = undefined; } resolve(); };
+      hookConsole();
       root.gm_authFailure = function () {
         libPromise = null;
         if (authFailCb) authFailCb();
@@ -277,8 +302,10 @@
     var stats = { updates: 0, calls: 0, throttled: 0, last: null, loads: 0, shows: 0 };
 
     function status(t) { if (opts.onStatus) opts.onStatus(t); }
-    function fail(msg) { var wasActive = active; active = false; destroy(); status(''); if (wasActive && opts.onFail) opts.onFail(msg); }
-    authFailCb = function () { if (map || building) fail('Google hylkäsi avaimen (gm_authFailure). Tarkista Vercelin GOOGLE_API-avain, Maps JavaScript API, laskutus ja viittaajarajaus.'); };
+    // Epäonnistuminen: kartta hylätään ja kutsuja palaa omaan näkymään. syy: 'kiintio', 'avain', 'laskutus', 'verkko' tai 'muu'.
+    function fail(msg, syy) { var wasActive = active; active = false; destroy(); status(''); if (wasActive && opts.onFail) opts.onFail(msg, syy || 'muu'); }
+    authFailCb = function () { if (map || building) fail('Google hylkäsi avaimen (gm_authFailure). Tarkista Vercelin GOOGLE_API-avain, Maps JavaScript API, laskutus ja viittaajarajaus.', 'avain'); };
+    apiErrCb = function (name, syy) { if (map || building) fail('Google Maps -virhe ' + name + '.', syy); };
 
     function enable() {
       var key = getKey();
@@ -303,7 +330,7 @@
         stats.loads++; building = false;
         try { map.maxTilt = 90; } catch (e) {}
         map.style.cssText = 'display:block;width:100%;height:100%';
-        map.addEventListener('gmp-error', function (ev) { if (my === seq) { var em = ev && ((ev.error && ev.error.message) || ev.message); fail('Google 3D -kartta ei alustunut' + (em ? ': ' + em : ' (gmp-error). Syynä voi olla avain, laskutus tai alue.')); } });
+        map.addEventListener('gmp-error', function (ev) { if (my === seq) { var em = ev && ((ev.error && ev.error.message) || ev.message) || ''; var nm = /([A-Za-z]+MapError)/.exec(em); fail('Google 3D -kartta ei alustunut' + (em ? ': ' + em : ' (gmp-error).'), nm ? classifyMapError(nm[1]) : (/quota|limit/i.test(em) ? 'kiintio' : 'muu')); } });
         map.addEventListener('gmp-steadychange', function (ev) { if (my === seq && ev && ev.isSteady) { ready = true; clearTimeout(steadyTimer); if (active) status('Google 3D (testi)'); } });
         box.appendChild(map);
         if (!active) box.style.display = 'none';
@@ -311,7 +338,7 @@
         steadyTimer = setTimeout(function () { if (my === seq && active && !ready) status('Google ei vastaa (25 s)'); }, SETTINGS.steadyTimeoutMs);
       }).catch(function (e) {
         building = false;
-        if (my === seq) fail((e && e.message) ? e.message : 'Google 3D -näkymän lataus epäonnistui.');
+        if (my === seq) { var em = (e && e.message) || ''; fail(em || 'Google 3D -näkymän lataus epäonnistui.', /gm_authFailure|avaimen/.test(em) ? 'avain' : /verkko|latautunut/.test(em) ? 'verkko' : 'muu'); }
       });
       return { ok: true };
     }
@@ -347,7 +374,7 @@
 
   var api = {
     SETTINGS: SETTINGS, HELP_LINES: HELP_LINES, CAL_TARGETS: CAL_TARGETS, camera: camera, getCalib: getCalib, setCalib: setCalib, viewAngles: viewAngles, projectRay: projectRay, fitCalibration: fitCalibration, vfovFromHfov: vfovFromHfov, metersPerDegLat: metersPerDegLat, metersPerDegLon: metersPerDegLon,
-    offsetLatLon: offsetLatLon, moveAlong: moveAlong, getKey: getKey, fetchServerKey: fetchServerKey, hasServerKey: hasServerKey, setKey: setKey, create: create
+    offsetLatLon: offsetLatLon, moveAlong: moveAlong, classifyMapError: classifyMapError, getKey: getKey, fetchServerKey: fetchServerKey, hasServerKey: hasServerKey, setKey: setKey, create: create
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Google3D = api;
 })(typeof window !== 'undefined' ? window : globalThis);
