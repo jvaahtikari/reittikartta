@@ -301,13 +301,23 @@
       container.parentNode.appendChild(panel);
       panel.k = {}; Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (e) { panel.k[e.getAttribute('data-k')] = e; });
     }
+    // Sovitus korkeuteen: tiivis asettelu (short), sitten kursorin sijainti pois (tight), sitten oma sijainti pois (tighter), kunnes kaikki mahtuu.
+    // Tarkistetaan, kun ruudun koko tai työkalukentän näkyvyys muuttuu.
+    var fitDirty = true, fitTool = null, FIT = ['short', 'tight', 'tighter'];
+    function panelYli() { return panel.scrollHeight > panel.clientHeight + 1 || panel.k.clock.getBoundingClientRect().bottom > panel.getBoundingClientRect().bottom - 1; }
+    function fitPanel() {
+      fitDirty = false;
+      FIT.forEach(function (c) { panel.classList.remove(c); });
+      var yli = panelYli;
+      for (var i = 0; i < FIT.length && yli(); i++) panel.classList.add(FIT[i]);
+    }
     function setPanelText(k, t) { var e = panel && panel.k[k]; if (e && e.textContent !== t) e.textContent = t; }
     function panelWidth() {
       var pn = container.parentNode; if (!panel || !pn) return 0;
       var small = pn.classList.contains('small'), W = pn.clientWidth;
       panel.hidden = small || !W;
-      var pw = small || !W ? 0 : W < 520 ? 78 : 118;
-      panel.classList.toggle('narrow', pw === 78); panel.classList.toggle('short', pn.clientHeight < 330);   // matalassa ruudussa (työpöydän deck) pienemmät luvut, jotta kello mahtuu
+      var pw = small || !W ? 0 : W < 520 ? 88 : 118;
+      panel.classList.toggle('narrow', pw === 88); fitDirty = true;
       (pn.parentNode || pn).style.setProperty('--pw', pw + 'px');   // #stage: myös pieni 3D-ikkuna väistää palstaa (sim.css)
       return pw;
     }
@@ -332,6 +342,7 @@
       setPanelText('brgLbl', evOn && evLock && !hs ? 'Suuntima · lukittu' : 'Suuntima');
       if (tb != null) { setPanelText('brg', pad3(((tb % 360) + 360) % 360)); setPanelText('dst', td.toFixed(2)); setPanelText('clat', ddm(tp.lat, true)); setPanelText('clon', ddm(tp.lon, false)); }
       setPanelText('clock', clockTxt);
+      if (fitDirty || fitTool !== tl.hidden || panelYli()) { fitTool = tl.hidden; fitPanel(); }
     }
     function setClock(ms) {
       var d = new Date(ms), p2 = function (n) { return (n < 10 ? '0' : '') + n; };
