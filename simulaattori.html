@@ -13073,7 +13073,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   }
   // Reittikartan reitit (localStorage reittikartta.v1) luetaan aloitusnäytön avautuessa ja aina, kun toinen välilehti muuttaa niitä.
   function refreshStored() {
-    G.stored = H.listStored().concat(H.listImported()); G.showRk = H.storedShow();
+    // GPX-kopio, joka vastaa Reittikartassa olevaa reittiä (sama nimi ja pisteet), jätetään pois: Reittikartan reitti on ajantasainen ja sisältää
+    // sivuutukset ja nuotit, joita vanhoissa GPX-tuonneissa ei ollut (28.10.2026).
+    var rk = H.listStored(), sig = function (e) { return e.nimi + '|' + e.route.map(function (q) { return Math.round(q.e) + ',' + Math.round(q.n); }).join(';'); }, have = {};
+    rk.forEach(function (e) { have[sig(e)] = true; });
+    G.stored = rk.concat(H.listImported().filter(function (e) { return !have[sig(e)]; })); G.showRk = H.storedShow();
     if (G.ex !== 'h1' && G.ex !== 'free' && !G.stored.some(function (x) { return x.id === G.ex; })) G.ex = 'h1';
     renderExList();
   }
