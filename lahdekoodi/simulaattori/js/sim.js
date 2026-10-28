@@ -771,6 +771,7 @@
     });
     $('g3dBack').addEventListener('click', function () { setExtView(false); G.scene = 'own'; try { localStorage.setItem('sim.maisema', 'own'); } catch (e) {} });
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
+    $('g3dNoteX').addEventListener('click', function () { $('g3dNote').hidden = true; });
     $('g3dGo').addEventListener('click', function () {
       if (setExtView(true)) { G.scene = 'google'; try { localStorage.setItem('sim.maisema', 'google'); } catch (e) {} }
     });
@@ -978,10 +979,26 @@
     $('g3dInfoTitle').textContent = title; $('g3dInfoText').textContent = text;
     $('g3dInfo').hidden = false;
   }
-  // Epäonnistuminen: palataan omaan näkymään ja kerrotaan syy
-  function g3Fail(msg) {
+  // Ilmoitusbanneri (28.10.2026): Google 3D:n vika ei pysäytä ajoa. Simulaattori vaihtaa omaan näkymään ja kertoo syyn ruudun yläreunassa.
+  // Banneri sulkeutuu itsestään 15 sekunnissa tai ×-napista. Syyt: 'kiintio', 'avain', 'laskutus', 'verkko', 'eiavainta' ja 'muu'.
+  var G3_NOTE = {
+    kiintio: 'Google 3D:n käyttöraja täyttyi, käytössä oma maisema. Päiväraja nollautuu noin klo 10 Suomen aikaa.',
+    avain: 'Google hylkäsi avaimen, käytössä oma maisema. Tarkista GOOGLE_API-avain ja sen rajaukset.',
+    laskutus: 'Google 3D:n laskutus ei ole käytössä, käytössä oma maisema. Tarkista laskutustili Google Cloudissa.',
+    verkko: 'Google 3D ei latautunut (verkkoyhteys), käytössä oma maisema.',
+    eiavainta: 'Google 3D -avainta ei saatu palvelimelta, käytössä oma maisema.',
+    muu: 'Google 3D:ssä oli vika, käytössä oma maisema.'
+  };
+  function g3Note(syy, detail) {
+    var el = $('g3dNote'); if (!el) return;
+    setText($('g3dNoteText'), (G3_NOTE[syy] || G3_NOTE.muu) + ((syy === 'verkko' || syy === 'muu') && G.ext !== 'google' ? ' Voit yrittää uudelleen Google 3D -napista.' : ''));
+    el.title = detail || ''; el.hidden = false;
+    clearTimeout(g3Note._t); g3Note._t = setTimeout(function () { el.hidden = true; }, 15000);
+  }
+  // Epäonnistuminen: palataan omaan näkymään ja kerrotaan syy bannerissa (ei estä ajoa)
+  function g3Fail(msg, syy) {
     setExtView(false);
-    g3Info('Google 3D ei auennut', msg + '\n\nOma näkymä on käytössä. Voit yrittää uudelleen oikean yläkulman Google 3D -napista.');
+    g3Note(syy || 'muu', msg);
     if (G.S && G.mode === 'run') logCustom('google3d', 0);
   }
   // Googlen kerros näkyviin tai pois (vain kuvan kerrostus, G.ext ei muutu)
@@ -1009,7 +1026,7 @@
   function setExtView(google) {
     if (google) {
       if (G.mode !== 'run') return false;
-      if (!root.Google3D.getKey() && !G.g3.hasMap()) { updateG3Badge(); g3Info('Google 3D -avainta ei saatu', 'Google 3D -näkymä tarvitsee palvelimen Google Maps -avaimen, eikä sitä nyt saatu.\n\n' + root.Google3D.HELP_LINES.join('\n')); return false; }
+      if (!root.Google3D.getKey() && !G.g3.hasMap()) { updateG3Badge(); g3Note('eiavainta'); return false; }
       G.ext = 'google';
       if (!g3Small() && G.g3.enable().ok) g3Layer(true);
       if (G.S) logCustom('google3d', 1);
@@ -1129,7 +1146,8 @@
         if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.budgetKn * KN)), 2600);
         if (G.rec) G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y));
         applyPanes(); sizeViews();
-        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true); else updateG3Badge();
+        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true);
+        else { updateG3Badge(); if (G.scene === 'google' && qs.get('maisema') !== 'oma' && root.Google3D && !root.Google3D.getKey()) g3Note('eiavainta'); }
         loadAids(v.aids.settings.loadRadius);   // loistojen ja linjataulujen näkyvyysrajat ovat kilometrejä, joten kauempana olevat laitteet luetaan taustalla
       }
       return;
