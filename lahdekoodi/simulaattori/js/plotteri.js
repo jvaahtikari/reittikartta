@@ -434,10 +434,37 @@
     }
     function brgText(b) { b = ((b % 360) + 360) % 360; var t = String(Math.round(b) % 360); while (t.length < 3) t = '0' + t; return t + '°'; }
     function nmText(m) { var nm = m / 1852; return (nm < 10 ? nm.toFixed(2) : nm.toFixed(1)).replace('.', ',') + ' mpk'; }
+    // Sivuutus- ja käännösetäisyydet Reittikartan tapaan (routes.js): sininen katkoviiva legiltä kohteeseen, poikkiviiva kohteessa ja lukema kaapeleina
+    // valkoisessa laatikossa Reittikartassa valittuun paikkaan; käännösetäisyys violettina pisteviivana reittipisteestä kohteeseen, lukema keskellä (↻).
+    function kblText(m) { return (m / 185.2).toFixed(1).replace('.', ',') + ' kbl'; }
+    function labelBox(text, x, y, col) {
+      ctx.font = '700 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var tw = ctx.measureText(text).width + 10;
+      ctx.fillStyle = '#fff'; ctx.fillRect(x - tw / 2, y - 9, tw, 18); ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.strokeRect(x - tw / 2, y - 9, tw, 18);
+      ctx.fillStyle = col; ctx.fillText(text, x, y + 0.5);
+    }
+    function drawPasses() {
+      var vis = function (a, b) { return Math.max(a[0], b[0]) > -40 && Math.min(a[0], b[0]) < w + 40 && Math.max(a[1], b[1]) > -40 && Math.min(a[1], b[1]) < h + 40; };
+      (route.passes || []).forEach(function (p) {
+        var F = toScreen(p.foot[0], p.foot[1]), T = toScreen(p.tgt[0], p.tgt[1]), Lb = toScreen(p.lab[0], p.lab[1]);
+        if (!vis(F, T) && !vis(Lb, Lb)) return;
+        var col = '#0b4f7a', dx = T[0] - F[0], dy = T[1] - F[1], l = Math.hypot(dx, dy) || 1;
+        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(F[0], F[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(T[0] - dy / l * 7, T[1] + dx / l * 7); ctx.lineTo(T[0] + dy / l * 7, T[1] - dx / l * 7); ctx.stroke();
+        labelBox(kblText(p.dist), Lb[0], Lb[1], col);
+      });
+      (route.rkTurns || []).forEach(function (t) {
+        var A = toScreen(t.wp[0], t.wp[1]), T = toScreen(t.tgt[0], t.tgt[1]); if (!vis(A, T)) return;
+        var col = '#6a3b8f';
+        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
+        labelBox('\u21bb ' + kblText(t.dist), (A[0] + T[0]) / 2, (A[1] + T[1]) / 2, col);
+      });
+    }
     function drawRouteNotes() {
       if (!route.legs.length || !w || !h) return;
       var legs = route.legs, i;
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawPasses();
       var color = route.color;
       // käännösmerkit: 2 ja 1 kaapelia (0,2 ja 0,1 mpk) ennen reittipistettä, kohtisuoraan legiä vastaan
       if (route.turnTicks) {
@@ -633,7 +660,11 @@
       route.pts = cvt(pts); route.turns = (turnPts || []).map(function (p) { var q = worldToPlot(p.x, p.y); return [q[0], q[1]]; });
       route.legs = (ro.legs || []).map(function (l) { var a = worldToPlot(l.a.x, l.a.y), b = worldToPlot(l.b.x, l.b.y); return { ax: a[0], ay: a[1], bx: b[0], by: b[1], brg: l.brg, dist: l.dist }; });
       route.legBrg = ro.legBrg !== false; route.turnTicks = ro.turnTicks !== false; route.approved = ro.approved !== false;
-      route.color = route.approved ? '#d4237f' : '#9a5b2a'; dirty = true;
+      route.color = route.approved ? '#d4237f' : '#9a5b2a';
+      var pp = function (q) { var o = worldToPlot(q.x, q.y); return [o[0], o[1]]; };
+      route.passes = (ro.passes || []).map(function (p) { return { foot: pp(p.foot), tgt: pp(p.tgt), lab: pp(p.lab), dist: p.dist }; });
+      route.rkTurns = (ro.rkTurns || []).map(function (t) { return { wp: pp(t.wp), tgt: pp(t.tgt), dist: t.dist }; });
+      dirty = true;
     }
     function setNext(p) { if (!p) { nextPt = null; return; } var q = worldToPlot(p.x, p.y); nextPt = [q[0], q[1]]; }
     function setTrail(pts) {

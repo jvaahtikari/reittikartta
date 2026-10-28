@@ -11513,10 +11513,37 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     }
     function brgText(b) { b = ((b % 360) + 360) % 360; var t = String(Math.round(b) % 360); while (t.length < 3) t = '0' + t; return t + '°'; }
     function nmText(m) { var nm = m / 1852; return (nm < 10 ? nm.toFixed(2) : nm.toFixed(1)).replace('.', ',') + ' mpk'; }
+    // Sivuutus- ja käännösetäisyydet Reittikartan tapaan (routes.js): sininen katkoviiva legiltä kohteeseen, poikkiviiva kohteessa ja lukema kaapeleina
+    // valkoisessa laatikossa Reittikartassa valittuun paikkaan; käännösetäisyys violettina pisteviivana reittipisteestä kohteeseen, lukema keskellä (↻).
+    function kblText(m) { return (m / 185.2).toFixed(1).replace('.', ',') + ' kbl'; }
+    function labelBox(text, x, y, col) {
+      ctx.font = '700 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var tw = ctx.measureText(text).width + 10;
+      ctx.fillStyle = '#fff'; ctx.fillRect(x - tw / 2, y - 9, tw, 18); ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.strokeRect(x - tw / 2, y - 9, tw, 18);
+      ctx.fillStyle = col; ctx.fillText(text, x, y + 0.5);
+    }
+    function drawPasses() {
+      var vis = function (a, b) { return Math.max(a[0], b[0]) > -40 && Math.min(a[0], b[0]) < w + 40 && Math.max(a[1], b[1]) > -40 && Math.min(a[1], b[1]) < h + 40; };
+      (route.passes || []).forEach(function (p) {
+        var F = toScreen(p.foot[0], p.foot[1]), T = toScreen(p.tgt[0], p.tgt[1]), Lb = toScreen(p.lab[0], p.lab[1]);
+        if (!vis(F, T) && !vis(Lb, Lb)) return;
+        var col = '#0b4f7a', dx = T[0] - F[0], dy = T[1] - F[1], l = Math.hypot(dx, dy) || 1;
+        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(F[0], F[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(T[0] - dy / l * 7, T[1] + dx / l * 7); ctx.lineTo(T[0] + dy / l * 7, T[1] - dx / l * 7); ctx.stroke();
+        labelBox(kblText(p.dist), Lb[0], Lb[1], col);
+      });
+      (route.rkTurns || []).forEach(function (t) {
+        var A = toScreen(t.wp[0], t.wp[1]), T = toScreen(t.tgt[0], t.tgt[1]); if (!vis(A, T)) return;
+        var col = '#6a3b8f';
+        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
+        labelBox('\u21bb ' + kblText(t.dist), (A[0] + T[0]) / 2, (A[1] + T[1]) / 2, col);
+      });
+    }
     function drawRouteNotes() {
       if (!route.legs.length || !w || !h) return;
       var legs = route.legs, i;
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawPasses();
       var color = route.color;
       // käännösmerkit: 2 ja 1 kaapelia (0,2 ja 0,1 mpk) ennen reittipistettä, kohtisuoraan legiä vastaan
       if (route.turnTicks) {
@@ -11712,7 +11739,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       route.pts = cvt(pts); route.turns = (turnPts || []).map(function (p) { var q = worldToPlot(p.x, p.y); return [q[0], q[1]]; });
       route.legs = (ro.legs || []).map(function (l) { var a = worldToPlot(l.a.x, l.a.y), b = worldToPlot(l.b.x, l.b.y); return { ax: a[0], ay: a[1], bx: b[0], by: b[1], brg: l.brg, dist: l.dist }; });
       route.legBrg = ro.legBrg !== false; route.turnTicks = ro.turnTicks !== false; route.approved = ro.approved !== false;
-      route.color = route.approved ? '#d4237f' : '#9a5b2a'; dirty = true;
+      route.color = route.approved ? '#d4237f' : '#9a5b2a';
+      var pp = function (q) { var o = worldToPlot(q.x, q.y); return [o[0], o[1]]; };
+      route.passes = (ro.passes || []).map(function (p) { return { foot: pp(p.foot), tgt: pp(p.tgt), lab: pp(p.lab), dist: p.dist }; });
+      route.rkTurns = (ro.rkTurns || []).map(function (t) { return { wp: pp(t.wp), tgt: pp(t.tgt), dist: t.dist }; });
+      dirty = true;
     }
     function setNext(p) { if (!p) { nextPt = null; return; } var q = worldToPlot(p.x, p.y); nextPt = [q[0], q[1]]; }
     function setTrail(pts) {
@@ -12384,8 +12415,22 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var total = 0;
     for (var i = 1; i < route.length; i++) total += Math.hypot(route[i].e - route[i - 1].e, route[i].n - route[i - 1].n);
     var sp = Number(r.speed);
+    // Sivuutus- ja käännösetäisyydet (28.10.2026): plotteri piirtää ne Reittikartan tapaan. Legi- ja pisteindeksit viittaavat suodattamattomiin pisteisiin,
+    // joten ne hylätään, jos pisteitä jouduttiin poistamaan.
+    var en = function (q) { if (!q || !isFinite(Number(q.lat)) || !isFinite(Number(q.lng))) return null; var o = Paikka.lonlatToEN(Number(q.lng), Number(q.lat)); return { e: o.e, n: o.n }; };
+    var sameIdx = pts.length === r.points.length, passes = [], rkTurns = [];
+    if (sameIdx) {
+      (Array.isArray(r.passes) ? r.passes : []).forEach(function (p) {
+        var t = en(p && p.tgt), lab = en(p && p.lab) || t;
+        if (t && p.leg >= 0 && p.leg < route.length - 1) passes.push({ leg: p.leg, tgt: t, lab: lab, nimi: p.tgt.aid && p.tgt.aid.name || '' });
+      });
+      (Array.isArray(r.turns) ? r.turns : []).forEach(function (q) {
+        var t = en(q && q.tgt);
+        if (t && q.wp >= 0 && q.wp < route.length) rkTurns.push({ wp: q.wp, tgt: t });
+      });
+    }
     return {
-      id: 'rk:' + r.id, rkId: r.id, nimi: storedName(r), kuvaus: '', route: route, builtin: false,
+      id: 'rk:' + r.id, rkId: r.id, nimi: storedName(r), kuvaus: '', route: route, builtin: false, passes: passes, rkTurns: rkTurns,
       status: r.status === 'approved' ? 'approved' : 'draft', pisteita: route.length, lengthM: total,
       startKn: sp > 0 && isFinite(sp) ? sp : DEFAULT_START_KN, speedFromRoute: sp > 0 && isFinite(sp)
     };
@@ -12416,7 +12461,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     src.forEach(function (r, i) {
       var m = r.meta || {};
       var raw = { id: 'gpx-' + stamp + '-' + i, name: r.name || '', from: m.from || '', via: m.via || '', to: m.to || '', speed: m.speed, status: m.status === 'approved' ? 'approved' : 'draft', tuotu: true,
-        points: (r.points || []).map(function (p) { return { lat: Number(p.lat), lng: Number(p.lng) }; }) };
+        points: (r.points || []).map(function (p) { return { lat: Number(p.lat), lng: Number(p.lng) }; }),
+        passes: Array.isArray(m.passes) ? m.passes : [], turns: Array.isArray(m.turns) ? m.turns : [] };
       if (!fromStored(raw)) return;
       // sama reitti uudelleen tuotuna korvaa vanhan (nimi ja pisteet samat)
       var key = JSON.stringify([storedName(raw), raw.points]);
@@ -12435,11 +12481,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
 
   // Reittikartan asetukset, jotka vaikuttavat reittimerkintöihin plotterilla (legin suunta ja matka, käännösmerkit)
   function storedShow(storage) {
-    var o = { legBrg: true, turnTicks: true };
+    var o = { legBrg: true, turnTicks: true, passes: true };
     try {
       storage = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
       var st = JSON.parse(storage.getItem(STORE_KEY) || '{}'), sh = st && st.settings && st.settings.show;
-      if (sh) { if (sh.legBrg === false) o.legBrg = false; if (sh.turnTicks === false) o.turnTicks = false; }
+      if (sh) { if (sh.legBrg === false) o.legBrg = false; if (sh.turnTicks === false) o.turnTicks = false; if (sh.passes === false) o.passes = false; }
     } catch (e) {}
     return o;
   }
@@ -12447,6 +12493,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   function reversed(ex) {
     var c = {}; Object.keys(ex).forEach(function (k) { c[k] = ex[k]; });
     c.route = ex.route.slice().reverse().map(function (p) { return { e: p.e, n: p.n, nimi: p.nimi || '' }; });
+    var np = ex.route.length;   // legi k -> np-2-k ja piste i -> np-1-i
+    c.passes = (ex.passes || []).map(function (p) { return { leg: np - 2 - p.leg, tgt: p.tgt, lab: p.lab, nimi: p.nimi }; });
+    c.rkTurns = (ex.rkTurns || []).map(function (t) { return { wp: np - 1 - t.wp, tgt: t.tgt }; });
     c.reverse = true;
     return c;
   }
@@ -12485,7 +12534,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     }
     pts[0].cum = 0; pts[pts.length - 1].cum = cum;
     turns.forEach(function (t, k) { t.no = k + 1; });
-    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus || '', pts: pts, legs: legs, turns: turns, total: cum, startKn: ex.startKn || 0, builtin: !!ex.builtin, reverse: !!ex.reverse, status: ex.status || 'approved' };
+    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus || '', pts: pts, legs: legs, turns: turns, passes: ex.passes || [], rkTurns: ex.rkTurns || [], total: cum, startKn: ex.startKn || 0, builtin: !!ex.builtin, reverse: !!ex.reverse, status: ex.status || 'approved' };
   }
 
   // Pisteen (e, n) projektio reitille. Palauttaa lähimmän jakson, matkan reitillä (cum), sivupoikkeaman (xte, positiivinen = reitin oikealla puolella) ja etäisyyden.
@@ -12857,7 +12906,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     if (ex.builtin) { info.textContent = ''; h.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).'; }
     else {
       h.textContent = '';
-      info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Lähtönopeus ' + fnum(ex.startKn, 0) + ' kn (' + (ex.speedFromRoute ? 'reitin nopeus' : 'oletus') + '), aikabudjetti ' + H.mmss(rt.total / (ex.startKn * KN)) + '.';
+      info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Alkaa levosta. Aikabudjetti ' + fnum(ex.startKn, 0) + ' kn mukaan (' + (ex.speedFromRoute ? 'reitin nopeus' : 'oletus') + '): ' + H.mmss(rt.total / (ex.startKn * KN)) + '.';
     }
   }
   function updateDispHint() {
@@ -13222,12 +13271,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var id = v.indexOf('rk:') === 0 ? v : 'rk:' + v;
     return G.stored.some(function (x) { return x.id === id; }) ? id : null;
   }
-  // Tavoitenopeus ja lähtönopeus: sisäänrakennettu harjoitus alkaa levosta, tallennettu reitti ja vapaa ajo kulussa (reitin nopeus tai 12 kn, vapaassa ajossa auto-parametrin nopeus)
+  // Lähtönopeus: kaikki ajot alkavat levosta lähtöpisteessä (28.10.2026, myös Reittikartan reitit). Vain testien auto-parametri antaa lähtönopeuden.
   function startSpeedKn(ex) {
     var auto = Number(qs.get('auto')) > 0 ? Number(qs.get('auto')) : 0;
-    if (!ex) return auto;
-    if (ex.builtin) return 0;
-    return auto > 0 ? auto : ex.startKn;
+    if (!ex || ex.builtin) return ex ? 0 : auto;
+    return auto;
   }
   function startRun() {
     refreshStored();
@@ -13242,7 +13290,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     if (G.ext === 'google') setExtView(false);
     var ex = currentEx();
     G.route = ex ? H.buildRoute(ex) : null;
-    G.budgetKn = ex && !ex.builtin ? startSpeedKn(ex) : G.targetKn;
+    G.budgetKn = ex && !ex.builtin ? (startSpeedKn(ex) || ex.startKn) : G.targetKn;   // aikabudjetti reitin nopeudella, vaikka lähtö on levosta
     // maailmakoordinaatiston origo: harjoituksessa reitin keskipiste, vapaassa ajossa Mustalahti
     if (G.route) {
       var es = G.route.pts.map(function (p) { return p.e; }), ns = G.route.pts.map(function (p) { return p.n; });
@@ -13301,7 +13349,16 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       } else { brg = P.gridToTrue(rt.legs[i].brg, wp[i].x, wp[i].y); dist = rt.legs[i].len; }
       legs.push({ a: wp[i], b: wp[i + 1], brg: brg, dist: dist });
     }
-    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft' });
+    // Sivuutusetäisyys: kohteen kohtisuora etäisyys legin linjasta (sama kuin Reittikartassa), käännösetäisyys: reittipisteen etäisyys kohteesta
+    var passes = G.showRk.passes === false ? [] : (rt.passes || []).filter(function (p) { return rt.pts[p.leg + 1]; }).map(function (p) {
+      var a = rt.pts[p.leg], b = rt.pts[p.leg + 1], dx = b.e - a.e, dy = b.n - a.n, L2 = dx * dx + dy * dy || 1;
+      var t = ((p.tgt.e - a.e) * dx + (p.tgt.n - a.n) * dy) / L2, fe = a.e + t * dx, fn = a.n + t * dy;
+      return { foot: P.enToWorld(fe, fn), tgt: P.enToWorld(p.tgt.e, p.tgt.n), lab: P.enToWorld(p.lab.e, p.lab.n), dist: Math.hypot(p.tgt.e - fe, p.tgt.n - fn) };
+    });
+    var rkTurns = G.showRk.passes === false ? [] : (rt.rkTurns || []).filter(function (t) { return rt.pts[t.wp]; }).map(function (t) {
+      var w = rt.pts[t.wp]; return { wp: P.enToWorld(w.e, w.n), tgt: P.enToWorld(t.tgt.e, t.tgt.n), dist: Math.hypot(t.tgt.e - w.e, t.tgt.n - w.n) };
+    });
+    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft', passes: passes, rkTurns: rkTurns });
   }
 
   // ---------- tutka ----------
