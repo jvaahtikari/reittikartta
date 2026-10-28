@@ -117,9 +117,9 @@
     hint.textContent = '';
     var a = doc.createElement('a'); a.href = 'index.html'; a.id = 'rkLink';
     a.href = 'https://reittikartta-6qn2.vercel.app/'; a.target = '_blank'; a.rel = 'noopener';
-    hint.appendChild(doc.createTextNode(G.stored.length ? 'Reitit ovat Reittikartasta. ' : 'Ei reittejä. '));
-    a.textContent = 'Suunnittele reitti Reittikartassa'; hint.appendChild(a);
-    hint.appendChild(doc.createTextNode(', vie se reitin valikosta GPX-tiedostoksi ja tuo tiedosto tähän.'));
+    hint.appendChild(doc.createTextNode('Oma reitti: '));
+    a.textContent = 'suunnittele se Reittikartassa'; hint.appendChild(a);
+    hint.appendChild(doc.createTextNode(', vie reitin valikosta GPX-tiedostoksi ja tuo tiedosto tähän.'));
     $('gpxClear').hidden = !G.stored.some(function (x) { return x.tuotu; });
     updateBudgetHint();
   }
@@ -140,7 +140,7 @@
     }
   }
   function updateDispHint() {
-    var h = { plot: 'Plotteri ja kuljettajan näkymä.', radar: 'Tutka ja kuljettajan näkymä, ei plotteria.', both: 'Plotteri ja tutka. Puhelimessa mittari vaihtuu napilla, vähintään 1440 px leveällä näytöllä kaikki kolme ovat rinnakkain.' };
+    var h = { plot: 'Plotteri ja 3D-näkymä.', radar: 'Tutka ja 3D-näkymä.', both: 'Plotteri, tutka ja 3D-näkymä. Puhelimessa mittari vaihtuu napilla, vähintään 1440 px leveällä näytöllä kaikki kolme ovat rinnakkain.' };
     $('dispHint').textContent = h[G.disp] || '';
   }
   function todayHelsinki() {
@@ -169,7 +169,7 @@
   function updateSceneHint() {
     var el = $('sceneHint'); if (!el) return;
     var has = !!(root.Google3D && root.Google3D.getKey());
-    el.textContent = G.scene === 'google' ? (has ? 'Googlen fotorealistinen maisema, oma vesi, vene ja merkit sen päällä. Ajon aikana vaihto oikean yläkulman napista (Oma näkymä / Google 3D).' : 'Google 3D -avainta ei saatu palvelimelta, joten ajo alkaa omalla maisemalla.') : 'Oma maisema avoimesta aineistosta. Toimii myös ilman verkkoa.';
+    el.textContent = G.scene === 'google' ? (has ? 'Googlen fotorealistinen maisema, oma vesi, vene ja merkit sen päällä. Hämärässä ja yöllä ajo alkaa omalla maisemalla, koska Google 3D on päivänvalokuva. Ajon aikana vaihto oikean yläkulman napista (Oma näkymä / Google 3D).' : 'Google 3D -avainta ei saatu palvelimelta, joten ajo alkaa omalla maisemalla.') : 'Oma maisema avoimesta aineistosta. Toimii myös ilman verkkoa.';
   }
   function initGoogleKey() {
     root.Google3D.fetchServerKey(function () { updateSceneHint(); });
@@ -732,8 +732,8 @@
     $('instrBtn').addEventListener('click', cycleInstr);
     $('gazeBtn').addEventListener('click', function () { G.view.setGaze(0); G.view.setBinoPitch(0); });
     $('binoBtn').addEventListener('click', function () { setBino(!G.view.isBino()); });
-    $('spotBtn').addEventListener('click', function () { toggleSpot(G.crew.role === 'solo' ? 'helm' : spotOwn()); });
-    $('spot2Btn').addEventListener('click', function () { toggleSpot('nav'); });
+    $('spotBtn').addEventListener('click', function () { toggleSpot(G.crew.role === 'solo' ? 'nav' : spotOwn()); });
+    $('spot2Btn').addEventListener('click', function () { toggleSpot('helm'); });
     $('spotAim').addEventListener('input', function () { aimSpot(Number($('spotAim').value)); });
     $('menuBtn').addEventListener('click', function () { $('menu').hidden = false; });
     $('mClose').addEventListener('click', function () { $('menu').hidden = true; });
@@ -1272,10 +1272,10 @@
     var solo = G.crew.role === 'solo', sel = spotSel(), hs = G.valot.heitin(sel);
     var b1 = $('spotBtn'), b2 = $('spot2Btn');
     if (solo) {
-      setText(b1, 'Ruori'); setText(b2, 'Navi'); b2.hidden = false;
-      b1.setAttribute('aria-pressed', G.valot.heitin('helm').on ? 'true' : 'false'); b2.setAttribute('aria-pressed', G.valot.heitin('nav').on ? 'true' : 'false');
-      b1.classList.toggle('sel', sel === 'helm'); b2.classList.toggle('sel', sel === 'nav');
-      b1.setAttribute('aria-label', 'Ruorimiehen valonheitin päälle tai pois'); b2.setAttribute('aria-label', 'Navigoijan valonheitin päälle tai pois');
+      setText(b1, 'Navi'); setText(b2, 'Ruori'); b2.hidden = false;   // istumajärjestyksessä: navigoija vasemmalla, ruorimies oikealla
+      b1.setAttribute('aria-pressed', G.valot.heitin('nav').on ? 'true' : 'false'); b2.setAttribute('aria-pressed', G.valot.heitin('helm').on ? 'true' : 'false');
+      b1.classList.toggle('sel', sel === 'nav'); b2.classList.toggle('sel', sel === 'helm');
+      b1.setAttribute('aria-label', 'Navigoijan valonheitin (vasen) päälle tai pois'); b2.setAttribute('aria-label', 'Ruorimiehen valonheitin (oikea) päälle tai pois');
     } else {
       setText(b1, 'Valonheitin'); b2.hidden = true; b1.classList.remove('sel');
       b1.setAttribute('aria-pressed', hs.on ? 'true' : 'false'); b1.setAttribute('aria-label', 'Oma valonheitin päälle tai pois (näppäin H)');

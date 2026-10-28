@@ -336,14 +336,14 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 <section id="start" class="screen">
   <div class="start-inner">
     <h1>Simulaattori</h1>
-    <p class="sub">Pv417 Repa Näsijärvellä, päivänavigointi. Roolina navigoija.</p>
+    <p class="sub">Pv417 Repa Näsijärvellä. Navigointiharjoitus päivällä ja yöllä, yksin tai kahdestaan.</p>
 
     <div class="field" role="group" aria-labelledby="lblCrew">
       <div class="lbl" id="lblCrew">Miehistö</div>
       <div class="seg" id="segCrew">
         <button type="button" data-v="solo" class="on">Yksin<small>yksi laite</small></button>
-        <button type="button" data-v="helm">Ruorimies<small>aloittaa istunnon</small></button>
         <button type="button" data-v="nav">Navigoija<small>liittyy koodilla</small></button>
+        <button type="button" data-v="helm">Ruorimies<small>aloittaa istunnon</small></button>
       </div>
       <div id="crewHelm" class="crew-box" hidden>
         <div>Istuntokoodi <b id="crewCode" class="crew-code">----</b></div>
@@ -361,7 +361,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
     <div class="field crew-hide" role="group" aria-labelledby="lblEx">
       <div class="lbl" id="lblEx">Reitti</div>
       <div class="seg list" id="segEx">
-        <button type="button" data-v="h1" class="on">Demoreitti<small>Esimerkkireitti Reittikartasta, alkaa levosta</small></button>
+        <button type="button" data-v="h1" class="on">Demoreitti<small>Esimerkkireitti Reittikartasta</small></button>
         <button type="button" data-v="free">Vapaa ajo<small>Mustalahdesta, ei reittiä</small></button>
       </div>
       <div class="hint" id="exInfo"></div>
@@ -388,10 +388,10 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
       <div class="hint" id="dispHint"></div>
     </div>
     <div class="field crew-hide crew-hide-helm" role="group" aria-labelledby="lblEye">
-      <div class="lbl" id="lblEye">Silmäpiste kuljettajan näkymässä</div>
+      <div class="lbl" id="lblEye">Silmäpiste 3D-näkymässä</div>
       <div class="seg" id="segEye">
-        <button type="button" data-v="nav" class="on">Navigoija</button>
-        <button type="button" data-v="helm">Ruorimies</button>
+        <button type="button" data-v="nav" class="on">Navigoija<small>vasen istuin</small></button>
+        <button type="button" data-v="helm">Ruorimies<small>oikea istuin</small></button>
       </div>
     </div>
     <div class="field crew-hide" role="group" aria-labelledby="lblClk">
@@ -481,7 +481,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
       <!-- valonheitin (vaihe 4): näkyy hämärässä ja yöllä, suunta omalla säätimellä -->
       <div class="hud spot" id="spotBox" hidden>
         <button type="button" id="spotBtn" aria-pressed="false" aria-label="Valonheitin päälle tai pois (näppäin H)">Valonheitin</button>
-        <button type="button" id="spot2Btn" aria-pressed="false" aria-label="Navigoijan valonheitin päälle tai pois" hidden>Navi</button>
+        <button type="button" id="spot2Btn" aria-pressed="false" aria-label="Ruorimiehen valonheitin päälle tai pois" hidden>Ruori</button>
         <input type="range" id="spotAim" min="-150" max="150" step="1" value="0" aria-label="Valonheittimen suunta keulasta (näppäimet J ja K)" hidden>
         <span id="spotLbl" class="spot-lbl" hidden>0°</span>
       </div>
@@ -552,7 +552,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
     <button type="button" class="big" id="mPort">Satamat (Google 3D): omat veneet</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. Valonheittimet (hämärässä ja yöllä): katolla on oma valo ruorimiehen ja navigoijan yläpuolella. Yksin ajaessa napit Ruori ja Navi sytyttävät kumman tahansa, miehistötilassa kumpikin ohjaa omaansa ja näkee toisen valon. H: valittu valo päälle tai pois (Shift+H toinen valo), J ja K kääntävät sitä 10° (Shift 30°), suunta myös säätimellä. Keila osuessaan viitan, poijun tai kummelin heijastimeen saa sen välähtämään selkeällä säällä kauempaa kuin valo valaisee rantaa. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus loitontaa ja miinus lähentää kuten SARNavissa (alue suuremmaksi tai pienemmäksi, 0,1 ... 12 mpk), samoin hiiren rulla ja kahden sormen nipistys. Kartan voi vetää keskityksen aikana hetkeksi sivuun, ja se palaa alukseen noin 2 sekunnissa. M: harppi (napautukset lisäävät pisteitä, Del poistaa edellisen, Esc lopettaa). Kun EBL/VRM eli suuntima on päällä, suuntimaviiva seuraa hiirtä, ja napautus tai klikkaus lukitsee EBL:n ja VRM:n napautettuun pisteeseen (Esc vapauttaa), pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. Valonheittimet (hämärässä ja yöllä): katolla on oma valo navigoijan (vasen) ja ruorimiehen (oikea) yläpuolella. Yksin ajaessa napit Navi ja Ruori sytyttävät kumman tahansa, miehistötilassa kumpikin ohjaa omaansa ja näkee toisen valon. H: valittu valo päälle tai pois (Shift+H toinen valo), J ja K kääntävät sitä 10° (Shift 30°), suunta myös säätimellä. Keila osuessaan viitan, poijun tai kummelin heijastimeen saa sen välähtämään selkeällä säällä kauempaa kuin valo valaisee rantaa. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus loitontaa ja miinus lähentää kuten SARNavissa (alue suuremmaksi tai pienemmäksi, 0,1 ... 12 mpk), samoin hiiren rulla ja kahden sormen nipistys. Kartan voi vetää keskityksen aikana hetkeksi sivuun, ja se palaa alukseen noin 2 sekunnissa. M: harppi (napautukset lisäävät pisteitä, Del poistaa edellisen, Esc lopettaa). Kun EBL/VRM eli suuntima on päällä, suuntimaviiva seuraa hiirtä, ja napautus tai klikkaus lukitsee EBL:n ja VRM:n napautettuun pisteeseen (Esc vapauttaa), pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
   </div>
 </div>
 
@@ -13553,9 +13553,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     hint.textContent = '';
     var a = doc.createElement('a'); a.href = 'index.html'; a.id = 'rkLink';
     a.href = 'https://reittikartta-6qn2.vercel.app/'; a.target = '_blank'; a.rel = 'noopener';
-    hint.appendChild(doc.createTextNode(G.stored.length ? 'Reitit ovat Reittikartasta. ' : 'Ei reittejä. '));
-    a.textContent = 'Suunnittele reitti Reittikartassa'; hint.appendChild(a);
-    hint.appendChild(doc.createTextNode(', vie se reitin valikosta GPX-tiedostoksi ja tuo tiedosto tähän.'));
+    hint.appendChild(doc.createTextNode('Oma reitti: '));
+    a.textContent = 'suunnittele se Reittikartassa'; hint.appendChild(a);
+    hint.appendChild(doc.createTextNode(', vie reitin valikosta GPX-tiedostoksi ja tuo tiedosto tähän.'));
     $('gpxClear').hidden = !G.stored.some(function (x) { return x.tuotu; });
     updateBudgetHint();
   }
@@ -13576,7 +13576,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     }
   }
   function updateDispHint() {
-    var h = { plot: 'Plotteri ja kuljettajan näkymä.', radar: 'Tutka ja kuljettajan näkymä, ei plotteria.', both: 'Plotteri ja tutka. Puhelimessa mittari vaihtuu napilla, vähintään 1440 px leveällä näytöllä kaikki kolme ovat rinnakkain.' };
+    var h = { plot: 'Plotteri ja 3D-näkymä.', radar: 'Tutka ja 3D-näkymä.', both: 'Plotteri, tutka ja 3D-näkymä. Puhelimessa mittari vaihtuu napilla, vähintään 1440 px leveällä näytöllä kaikki kolme ovat rinnakkain.' };
     $('dispHint').textContent = h[G.disp] || '';
   }
   function todayHelsinki() {
@@ -13605,7 +13605,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
   function updateSceneHint() {
     var el = $('sceneHint'); if (!el) return;
     var has = !!(root.Google3D && root.Google3D.getKey());
-    el.textContent = G.scene === 'google' ? (has ? 'Googlen fotorealistinen maisema, oma vesi, vene ja merkit sen päällä. Ajon aikana vaihto oikean yläkulman napista (Oma näkymä / Google 3D).' : 'Google 3D -avainta ei saatu palvelimelta, joten ajo alkaa omalla maisemalla.') : 'Oma maisema avoimesta aineistosta. Toimii myös ilman verkkoa.';
+    el.textContent = G.scene === 'google' ? (has ? 'Googlen fotorealistinen maisema, oma vesi, vene ja merkit sen päällä. Hämärässä ja yöllä ajo alkaa omalla maisemalla, koska Google 3D on päivänvalokuva. Ajon aikana vaihto oikean yläkulman napista (Oma näkymä / Google 3D).' : 'Google 3D -avainta ei saatu palvelimelta, joten ajo alkaa omalla maisemalla.') : 'Oma maisema avoimesta aineistosta. Toimii myös ilman verkkoa.';
   }
   function initGoogleKey() {
     root.Google3D.fetchServerKey(function () { updateSceneHint(); });
@@ -14168,8 +14168,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     $('instrBtn').addEventListener('click', cycleInstr);
     $('gazeBtn').addEventListener('click', function () { G.view.setGaze(0); G.view.setBinoPitch(0); });
     $('binoBtn').addEventListener('click', function () { setBino(!G.view.isBino()); });
-    $('spotBtn').addEventListener('click', function () { toggleSpot(G.crew.role === 'solo' ? 'helm' : spotOwn()); });
-    $('spot2Btn').addEventListener('click', function () { toggleSpot('nav'); });
+    $('spotBtn').addEventListener('click', function () { toggleSpot(G.crew.role === 'solo' ? 'nav' : spotOwn()); });
+    $('spot2Btn').addEventListener('click', function () { toggleSpot('helm'); });
     $('spotAim').addEventListener('input', function () { aimSpot(Number($('spotAim').value)); });
     $('menuBtn').addEventListener('click', function () { $('menu').hidden = false; });
     $('mClose').addEventListener('click', function () { $('menu').hidden = true; });
@@ -14708,10 +14708,10 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var solo = G.crew.role === 'solo', sel = spotSel(), hs = G.valot.heitin(sel);
     var b1 = $('spotBtn'), b2 = $('spot2Btn');
     if (solo) {
-      setText(b1, 'Ruori'); setText(b2, 'Navi'); b2.hidden = false;
-      b1.setAttribute('aria-pressed', G.valot.heitin('helm').on ? 'true' : 'false'); b2.setAttribute('aria-pressed', G.valot.heitin('nav').on ? 'true' : 'false');
-      b1.classList.toggle('sel', sel === 'helm'); b2.classList.toggle('sel', sel === 'nav');
-      b1.setAttribute('aria-label', 'Ruorimiehen valonheitin päälle tai pois'); b2.setAttribute('aria-label', 'Navigoijan valonheitin päälle tai pois');
+      setText(b1, 'Navi'); setText(b2, 'Ruori'); b2.hidden = false;   // istumajärjestyksessä: navigoija vasemmalla, ruorimies oikealla
+      b1.setAttribute('aria-pressed', G.valot.heitin('nav').on ? 'true' : 'false'); b2.setAttribute('aria-pressed', G.valot.heitin('helm').on ? 'true' : 'false');
+      b1.classList.toggle('sel', sel === 'nav'); b2.classList.toggle('sel', sel === 'helm');
+      b1.setAttribute('aria-label', 'Navigoijan valonheitin (vasen) päälle tai pois'); b2.setAttribute('aria-label', 'Ruorimiehen valonheitin (oikea) päälle tai pois');
     } else {
       setText(b1, 'Valonheitin'); b2.hidden = true; b1.classList.remove('sel');
       b1.setAttribute('aria-pressed', hs.on ? 'true' : 'false'); b1.setAttribute('aria-label', 'Oma valonheitin päälle tai pois (näppäin H)');
