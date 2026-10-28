@@ -598,18 +598,20 @@
     // (asteet ilman merkkiä), valkoinen teksti. Kuvio käännetään niin, että teksti on aina oikein päin.
     function drawLegBox(cx, cy, bw, bh, L, color) {
       var A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), ang = Math.atan2(B[1] - A[1], B[0] - A[0]), flip = Math.cos(ang) < 0;
-      var dPlus = flip ? L.brg + 180 : L.brg, dMinus = dPlus + 180, len = 50, hh = 12, tip = 9;
+      var dPlus = flip ? L.brg + 180 : L.brg, dMinus = dPlus + 180;
       var n3 = function (b) { var t = String(Math.round(((b % 360) + 360) % 360) % 360); while (t.length < 3) t = '0' + t; return t; };
+      // kaksi vierekkäistä nuolta: varsi (puolileveys sw) ja kolmiokärki (puolileveys hw, pituus hl). Yläpuolen nuoli osoittaa +x:ään, alapuolen -x:ään.
+      var len = 58, cy0 = 8, sw = 6, hw = 8, hl = 13, GREEN = '#2f7d3c', RED = '#c62828';
+      function arrow(dir, yc, fill) {
+        var x0 = -dir * len / 2, xs = dir * (len / 2 - hl), xt = dir * len / 2;
+        ctx.beginPath(); ctx.moveTo(x0, yc - sw); ctx.lineTo(xs, yc - sw); ctx.lineTo(xs, yc - hw); ctx.lineTo(xt, yc); ctx.lineTo(xs, yc + hw); ctx.lineTo(xs, yc + sw); ctx.lineTo(x0, yc + sw); ctx.closePath();
+        ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+      }
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(flip ? ang + Math.PI : ang);
-      // kulkusuunnan puolisko vihreä ja paluusuunnan punainen (SARNav). Yläpuoliskon nuoli osoittaa +x:ään, joka on kulkusuunta, kun kuviota ei käännetty.
-      var GREEN = '#2f7d3c', RED = '#c62828';
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(-len / 2, -hh); ctx.lineTo(len / 2 - tip, -hh); ctx.lineTo(len / 2 + 3, 0); ctx.lineTo(-len / 2, 0); ctx.closePath();   // yläpuolisko: nuoli +x
-      ctx.fillStyle = flip ? RED : GREEN; ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(len / 2, 0); ctx.lineTo(len / 2, hh); ctx.lineTo(-len / 2 + tip, hh); ctx.lineTo(-len / 2 - 3, 0); ctx.closePath();   // alapuolisko: nuoli -x
-      ctx.fillStyle = flip ? GREEN : RED; ctx.fill(); ctx.stroke();
-      ctx.font = '700 11px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
-      ctx.fillText(n3(dPlus), -3, -hh / 2 + 0.5); ctx.fillText(n3(dMinus), 3, hh / 2 + 0.5);
+      arrow(1, -cy0, flip ? RED : GREEN);    // +x: kulkusuunta, kun kuviota ei käännetty
+      arrow(-1, cy0, flip ? GREEN : RED);
+      ctx.font = '700 10px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+      ctx.fillText(n3(dPlus), -hl / 2, -cy0 + 0.5); ctx.fillText(n3(dMinus), hl / 2, cy0 + 0.5);
       ctx.restore();
     }
     // heading line ja COG/SOG-vektori (plot-koordinaateissa)
