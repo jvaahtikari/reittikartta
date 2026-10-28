@@ -30,23 +30,16 @@
 
   // ---------- Harjoitukset ----------
   var EXERCISES = {
+    // Demoreitti (28.10.2026, korvaa Harjoitus 1:n): Reittikartassa tehty esimerkkireitti (reitti.gpx), pisteet muunnettu TM35FIN-koordinaateiksi (Paikka.lonlatToEN).
+    // Tunniste h1 säilyy, jotta osoiteparametri harjoitus=h1 ja aiemmat tallennukset toimivat.
     h1: {
-      id: 'h1', nimi: 'Harjoitus 1', kuvaus: 'Mustalahti – Siilinkari – Aitolahti',
+      id: 'h1', nimi: 'Demoreitti', kuvaus: '',
       route: [
-        { e: 327184, n: 6823553, nimi: 'Mustalahti' },
-        { e: 327771, n: 6823999, nimi: 'Naistenlahden väylän alku' },
-        { e: 328045, n: 6824881, nimi: 'Siilinkarin kohta' },
-        { e: 332200, n: 6825714, nimi: 'Pirttiniemi' },
-        { e: 333273, n: 6825987, nimi: 'Kiikisensaari' },
-        { e: 333726, n: 6825700 },
-        { e: 334352, n: 6826392, nimi: 'Nupinnokka' },
-        { e: 334417, n: 6826553 },
-        { e: 334459, n: 6826731 },
-        { e: 334475, n: 6826862 },
-        { e: 334499, n: 6826941 },
-        { e: 334551, n: 6826982 },
-        { e: 334658, n: 6827038 },
-        { e: 334769, n: 6827049, nimi: 'Aitolahti' }
+        { e: 327983, n: 6823832 },
+        { e: 327125, n: 6824022 },
+        { e: 327019, n: 6824855 },
+        { e: 326814, n: 6826463 },
+        { e: 325529, n: 6826694 }
       ],
       suggestKn: [10, 30],
       startKn: 0,                // sisäänrakennettu harjoitus alkaa levosta kuten ennen vaihetta 3h
