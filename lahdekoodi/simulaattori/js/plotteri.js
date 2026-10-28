@@ -276,7 +276,6 @@
     var extraLines = [], extraPts = [];
     var showNotes = true, showPasses = true;            // SARNavin näkyvyyspainikkeet (reittinuotit, sivuutusetäisyydet)
     var harp = { on: false, pts: [], cur: null };        // harppi: pisteet { X, Y, lat, lon } plot-koordinaateissa, cur = hiiren kursori
-    var peekTimer = null;                                 // kurkistus: keskitys palaa noin 2 s kuluttua vedon päättymisestä
     var aidList = [], lastAidSync = 0, wantStamp = 0, lastNeedKey = '', dirty = false, readyFlag = false, destroyed = false;
     var view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0, s: 1, sx: 0, sy: 0 };
 
@@ -890,7 +889,6 @@
         if (S.has && w) computeView();
         if (ptrs.size === 1) {
           var l = local(ev);
-          clearTimeout(peekTimer);
           gest = { mode: 'tap', x0: ev.clientX, y0: ev.clientY, slop: ev.pointerType === 'mouse' ? 4 : 8, g: toPlot(l[0], l[1]), wasFollow: follow };
         } else if (ptrs.size === 2) {
           var m = mid2();
@@ -921,8 +919,7 @@
         if (ptrs.size === 0) {
           if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && harp.on) { var hl = local(ev); harp.pts.push(harpPoint(hl[0], hl[1])); updateReadouts(); if (S.has) draw(); }
           else if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && evOn) { evLock = true; setPoint(ev); endPoint(); }
-          // kurkistus: keskityksen aikana vedetty kartta palaa alukseen noin 2 s kuluttua
-          if (gest && gest.mode === 'pan' && gest.wasFollow) { clearTimeout(peekTimer); peekTimer = setTimeout(function () { if (!ptrs.size) recenter(); }, 2000); }
+          // vedetty kartta jää paikalleen: keskitys vain Keskitä-napista tai C-näppäimestä
           gest = null;
         } else if (ptrs.size === 1) gest = { mode: 'jaa' };     // sormen nosto nipistyksen jälkeen ei siirrä karttaa eikä EBL:ää
       };
