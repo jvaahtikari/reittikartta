@@ -552,7 +552,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
     <button type="button" class="big" id="mPort">Satamat (Google 3D): omat veneet</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. Valonheittimet (hämärässä ja yöllä): katolla on oma valo navigoijan (vasen) ja ruorimiehen (oikea) yläpuolella. Yksin ajaessa napit Navi ja Ruori sytyttävät kumman tahansa, miehistötilassa kumpikin ohjaa omaansa ja näkee toisen valon. H: valittu valo päälle tai pois (Shift+H toinen valo), J ja K kääntävät sitä 10° (Shift 30°), suunta myös säätimellä. Keila osuessaan viitan, poijun tai kummelin heijastimeen saa sen välähtämään selkeällä säällä kauempaa kuin valo valaisee rantaa. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus loitontaa ja miinus lähentää kuten SARNavissa (alue suuremmaksi tai pienemmäksi, 0,1 ... 12 mpk), samoin hiiren rulla ja kahden sormen nipistys. Kartan voi vetää keskityksen aikana hetkeksi sivuun, ja se palaa alukseen noin 2 sekunnissa. M: harppi (napautukset lisäävät pisteitä, Del poistaa edellisen, Esc lopettaa). Kun EBL/VRM eli suuntima on päällä, suuntimaviiva seuraa hiirtä, ja napautus tai klikkaus lukitsee EBL:n ja VRM:n napautettuun pisteeseen (Esc vapauttaa), pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. Valonheittimet (hämärässä ja yöllä): katolla on oma valo navigoijan (vasen) ja ruorimiehen (oikea) yläpuolella. Yksin ajaessa napit Navi ja Ruori sytyttävät kumman tahansa, miehistötilassa kumpikin ohjaa omaansa ja näkee toisen valon. H: valittu valo päälle tai pois (Shift+H toinen valo), J ja K kääntävät sitä 10° (Shift 30°), suunta myös säätimellä. Keila osuessaan viitan, poijun tai kummelin heijastimeen saa sen välähtämään selkeällä säällä kauempaa kuin valo valaisee rantaa. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus loitontaa ja miinus lähentää kuten SARNavissa (alue suuremmaksi tai pienemmäksi, 0,1 ... 12 mpk), samoin hiiren rulla ja kahden sormen nipistys. Vedetty kartta jää paikalleen, kunnes painat Keskitä-nappia tai C:tä. M: harppi (napautukset lisäävät pisteitä, Del poistaa edellisen, Esc lopettaa). Kun EBL/VRM eli suuntima on päällä, suuntimaviiva seuraa hiirtä, ja napautus tai klikkaus lukitsee EBL:n ja VRM:n napautettuun pisteeseen (Esc vapauttaa), pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
   </div>
 </div>
 
@@ -11861,7 +11861,6 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var extraLines = [], extraPts = [];
     var showNotes = true, showPasses = true;            // SARNavin näkyvyyspainikkeet (reittinuotit, sivuutusetäisyydet)
     var harp = { on: false, pts: [], cur: null };        // harppi: pisteet { X, Y, lat, lon } plot-koordinaateissa, cur = hiiren kursori
-    var peekTimer = null;                                 // kurkistus: keskitys palaa noin 2 s kuluttua vedon päättymisestä
     var aidList = [], lastAidSync = 0, wantStamp = 0, lastNeedKey = '', dirty = false, readyFlag = false, destroyed = false;
     var view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0, s: 1, sx: 0, sy: 0 };
 
@@ -12475,7 +12474,6 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         if (S.has && w) computeView();
         if (ptrs.size === 1) {
           var l = local(ev);
-          clearTimeout(peekTimer);
           gest = { mode: 'tap', x0: ev.clientX, y0: ev.clientY, slop: ev.pointerType === 'mouse' ? 4 : 8, g: toPlot(l[0], l[1]), wasFollow: follow };
         } else if (ptrs.size === 2) {
           var m = mid2();
@@ -12506,8 +12504,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         if (ptrs.size === 0) {
           if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && harp.on) { var hl = local(ev); harp.pts.push(harpPoint(hl[0], hl[1])); updateReadouts(); if (S.has) draw(); }
           else if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && evOn) { evLock = true; setPoint(ev); endPoint(); }
-          // kurkistus: keskityksen aikana vedetty kartta palaa alukseen noin 2 s kuluttua
-          if (gest && gest.mode === 'pan' && gest.wasFollow) { clearTimeout(peekTimer); peekTimer = setTimeout(function () { if (!ptrs.size) recenter(); }, 2000); }
+          // vedetty kartta jää paikalleen: keskitys vain Keskitä-napista tai C-näppäimestä
           gest = null;
         } else if (ptrs.size === 1) gest = { mode: 'jaa' };     // sormen nosto nipistyksen jälkeen ei siirrä karttaa eikä EBL:ää
       };
