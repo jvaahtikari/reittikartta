@@ -25,6 +25,15 @@
  * Tila on erillään näkymistä: sijainti (x, y metriä maailmakoordinaatistossa, ks. paikka.js), suunta
  * (ruutusuunta asteina), nopeus (m/s), vipu, ruori, trimmi, kallistus, aika ja komentoloki.
  *
+ * Tuuli (vaihe 4, 28.10.2026, siirtosuunnitelma RAPORTTI_vaihe3m.md kohta 4.2, omin sanoin, idea maritime-ship-simulatorista, MPL-2.0, ei koodia):
+ * näennäinen tuuli = todellinen tuuli miinus aluksen nopeus veden suhteen. Tuulen voima 0,5 x ilman tiheys x C x A x komponentti x |näennäinen|
+ * (sivuprofiili 25 m², keulaprofiili 12 m²). Pitkittäisvoimasta lisätään vain ero tyyneen (nykyinen vastuskäyrä sisältää ilmanvastuksen),
+ * ja tehollinen keulakerroin 0,2 on kalibrointivalinta: vastatuuli 10 m/s hidastaa 20 kn:n ajoa alle 1 kn. Sivuttaisnopeus vs (sorto) hidastuu
+ * veden sivuvastukseen (neliöllinen osa) ja nostovoimaan, joka kasvaa vauhdin mukana, joten sorto on selvä paikallaan (noin 0,9 kn 10 m/s
+ * sivutuulessa) ja pieni ajossa (alle 1,5° 20 kn:ssa). Kääntömomentti: tuulen vaikutuskeskus on veden sivuvastuksen keskiön edessä (ohjaamo
+ * ja keula korkealla), joten hitaalla nopeudella keula kääntyy tuulesta poispäin. Vauhdissa suihkujen ja rungon suuntavakaus voittaa.
+ * Momentti lisätään kääntymisnopeuden tavoitteeseen, ja ruorimiehen P-säädin korjaa sen ruorilla. Tyynellä (tuuli 0) malli on ennallaan.
+ *
  * Moduuli toimii selaimessa (window.Liike) ja Nodessa (module.exports). */
 (function (root) {
   'use strict';
@@ -56,6 +65,7 @@
     rudderNormalDeg: 15, rudderGentleDeg: 7,   // ruorimiehen tavallisen ja loivan käännöksen ruorikulma
     hdgKp: 1.2, hdgKd: 1.0,               // suunnan P-säätö: ruorikulma = Kp * virhe - Kd * kääntymisnopeus (aste, aste/s)
     hdgDeadDeg: 0.5,
+    hdgKi: 0.25, hdgIMax: 40,             // tuulessa: suuntavirheen integraali (aste x s) ruorikulmaan, enimmäisarvo
     leverKpPerKn: 0.04,                   // vivun lisäys nopeusvirhettä kohti (liukukynnyksen yli hän antaa enemmän)
     leverKiPerKnSec: 0.006,               // vivun hidas korjaus nopeusvirheen integraalista (ruorimies hakee oikean asennon)
     leverGuessPerKn: 1 / 35,              // ruorimiehen ensiarvaus vivun asennosta käsketyllä nopeudella (lineaarinen, 28 kn = 80 %)
@@ -73,7 +83,16 @@
     // Trimmi (keulan nousu) sidotaan vastuskäyrän liukukynnykseen: piste [kn kynnyksen 12 kn:n suhteessa, aste]
     trimPoints: [[0, 0], [6, 0.4], [10, 4.6], [12, 5], [14, 5], [17, 4.2], [22, 3.2], [28, 2.5], [35, 2.5]],
     trimLagSec: 1.0,
-    maxSubStep: 0.05           // integroinnin enimmäisaskel, s
+    maxSubStep: 0.05,          // integroinnin enimmäisaskel, s
+    // tuuli (vaihe 4)
+    airRho: 1.225, waterRho: 1000,
+    windSideAreaM2: 25, windFrontAreaM2: 12,   // tuulipinta-alat (arvio piirustuksista)
+    windCy: 1.0, windCx: 0.2,                 // sivuttainen kerroin ja tehollinen keulakerroin (kalibroitu, ks. otsikko)
+    latDragCd: 1.2, latAreaM2: 11.0,          // veden sivuvastus: kerroin ja ala (12,25 m x 0,9 m)
+    latLiftNs2: 1200,                         // nostovoiman vaimennus N / (m/s)² (vauhti x sivunopeus)
+    latMassFactor: 1.4,                       // sivuttaisliikkeen lisätty massa
+    windYawRadPerN: 4.5e-5,                   // tuulen kääntövaikutus paikallaan (rad/s newtonia kohti), 10 m/s sivutuulessa noin 4 °/s
+    windYawFadeKn: 5                          // kääntövaikutus vaimenee nopeuden mukana: 1 / (1 + (kn / 5)²)
   };
 
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -138,6 +157,8 @@
       hdg: hdg,                              // ruutusuunta, aste (tosisuunta = ruutusuunta + conv)
       conv: conv,                            // meridiaanikonvergenssi (aste), sovellus päivittää sijainnin mukaan
       v: init.v || 0,                        // m/s
+      vs: 0,                                 // sivuttaisnopeus veden suhteen (sorto), m/s, positiivinen oikealle
+      windFrom: init.windFrom || 0, windSpeed: init.windSpeed || 0,   // todellinen tuuli: tosisuunta, josta tuulee (aste) ja nopeus (m/s)
       // navigoijan käskyt
       orderHdg: ht,                          // käsketty tosisuunta, aste
       orderSpeedKn: init.speedKn || 0,       // käsketty nopeus, solmua (negatiivinen = peruutus)
@@ -236,7 +257,7 @@
   // Pysäytys esteeseen osuttaessa (laituri, kivi, silta): nopeus, kierto ja vipu nollataan, nopeuskäsky nollataan eikä ruorimies yritä ajaa uudelleen esteeseen
   // (käskyä ei kirjata komentolokiin, esteeseen osuminen kirjataan erikseen). Suunta pidetään siinä, mihin alus jäi, ja perän käsky päättyy.
   function halt(s) {
-    s.v = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
+    s.v = 0; s.vs = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
     s.crashCmd = false; s.crashActive = false;
     s.pending = s.pending.filter(function (p) { return p.kind === 'gentle'; });
     s.orderSpeedKn = 0; s.hmSpeedKn = 0; s.sternTurn = null; s.hmStern = null; s.gentleNext = false; s.hmGentle = false;
@@ -259,7 +280,9 @@
       return 0;
     }
     if (Math.abs(e) < 1.0 && Math.abs(s.rate) < 0.6 && s.hmGentle) s.hmGentle = false;
-    var rd = clamp(S.hdgKp * e - S.hdgKd * s.rate, -lim, lim);
+    // tuulessa ruorimies pitää ruoria tuulta vastaan (hidas korjaus suuntavirheen integraalista), tyynellä ei käytössä
+    if (s.windSpeed > 0 && Math.abs(e) < 20) s.hdgI = clamp((s.hdgI || 0) + e * s._dt, -S.hdgIMax, S.hdgIMax); else s.hdgI = 0;
+    var rd = clamp(S.hdgKp * e - S.hdgKd * s.rate + S.hdgKi * (s.hdgI || 0), -lim, lim);
     return clamp(sg * rd / S.rudderMaxDeg, -1, 1);
   }
   // Ruorimiehen nopeussäätö: vivun tavoite -1..1. Pito-ohjaus (vipu, joka pitää käsketyn nopeuden) ja virhe lisää vipua.
@@ -272,11 +295,26 @@
     return clamp(s.leverTrim + S.leverKpPerKn * err, -1, 1);
   }
 
+  // Tuulen voimat: { fx: pitkittäisvoiman ero tyyneen (N, + eteenpäin), fy: sivuvoima (N, + oikealle), app: näennäisen tuulen nopeus m/s, rel: näennäisen tuulen suunta keulasta (aste, mistä tuulee) }
+  function windForces(s) {
+    var S = SETTINGS, h = trueHdg(s) * RAD, to = (s.windFrom + 180) * RAD;
+    // todellinen tuuli (tosikoordinaatit, itä ja pohjoinen) aluksen akseleille: eteen ja oikealle
+    var we = Math.sin(to) * s.windSpeed, wn = Math.cos(to) * s.windSpeed;
+    var wf = we * Math.sin(h) + wn * Math.cos(h), wr = we * Math.cos(h) - wn * Math.sin(h);
+    var ax = wf - s.v, ay = wr - s.vs, aa = Math.hypot(ax, ay), q = 0.5 * S.airRho;
+    var fx = q * S.windCx * S.windFrontAreaM2 * (ax * aa - (-s.v) * Math.abs(s.v));
+    var fy = q * S.windCy * S.windSideAreaM2 * ay * aa;
+    return { fx: fx, fy: fy, app: aa, rel: norm360(Math.atan2(-ay, -ax) / RAD) };
+  }
+  function apparentWind(s) { if (!(s.windSpeed > 0) && !s.vs) return { app: Math.abs(s.v), rel: s.v >= 0 ? 0 : 180 }; var f = windForces(s); return { app: f.app, rel: f.rel }; }
+  function setWind(s, fromDeg, speed) { s.windFrom = norm360(Number(fromDeg) || 0); s.windSpeed = Math.max(0, Number(speed) || 0); }
+
   // Yksi integrointiaskel dt (s)
   function stepOnce(s, dt) {
     var S = SETTINGS;
     while (s.pending.length && s.pending[0].at <= s.t) apply(s, s.pending.shift());
     if (s.helmsman) {
+      s._dt = dt;
       s.rudderCmd = helmRudder(s);
       var lt = helmLever(s, dt), maxd = S.leverRatePerSec * dt;
       s.leverCmd += clamp(lt - s.leverCmd, -maxd, maxd);
@@ -287,28 +325,35 @@
     if (s.crashCmd && !s.crashActive) s.crashActive = true;
     var lv = s.crashActive ? S.crashLever : s.leverCmd;
     s.lever = lv;
-    var a = (thrust(lv, s.v) - resistance(s.v)) / S.massKg, v0 = s.v;
+    var windOn = s.windSpeed > 0 || s.vs !== 0, wf = windOn ? windForces(s) : null;
+    var a = (thrust(lv, s.v) - resistance(s.v) + (wf ? wf.fx : 0)) / S.massKg, v0 = s.v;
     s.v += a * dt;
+    if (wf) {   // sorto: sivuvoima vastaan veden sivuvastus ja nostovoima
+      var dl = 0.5 * S.waterRho * S.latDragCd * S.latAreaM2 * s.vs * Math.abs(s.vs) + S.latLiftNs2 * Math.abs(s.v) * s.vs;
+      s.vs += (wf.fy - dl) / (S.massKg * S.latMassFactor) * dt;
+      if (!(s.windSpeed > 0) && Math.abs(s.vs) < 0.005) s.vs = 0;
+    }
     if (s.v < -S.reverseMaxKn * KN) s.v = -S.reverseMaxKn * KN;   // peruutusnopeuden rajoitin: täydelläkään peruutusvivulla ei yli reverseMaxKn
     if (s.crashActive) {
       if (s.v <= S.crashEndMs) {            // pysähtynyt: vipu neutraaliksi
         s.v = 0; s.crashActive = false; s.crashCmd = false; s.leverCmd = 0; s.speedSense = 0;
         logCmd(s, 'lever0', 0);
       }
-    } else if (lv === 0 && Math.abs(s.v) < 0.02) s.v = 0;
+    } else if (lv === 0 && Math.abs(s.v) < 0.02 && !(s.windSpeed > 0)) s.v = 0;
     else if (lv === 0 && v0 * s.v < 0) s.v = 0;
     // suunta
     var wTarget = s.rudder * maxTurnRate(s.v) * steerSign(s);   // rad/s
+    if (wf) { var kn0 = Math.abs(s.v) / KN; wTarget += S.windYawRadPerN * wf.fy / (1 + Math.pow(kn0 / S.windYawFadeKn, 2)); }   // keula kääntyy tuulesta poispäin (sivuvoiman suuntaan)
     var w = s.rate * RAD;
     w += (wTarget - w) * (1 - Math.exp(-dt / S.yawLagSec));
     s.rate = w / RAD;
     var h0 = s.hdg * RAD;
     s.hdg = ((s.hdg + s.rate * dt) % 360 + 360) % 360;
     var hm = h0 + 0.5 * w * dt;
-    var ds = s.v * dt;
-    s.x += Math.sin(hm) * ds;
-    s.y += Math.cos(hm) * ds;
-    s.dist += Math.abs(ds);
+    var ds = s.v * dt, dsl = s.vs * dt;
+    s.x += Math.sin(hm) * ds + Math.cos(hm) * dsl;
+    s.y += Math.cos(hm) * ds - Math.sin(hm) * dsl;
+    s.dist += Math.hypot(ds, dsl);
     // trimmi ja kallistus
     s.trim += (trimTarget(s.v) - s.trim) * (1 - Math.exp(-dt / S.trimLagSec));
     var ac = s.v * w;                                    // keskihakukiihtyvyys, positiivinen oikealle
@@ -342,14 +387,17 @@
   // Käskyn suuntarivi: perän käsky (peruutuksessa) tai suunta
   function orderHeadingText(s) { return s.sternTurn ? sternText(s.sternTurn) : headingText(s.orderHdg); }
   // Kulku (COG) tosisuuntana ja ruutusuuntana: perä edellä liikkuessa 180 astetta keulasuunnan vastaisesti
-  function cogTrue(s) { return norm360(trueHdg(s) + (s.v < -0.01 ? 180 : 0)); }
-  function cogGrid(s) { return norm360(s.hdg + (s.v < -0.01 ? 180 : 0)); }
+  // Tuulessa kulku on nopeusvektorin suunta (keulasuunta + sorron kulma).
+  function driftDeg(s) { return Math.atan2(s.vs || 0, s.v) / RAD; }
+  function cogTrue(s) { return s.vs && Math.hypot(s.v, s.vs) > 0.02 ? norm360(trueHdg(s) + driftDeg(s)) : norm360(trueHdg(s) + (s.v < -0.01 ? 180 : 0)); }
+  function cogGrid(s) { return s.vs && Math.hypot(s.v, s.vs) > 0.02 ? norm360(s.hdg + driftDeg(s)) : norm360(s.hdg + (s.v < -0.01 ? 180 : 0)); }
+  function sog(s) { return Math.hypot(s.v, s.vs || 0); }
 
   var api = {
     KN: KN, SETTINGS: SETTINGS, create: create, stepOnce: stepOnce, advance: advance, stepFrame: stepFrame,
     orderHeading: orderHeading, stepHeadingOrder: stepHeadingOrder, toggleGentle: toggleGentle, orderSpeed: orderSpeed,
     stepSpeedOrder: stepSpeedOrder, orderReverse: orderReverse, orderStern: orderStern, stepSternOrder: stepSternOrder, orderStraight: orderStraight, crashStop: crashStop, halt: halt, trueHdg: trueHdg, wrap180: wrap180,
-    steerSign: steerSign, cogTrue: cogTrue, cogGrid: cogGrid, sternText: sternText, orderHeadingText: orderHeadingText,
+    steerSign: steerSign, cogTrue: cogTrue, cogGrid: cogGrid, sog: sog, windForces: windForces, apparentWind: apparentWind, setWind: setWind, sternText: sternText, orderHeadingText: orderHeadingText,
     resistance: resistance, thrust: thrust, leverForSpeed: leverForSpeed, crashStopDistance: crashStopDistance,
     turnRadius: turnRadius, maxTurnRate: maxTurnRate, trimTarget: trimTarget, headingText: headingText, speedText: speedText
   };
