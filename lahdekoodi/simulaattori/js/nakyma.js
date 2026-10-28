@@ -27,7 +27,9 @@
     fogDensity: 0.000139,     // ilmaperspektiivi: läpäisy exp(-tiheys x etäisyys), 5 km:n päässä kontrasti noin puolet (0,50), 15 km:n päässä noin 0,12, eli kaukomaasto erottuu vielä siluettina (vaihe 3j)
     exposure: 1.0,            // tonemappingin valotus (ACES Filmic)
     windFromDeg: 225, windSpeed: 3,   // tuuli: suunta, josta tuulee (tosisuunta, oletus lounas) ja nopeus (m/s). Vesi lukee nämä, vaihe 4 voi muuttaa asetuksia (setWind)
-    cloudCover: 0.55,         // pilvien peitto 0...1 (kevyt grafiikka ei piirrä pilviä)
+    cloudCover: 0.55,         // pilvien peitto 0...1 (kevyt grafiikka ei piirrä pilviä), sää asettaa (setWeather)
+    weather: 'puoli',         // sää (vaihe 4): 'selkea', 'puoli' tai 'pilvi'. Pilvisyys himmentää päivän auringon ja yön kuun ja tähdet
+    moonMode: 'auto',         // kuu: 'auto' = kalenterin mukaan (vaihe ja korkeus), 'taysi' = täysikuu korkealla, 'ei' = ei kuuta
     maxDist: 8000,
     pixelBudgetMp: 0.55,      // piirtopuskurin pikselien enimmäismäärä (miljoonaa), tarkentuu kuvanopeuden mukaan
     pixelMinMp: 0.1, pixelMaxMp: 1.4,
@@ -106,6 +108,7 @@
   var GLSL_SKY = [
     'uniform vec3 uHorizon; uniform vec3 uZenith; uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uSunGlow;',
     'uniform sampler2D uCloudTex; uniform float uCloud; uniform float uTime; uniform vec3 uCloudLit; uniform vec3 uCloudShade;',
+    'uniform vec3 uMoonDir; uniform float uMoonI; uniform float uStars;',
     'float cloudCov(vec2 uv, float t){',
     '  float n1 = texture2D(uCloudTex, uv + vec2(t * 0.0042, t * 0.0016)).r;',
     '  float n2 = texture2D(uCloudTex, uv * 2.7 + vec2(0.37 - t * 0.0025, 0.11 + t * 0.0012)).r;',
@@ -119,6 +122,9 @@
     '  float s140 = s70 * s70, s280 = s140 * s140, s700 = s280 * s280 * s140;',
     '  c += uSunColor * (s6 * 0.16 + s70 * 0.26 + s700 * 0.30) * uSunGlow;',
     '  c = mix(c, uSunColor * 1.7, smoothstep(0.99992, 0.99997, s) * uSunGlow);',
+    // kuu: kiekko (hieman todellista suurempi, jotta näkyy pienellä ruudulla) ja heikko kehä
+    '  if (uMoonI > 0.0) { float m = max(dot(d, uMoonDir), 0.0); float m2 = m * m, m4 = m2 * m2, m8 = m4 * m4, m16 = m8 * m8, m64 = m16 * m16 * m16 * m16;',
+    '    c += vec3(0.80, 0.84, 0.95) * uMoonI * (smoothstep(0.99993, 0.99996, m) * 0.9 + m64 * m64 * m16 * 0.05); }',
     '  return c;',
     '}',
     // Kevyt versio vesiheijastukseen: yksi pilvitekstuurihaku, ei auringon puoleista valaistusta (aaltoilevassa pinnassa yksityiskohta ei näy)
@@ -135,6 +141,9 @@
     '}',
     'vec3 skyCol(vec3 d){',
     '  vec3 c = skyBase(d);',
+    // tähdet selkeänä yönä: suunnan ruudukosta satunnaiset pisteet, kirkkaus vaihtelee
+    '  if (uStars > 0.0 && d.y > 0.02) { vec3 q = d * 420.0; vec3 cell = floor(q); float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);',
+    '    if (h > 0.9965) { vec3 f = fract(q) - 0.5; float st = smoothstep(0.32, 0.0, length(f)) * (h - 0.9965) * 285.0; c += vec3(0.9, 0.93, 1.0) * st * uStars * smoothstep(0.02, 0.15, d.y); } }',
     '  if (uCloud > 0.0 && d.y > 0.012) {',
     '    vec2 uv = d.xz / (d.y + 0.20) * 0.62;',
     '    float t = uTime, cv = cloudCov(uv, t);',
@@ -273,6 +282,38 @@
     return { elevDeg: el / RAD, azDeg: ((az / RAD) % 360 + 360) % 360 };
   }
 
+  // Kuun paikka ja valaistu osuus (vaihe 4, 28.10.2026). Lyhennetty kuurata (päätermit), tarkkuus noin 1 aste, riittää valaistukseen ja kiekon paikkaan.
+  // Valaistu osuus auringon ja kuun kulmaerosta (sama kaava kuin SunCalc-kirjastossa).
+  function moonPosition(ms, latDeg, lonDeg) {
+    var d = ms / 86400000 + 2440587.5 - 2451545.0, eps = 23.4397 * RAD;
+    var L = (218.316 + 13.176396 * d) * RAD, M = (134.963 + 13.064993 * d) * RAD, F = (93.272 + 13.229350 * d) * RAD;
+    var l = L + 6.289 * RAD * Math.sin(M), b = 5.128 * RAD * Math.sin(F), dist = 385001 - 20905 * Math.cos(M);
+    var ra = Math.atan2(Math.sin(l) * Math.cos(eps) - Math.tan(b) * Math.sin(eps), Math.cos(l)), dec = Math.asin(Math.sin(b) * Math.cos(eps) + Math.cos(b) * Math.sin(eps) * Math.sin(l));
+    var gmst = (18.697374558 + 24.06570982441908 * d) % 24; if (gmst < 0) gmst += 24;
+    var ha = (gmst * 15 + lonDeg) * RAD - ra, lat = latDeg * RAD;
+    var el = Math.asin(Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.cos(ha));
+    var az = Math.atan2(-Math.sin(ha), Math.tan(dec) * Math.cos(lat) - Math.sin(lat) * Math.cos(ha));
+    // aurinko samalla hetkellä (rektaskensio ja deklinaatio)
+    var g = (357.528 + 0.9856003 * d) * RAD, lam = (280.460 + 0.9856474 * d) * RAD + 1.915 * RAD * Math.sin(g) + 0.020 * RAD * Math.sin(2 * g);
+    var sra = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam)), sdec = Math.asin(Math.sin(eps) * Math.sin(lam)), sdist = 149598000;
+    var phi = Math.acos(Math.max(-1, Math.min(1, Math.sin(sdec) * Math.sin(dec) + Math.cos(sdec) * Math.cos(dec) * Math.cos(sra - ra))));
+    var inc = Math.atan2(sdist * Math.sin(phi), dist - sdist * Math.cos(phi));
+    var waxing = Math.sin(ra - sra) > 0;
+    return { elevDeg: el / RAD, azDeg: ((az / RAD) % 360 + 360) % 360, illum: (1 + Math.cos(inc)) / 2, waxing: waxing };
+  }
+
+  // Yön valoisuus (vaihe 4): kuu (vaihe x korkeus, pilvet peittävät), tähdet selkeällä ja Tampereen valojen hehku pilvien pohjasta.
+  // nl on suhteessa aiempaan oletusyöhön (0,6 = ennallaan): selkeä kuuton noin 0,26, pilvinen kuuton noin 0,12, selkeä täysikuu noin 1,0.
+  var WEATHER = { selkea: 0.15, puoli: 0.55, pilvi: 0.95 };
+  function nightEnv(ms, cloud, moonMode) {
+    var mp = moonPosition(ms, 61.5, 23.77), o = { elevDeg: mp.elevDeg, azDeg: mp.azDeg, illum: mp.illum, waxing: mp.waxing, show: mp.elevDeg > -1 ? 1 : 0 };
+    if (moonMode === 'ei') { o.illum = 0; o.show = 0; o.elevDeg = -10; }
+    else if (moonMode === 'taysi') { o.illum = 1; o.show = 1; if (o.elevDeg < 25) o.elevDeg = 25; }
+    o.light = o.illum * smooth01(o.elevDeg / 15) * (o.show ? 1 : 0);
+    var moonLight = o.light * (1 - 0.85 * cloud), nl = Math.max(0.06, 0.18 * (1 - cloud) + 0.04 + 0.04 * cloud + 0.85 * moonLight);
+    return { nl: nl, moon: o, moonLight: moonLight, cloud: cloud };
+  }
+
   function create(container, opts) {
     opts = opts || {};
     var S = {}; for (var k in SETTINGS) S[k] = SETTINGS[k];
@@ -295,6 +336,7 @@
     // ---- valot, taivas, vesi ----
     var hemi = new THREE.HemisphereLight(0xdfeaf5, 0x6f7a5c, 0.62); scene.add(hemi);
     var sunL = new THREE.DirectionalLight(0xfff2d8, 0.62); scene.add(sunL); scene.add(sunL.target);
+    var moonL = new THREE.DirectionalLight(0xb9c8ff, 0); scene.add(moonL); scene.add(moonL.target);   // kuunvalo (vaihe 4), aina näkymässä, ettei varjostimia käännetä uudelleen
     var cloudTex = makeCloudTexture();
     var U = {
       uHorizon: { value: new THREE.Color('#cfe0ee') }, uZenith: { value: new THREE.Color('#4a86c7') },
@@ -302,6 +344,7 @@
       uTime: { value: 0 }, uDeep: { value: new THREE.Color('#1c4c66') }, uFogColor: { value: new THREE.Color('#cfe0ee') }, uFogDensity: { value: S.fogDensity }, uDay: { value: 1 },
       uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') },
       // valonheitin (vaihe 4, valot3d.js): paikka ja suunta maailmassa, keilan kosini ja päällä (1) tai pois (0)
+      uMoonDir: { value: new THREE.Vector3(0, -1, 0) }, uMoonI: { value: 0 }, uStars: { value: 0 },
       uSpotPos: { value: new THREE.Vector3() }, uSpotDir: { value: new THREE.Vector3(1, 0, 0) }, uSpotCos: { value: 0.995 }, uSpotI: { value: 0 }, uSpotPos2: { value: new THREE.Vector3() }, uSpotDir2: { value: new THREE.Vector3(1, 0, 0) }, uSpotI2: { value: 0 }
     };
     var sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), skyMaterial(U));
@@ -326,7 +369,7 @@
       quality = q === 'light' ? 'light' : 'full';
       var full = quality === 'full';
       water.material = full ? waterFull : waterLight; if (wmask) wmask.setMaterial(water.material);
-      U.uCloud.value = full ? S.cloudCover : 0;
+      U.uCloud.value = full ? S.cloudCover : 0;   // (setWeather asettaa saman)
       if (terrain && terrain.setQuality) terrain.setQuality(quality);
     }
 
@@ -461,7 +504,7 @@
 
     // ---- tila ----
     var gaze = 0, gazeCmd = 0, w = 1, h = 1, dpr = Math.min(root.devicePixelRatio || 1, 3), pixelMp = S.pixelBudgetMp;
-    var sun = { elevDeg: 45, azDeg: 180 }, sunDirW = new THREE.Vector3(0, 1, 0), simMs = Date.now();
+    var sun = { elevDeg: 45, azDeg: 180 }, sunDirW = new THREE.Vector3(0, 1, 0), simMs = Date.now(), moonDirW = new THREE.Vector3(0, -1, 0), night = null;
     var frames = [], lastT = 0, bobT = 0, camPitchDeg = 0;
     var extra = [];     // lisäobjektit, joilla on rebase()
     // kiikari: tila (päällä, katseen ja pystykulman talteenotto) ja käden tärinä (kaksi vaimennettua värähtelijää, joita satunnaisliike ajaa)
@@ -546,8 +589,34 @@
       sunL.color.copy(lin('#' + m.sun.getHexString()));
       sunL.intensity = m.sunI * smooth01((e + 2) / 6);
       hemi.color.copy(m.hemiSky); hemi.groundColor.copy(m.hemiGnd); hemi.intensity = m.hemiI;
-      scene.fog.color.copy(m.hor);
-      horColor.copy(m.hor); if (!ov.on) renderer.setClearColor(m.hor, 1);
+      // yön pimeys (vaihe 4): kuun vaihe ja korkeus, tähdet ja kaupungin hehku pilvien mukaan. Valoisuus nl suhteessa aiempaan oletusyöhön (0,6 = ennallaan)
+      var ne = nightEnv(ms, S.cloudCover, S.moonMode), cl = ne.cloud, mo = ne.moon, moonLight = ne.moonLight, nl = ne.nl;
+      var nightW = smooth01((-e - 1) / 8), kk = 1 + (Math.min(1.4, nl / 0.6) - 1) * nightW, kc = 1 + (Math.max(0.1, Math.min(1.25, nl / 0.6)) - 1) * nightW;
+      hemi.intensity = m.hemiI * kk;
+      U.uHorizon.value.multiplyScalar(kc); U.uZenith.value.multiplyScalar(kc); U.uFogColor.value.copy(U.uHorizon.value);
+      U.uCloudLit.value.multiplyScalar(kc); U.uCloudShade.value.multiplyScalar(kc);
+      // pilvisyys himmentää päivän auringon ja harmaannuttaa taivaan
+      sunL.intensity *= 1 - 0.75 * Math.max(0, cl - 0.3) / 0.7;
+      var gr = smooth01((cl - 0.4) / 0.5) * day * 0.7;
+      if (gr > 0) [U.uHorizon.value, U.uZenith.value].forEach(function (c) { var y = (c.r + c.g + c.b) / 3 * 0.88; c.lerp(new THREE.Color(y, y, y * 1.02), gr); });
+      moonL.intensity = 0.16 * moonLight * nightW;
+      if (mo.elevDeg > -2) {
+        var ma = P.trueToGrid(mo.azDeg, 0, 0) * RAD, mce = Math.cos(mo.elevDeg * RAD);
+        moonDirW.set(Math.sin(ma) * mce, Math.sin(mo.elevDeg * RAD), -Math.cos(ma) * mce).normalize();
+      } else moonDirW.set(0, -1, 0);
+      moonL.position.copy(moonDirW).multiplyScalar(1000); U.uMoonDir.value.copy(moonDirW);
+      U.uMoonI.value = mo.elevDeg > -1 ? (0.25 + 0.75 * mo.illum) * mo.show * (0.35 + 0.65 * nightW) : 0;
+      U.uStars.value = nightW * (1 - smooth01((cl - 0.25) / 0.6)) * (1 - 0.5 * Math.min(1, moonLight * 1.5));
+      night = { nl: nl, moon: mo, cloud: cl };
+      scene.fog.color.copy(U.uHorizon.value);
+      horColor.copy(U.uHorizon.value); if (!ov.on) renderer.setClearColor(horColor, 1);
+    }
+    // sää: 'selkea', 'puoli' tai 'pilvi' (pilvien peitto) ja kuu: 'auto', 'taysi' tai 'ei'
+    function setWeather(w, moon) {
+      if (w && WEATHER[w] != null) { S.weather = w; S.cloudCover = WEATHER[w]; }
+      if (moon) S.moonMode = moon;
+      U.uCloud.value = quality === 'full' ? S.cloudCover : 0;
+      setSimTime(simMs);
     }
     function sunScreen() {
       // auringon paikka kuvassa ja katseen suunta: päivän sumennus vastavalossa
@@ -648,7 +717,7 @@
       scene: scene, camera: camera, renderer: renderer, rig: rig, boat: runko, terrain: terrain, aids: aids3d, landmarks: landmarks, piers: piers, canvas: canvas, settings: S, uniforms: U, veil: veil,
       setSize: setSize, render: render, setSimTime: setSimTime, setGaze: setGaze, getGaze: getGaze, stepGaze: stepGaze, getGazeNow: function () { return gaze; }, hfov: function () { return 2 * Math.atan(Math.tan(camera.fov * RAD / 2) * camera.aspect) / RAD; }, setHfov: function (d) { S.hfovDeg = d; updateFov(); }, setSeat: setSeat, setEye: setEye,
       setPixelBudget: setPixelBudget, getPixelBudget: getPixelBudget, rendererStats: rendererStats, frameStats: frameStats, resetFrameStats: resetFrameStats,
-      rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; },
+      rebase: rebase, addExtra: addExtra, sunScreen: sunScreen, sun: function () { return sun; }, night: function () { return night; }, setWeather: setWeather, weather: function () { return { weather: S.weather, moon: S.moonMode, cloud: S.cloudCover }; },
       setFree: setFree, clearFree: clearFree,
       setOverlay: setOverlay, isOverlay: function () { return ov.on; }, setFogKm: setFogKm, getFogKm: function () { return ov.fogKm; }, setCalib: setCalib, getCalib: function () { return { dHeadingDeg: ov.cal.dHeadingDeg, dPitchDeg: ov.cal.dPitchDeg, tanScale: ov.cal.tanScale }; },
       vfovRequested: function () { return reqVfov; }, eyeAboveWaterM: function () { return eyeZ() - S.waterlineZ; }, overlayHide: overlayHide, wmask: wmask, overlayMat: ov.mat, overlayDome: ov.dome, overlaySettings: ov,
@@ -712,6 +781,6 @@
     return info;
   }
 
-  var api = { create: create, SETTINGS: SETTINGS, sunPosition: sunPosition, drawCommandMarker: drawCommandMarker, drawBinoMask: drawBinoMask };
+  var api = { create: create, SETTINGS: SETTINGS, sunPosition: sunPosition, moonPosition: moonPosition, nightEnv: nightEnv, WEATHER: WEATHER, drawCommandMarker: drawCommandMarker, drawBinoMask: drawBinoMask };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Nakyma = api;
 })(typeof window !== 'undefined' ? window : globalThis);

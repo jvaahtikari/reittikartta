@@ -18,7 +18,7 @@
 
   var G = {
     S: null, view: null, pl: null, route: null, auto: null, rec: null, mode: 'start', main: 'plot', origin: { e: 0, n: 0 },
-    ex: 'h1', dir: 'fwd', stored: [], showRk: { legBrg: true, turnTicks: true }, targetKn: 30, eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
+    ex: 'h1', dir: 'fwd', stored: [], showRk: { legBrg: true, turnTicks: true }, targetKn: 30, weather: 'puoli', moon: 'auto', eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
     plotterOn: true, lastPlotT: 0, lastTrailT: 0, trail: [], gazeKey: 0, lastMerkitLoad: { x: 1e9, y: 1e9 }, lastVis: -1e9,
     speedSteps: [1, 2, 5, 10], speedIdx: 0, seated: false, ground: null, lastConvT: -1e9, loadedLandmarks: false, ready: false,
     layout: { land: false, wide: false, tri: false, tp: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, finishedAt: null,
@@ -41,13 +41,14 @@
       if (o.evOn != null) G.evOn = !!o.evOn;
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
       if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
+      if (o.saa === 'selkea' || o.saa === 'puoli' || o.saa === 'pilvi') G.weather = o.saa; if (o.kuu === 'auto' || o.kuu === 'taysi' || o.kuu === 'ei') G.moon = o.kuu;
       if (o.googleSumu != null && root.Google3D.SETTINGS.fogLevelsKm.indexOf(Number(o.googleSumu)) >= 0) G.fogKm = Number(o.googleSumu);
       // Satamatila (28.10.2026 oletus 'google'): tallennettu arvo luetaan vain, jos käyttäjä on valinnut sen itse valikosta. Aiemmin arvo tallentui aina, joten vanha 'oma' ohittaisi uuden oletuksen.
       if (o.googleSatamaValittu && (o.googleSatama === 'oma' || o.googleSatama === 'google')) { G.satama = o.googleSatama; G.satamaValittu = true; }
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm, googleSatama: G.satama, googleSatamaValittu: !!G.satamaValittu })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, saa: G.weather, kuu: G.moon, googleSumu: G.fogKm, googleSatama: G.satama, googleSatamaValittu: !!G.satamaValittu })); } catch (e) {}
   }
   G.satama = root.Google3D.SETTINGS.googleSatama === 'google' ? 'google' : 'oma';
   loadPrefs();
@@ -164,6 +165,27 @@
       var hr = new Date(ms + helsinkiOffsetMin(ms) * 60000).getUTCHours(), after = hr >= 12;
       el.textContent = (after ? 'Auringonlaskun jälkeen' : 'Ennen auringonnousua') + (sun.elevDeg < -6 ? ', yö. ' : ', hämärä. ') + 'Loistot palavat valotunnustensa mukaan, plotteri on yönäytöllä ja valonheittimet ovat käytettävissä (auringon korkeus ' + Math.round(sun.elevDeg) + '°). Ajo alkaa omalla näkymällä, koska Google 3D on päivänvalokuva.';
     } else el.textContent = (sun.elevDeg < 3 ? 'Hämärä alkaa, loistot syttyvät. ' : 'Päivänäkymä. ') + 'Auringon korkeus ' + Math.round(sun.elevDeg) + '°. Näkymä seuraa kelloa: yö tulee ajon aikana, kun aurinko laskee.';
+    updateWxHint(ms);
+  }
+  // Sää ja kuu: kuun vaihe ja korkeus valitulla hetkellä sekä yön pimeysaste (Nakyma.nightEnv)
+  function nightLabel(nl) { return nl >= 0.7 ? 'valoisa kuutamo' : nl >= 0.4 ? 'hämärä yö' : nl >= 0.18 ? 'pimeä yö' : 'hyvin pimeä yö'; }
+  function updateWxHint(ms) {
+    var el = $('wxHint'); if (!el) return;
+    var N = root.Nakyma, pre = 'Nyt: ';
+    // päivällä kerrotaan tulevan yön tilanne: iltapäivällä klo 22, aamupäivällä klo 4 (Suomen aikaa)
+    if (N.sunPosition(ms, 61.5, 23.77).elevDeg > -6) {
+      var off = helsinkiOffsetMin(ms) * 60000, loc = new Date(ms + off), pm = loc.getUTCHours() >= 12;
+      ms = Date.UTC(loc.getUTCFullYear(), loc.getUTCMonth(), loc.getUTCDate(), pm ? 22 : 4) - off; pre = pm ? 'Illalla klo 22: ' : 'Aamuyöllä klo 4: ';
+    }
+    var ne = N.nightEnv(ms, N.WEATHER[G.weather], G.moon), mo = ne.moon, t;
+    if (G.moon === 'ei') t = 'Ei kuuta.';
+    else if (G.moon === 'taysi') t = 'Täysikuu korkealla.';
+    else {
+      var pct = Math.round(mo.illum * 100);
+      t = 'Kuu ' + pct + ' %' + (pct >= 97 ? ' (täysikuu)' : pct <= 3 ? ' (uusikuu)' : mo.waxing ? ', kasvava' : ', vähenevä') + (mo.elevDeg > 0 ? ', ' + Math.round(mo.elevDeg) + '° korkeudella.' : ', laskenut tai ei vielä noussut.');
+    }
+    var nlab = nightLabel(ne.nl);
+    el.textContent = pre + nlab.charAt(0).toUpperCase() + nlab.slice(1) + '. ' + t + (G.weather === 'pilvi' ? ' Pilvet peittävät kuun ja tähdet.' : G.weather === 'selkea' ? ' Tähdet näkyvät.' : '');
   }
   // Google Maps -avain: luetaan vain Vercelin ympäristömuuttujasta (GOOGLE_API, reitti /api/google), aloitusnäytössä ei ole avainkenttää (28.10.2026)
   function updateSceneHint() {
@@ -207,6 +229,10 @@
     segInit('segScene', function (v) { G.scene = v; try { localStorage.setItem('sim.maisema', v); } catch (e) {} updateSceneHint(); });
     G.dateStr = todayHelsinki(); $('dateIn').value = G.dateStr;
     segInit('segClock', function (v) { G.clockMode = v; updateClockHint(); });
+    // sää ja kuu (vaihe 4): yön pimeysaste
+    ['segWeather', 'segMoon'].forEach(function (id) { Array.prototype.forEach.call($(id).children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === (id === 'segWeather' ? G.weather : G.moon)); }); });
+    segInit('segWeather', function (v) { G.weather = v; savePrefs(); updateClockHint(); });
+    segInit('segMoon', function (v) { G.moon = v; savePrefs(); updateClockHint(); });
     $('clockIn').addEventListener('input', function () { G.clockStr = $('clockIn').value || '12:00'; updateClockHint(); });
     $('dateIn').addEventListener('input', function () { G.dateStr = $('dateIn').value || todayHelsinki(); updateClockHint(); });
     updateClockHint();
@@ -556,7 +582,7 @@
     G.rec.t0 = 0;
     G.auto = qs.get('auto') ? H.createAuto(G.route, Number(qs.get('auto')), G.origin) : null;
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
-    G.view.setSimTime(G.S.clockMs);
+    G.view.setWeather(G.weather, G.moon); G.view.setSimTime(G.S.clockMs);
     G.nightG3 = false; G.nightOff = false;
     G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; G.spotSel = null; if (G.valot) { ['helm', 'nav'].forEach(function (id) { G.valot.asetaHeitin(id, false); G.valot.asetaSuunta(id, 0); }); spotUi(); }
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
@@ -1359,7 +1385,7 @@
     if (!isHelm() || !G.crew.link || !G.S) return;
     var rex = G.ex !== 'h1' && G.ex !== 'free' ? G.stored.filter(function (x) { return x.id === G.ex; })[0] || null : null;
     G.crew.logSent = 0;
-    G.crew.link.send('aloita', { id: G.crew.runId, ex: G.ex, rex: rex, dir: G.dir, targetKn: G.targetKn, clockMs: G.S.clockMs });
+    G.crew.link.send('aloita', { id: G.crew.runId, ex: G.ex, rex: rex, dir: G.dir, targetKn: G.targetKn, clockMs: G.S.clockMs, wx: G.weather, moon: G.moon });
   }
   function crewSnap() { var S = G.S, o = {}; for (var k in S) { var v = S[k]; if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') o[k] = v; } return o; }
   function crewSendState(now) {
@@ -1412,7 +1438,7 @@
     var c = G.crew;
     if (!d || (d.id === c.runId && (G.mode === 'run' || G.mode === 'loading'))) return;
     c.started = true; clearTimeout(c.helloT); c.runId = d.id;
-    G.remoteEx = d.rex || null; G.ex = d.ex || 'h1'; G.dir = d.dir === 'rev' ? 'rev' : 'fwd'; if (d.targetKn) G.targetKn = Number(d.targetKn); G.crewClock = d.clockMs;
+    G.remoteEx = d.rex || null; G.ex = d.ex || 'h1'; G.dir = d.dir === 'rev' ? 'rev' : 'fwd'; if (d.targetKn) G.targetKn = Number(d.targetKn); G.crewClock = d.clockMs; if (d.wx) G.weather = d.wx; if (d.moon) G.moon = d.moon;
     startRun();
   }
   function onCrewState(d) {
