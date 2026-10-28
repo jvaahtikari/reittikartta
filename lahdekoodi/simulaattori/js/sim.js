@@ -130,13 +130,12 @@
     return G.dir === 'rev' ? H.reversed(ex) : ex;
   }
   function updateBudgetHint() {
-    var h = $('budgetHint'), info = $('exInfo'), ex = currentEx();
-    $('fldDir').hidden = !ex; $('fldSpeed').hidden = !(ex && ex.builtin);
-    if (!ex) { h.textContent = ''; info.textContent = 'Alus lähtee Mustalahdesta levosta, ei reittiä. Purku näyttää ajetun matkan, nopeudet, komennot ja etäisyydet rantaan ja matalikkoon.'; return; }
+    var info = $('exInfo'), ex = currentEx();
+    $('fldDir').hidden = !ex;
+    if (!ex) { info.textContent = 'Alus lähtee Mustalahdesta levosta, ei reittiä. Purku näyttää ajetun matkan, nopeudet, komennot ja etäisyydet rantaan ja matalikkoon.'; return; }
     var rt = H.buildRoute(ex), sec = rt.total / (G.targetKn * KN);
-    if (ex.builtin) { info.textContent = ''; h.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).'; }
+    if (ex.builtin) info.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Alkaa levosta. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).';
     else {
-      h.textContent = '';
       info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Alkaa levosta. Aikabudjetti ' + fnum(ex.startKn, 0) + ' kn mukaan (' + (ex.speedFromRoute ? 'reitin nopeus' : 'oletus') + '): ' + H.mmss(rt.total / (ex.startKn * KN)) + '.';
     }
   }
@@ -199,7 +198,6 @@
     $('gpxClear').addEventListener('click', function () { H.clearImported(); refreshStored(); gpxMsg('Tuodut reitit poistettu.'); });
     root.addEventListener('storage', function (e) { if (G.mode === 'start' && (!e.key || e.key === H.STORE_KEY)) refreshStored(); });
     root.addEventListener('focus', function () { if (G.mode === 'start') refreshStored(); }); root.addEventListener('pageshow', function () { if (G.mode === 'start') refreshStored(); });
-    segInit('segSpeed', function (v) { G.targetKn = Number(v); updateBudgetHint(); });
     segInit('segEye', function (v) { G.eye = v; });
     segInit('segDisp', function (v) { G.disp = v; updateDispHint(); });
     // Maisema (27.10.2026): Google 3D oletuksena, kun avain on saatavilla. Valinta muistetaan (sim.maisema).
