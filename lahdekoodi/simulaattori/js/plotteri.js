@@ -729,6 +729,23 @@
       canvas.style.cursor = on ? 'crosshair' : '';
       updateReadouts(); if (S.has) draw();
     }
+    // Miehistötila (28.10.2026): navigoijan plotterin näkymä ruorimiehen plotterille. Plot-koordinaatit ovat samat kaikilla laitteilla (kiinteä Mercator-origo).
+    function mirrorState() {
+      return { r: Math.round(rangeNm * 1e4) / 1e4, f: follow, a: follow ? null : [Math.round(anc.x * 10) / 10, Math.round(anc.y * 10) / 10], hu: headUp, ev: evOn,
+        e: Math.round(ebl * 100) / 100, v: Math.round(vrm * 1e4) / 1e4, h: harp.on ? harp.pts.map(function (p) { return [Math.round(p.X * 10) / 10, Math.round(p.Y * 10) / 10, p.lat, p.lon]; }) : null,
+        n: showNotes, p: showPasses, vi: vecIdx };
+    }
+    function applyMirror(o) {
+      if (!o) return;
+      rangeNm = clampRange(o.r); follow = !!o.f; if (!follow && o.a) { anc.x = o.a[0]; anc.y = o.a[1]; }
+      if (o.hu != null && !opts.fixedHeadUp) headUp = !!o.hu;
+      evOn = !!o.ev; ebl = norm360(Number(o.e) || 0); vrm = Math.max(0.01, Math.min(6, Number(o.v) || 0.5));
+      harp.on = !!o.h; harp.pts = o.h ? o.h.map(function (q) { return { X: q[0], Y: q[1], lat: q[2], lon: q[3] }; }) : []; harp.cur = null;
+      showNotes = o.n !== false; showPasses = o.p !== false; if (o.vi != null) vecIdx = ((o.vi % VEC_SEC.length) + VEC_SEC.length) % VEC_SEC.length;
+      var pn = container.parentNode, set = function (id, on) { var b = pn && pn.querySelector('#' + id); if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+      set('harpBtn', harp.on); set('notesBtn', showNotes); set('passBtn', showPasses);
+      updateReadouts(); dirty = true; if (S.has) draw();
+    }
     function harpUndo() { if (harp.on && harp.pts.length) { harp.pts.pop(); updateReadouts(); if (S.has) draw(); } }
     // DOM: oma alus, lisämerkit, lukemat
     function placeOverlay() {
@@ -942,7 +959,7 @@
       setRasterVisible: setRasterVisible, isRaster: function () { return rasterMode; }, redraw: redraw, rebase: rebase, ready: ready,
       setHeadUp: setHeadUp, isHeadUp: function () { return headUp; },
       heading: function () { return S.hdgTrue; },
-      setClock: setClock, setHarp: setHarp, harpUndo: harpUndo, isHarp: function () { return harp.on; }, setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
+      setClock: setClock, mirrorState: mirrorState, applyMirror: applyMirror, setHarp: setHarp, harpUndo: harpUndo, isHarp: function () { return harp.on; }, setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
       setVectorIdx: setVecIdx, getVecIdx: function () { return vecIdx; }, cycleVector: cycleVec, vectorSec: function () { return VEC_SEC[vecIdx]; },
       toScreen: function (x, y) { var p = worldToPlot(x, y); return toScreen(p[0], p[1]); },
       canvas: canvas, destroy: destroy, view: function () { return { z: view.z, mpp: view.mpp, sx: view.sx, sy: view.sy, ax: view.ax, ay: view.ay, w: w, h: h, follow: follow, rangeNm: rangeNm }; },

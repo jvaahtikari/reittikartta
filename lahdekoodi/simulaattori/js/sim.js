@@ -97,6 +97,7 @@
     var rk = H.listStored(), sig = function (e) { return e.nimi + '|' + e.route.map(function (q) { return Math.round(q.e) + ',' + Math.round(q.n); }).join(';'); }, have = {};
     rk.forEach(function (e) { have[sig(e)] = true; });
     G.stored = rk.concat(H.listImported().filter(function (e) { return !have[sig(e)]; })); G.showRk = H.storedShow();
+    if (G.remoteEx && isNav()) G.stored = G.stored.filter(function (x) { return x.id !== G.remoteEx.id; }).concat([G.remoteEx]);   // miehistötila: ruorimiehen reitti
     if (G.ex !== 'h1' && G.ex !== 'free' && !G.stored.some(function (x) { return x.id === G.ex; })) G.ex = 'h1';
     renderExList();
   }
@@ -213,6 +214,9 @@
     updateClockHint();
     initGoogleKey();
     $('startBtn').addEventListener('click', startRun);
+    segInit('segCrew', setCrewRole);
+    $('crewJoin').addEventListener('click', crewJoin);
+    $('crewIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); crewJoin(); } });
     var dq = qs.get('naytot');
     if (dq === 'plot' || dq === 'radar' || dq === 'both') {
       G.disp = dq;
@@ -486,6 +490,7 @@
 
   // ---------- peli: aloitus ----------
   function startClockMs() {
+    if (isNav() && G.crewClock) return G.crewClock;   // miehistötila: ruorimiehen kellonaika
     if (qs.get('t')) return Date.parse(qs.get('t'));
     if (G.clockMode === 'real') return Date.now();
     return customClockMs();
@@ -510,6 +515,10 @@
   function startRun() {
     refreshStored();
     G.ex = exFromParam(qs.get('harjoitus')) || G.ex;
+    // miehistötila: ruorimies näkee ruorimiehen silmäpisteestä ja molemmat mittarit (navigoijan valinnan mukaan), navigoija navigoijan paikalta
+    if (isHelm()) { G.eye = 'helm'; G.disp = 'both'; G.crew.runId = Math.random().toString(36).slice(2, 8); }
+    if (isNav()) { G.eye = 'nav'; G.crew.recT = -1e9; G.crew.snap = G.crew.prev = null; }
+    crewGameClass();
     if (qs.get('suunta')) G.dir = qs.get('suunta') === 'kaanteinen' ? 'rev' : 'fwd';
     if (qs.get('nopeus')) G.targetKn = Number(qs.get('nopeus'));
     $('start').hidden = true; $('debrief').hidden = true; $('game').hidden = false; $('loading').hidden = false;
@@ -564,6 +573,7 @@
     G.view.rebase(); G.pl.rebase();
     startBoats();
     G.t0load = performance.now(); G.lastT = performance.now();
+    if (isHelm()) crewSendStart();
     requestAnimationFrame(loop);
   }
 
@@ -642,7 +652,7 @@
   function logCustom(kind, value) {
     var S = G.S; S.cmdLog.push({ t: S.t, clockMs: S.clockMs, kind: kind, value: value, x: S.x, y: S.y, hdg: S.hdg, hdgTrue: L.trueHdg(S), v: S.v });
   }
-  function canCmd() { return G.mode === 'run' && !G.frozen; }
+  function canCmd() { return G.mode === 'run' && !G.frozen && !isNav(); }   // miehistötilassa komennot ovat ruorimiehellä
   function cmdHeading(dir, long) {
     if (!canCmd()) return;
     if (G.S.orderSpeedKn < 0) L.stepSternOrder(G.S, dir);   // peruutuksessa käsky annetaan perän suuntana: Perä vasen (dir -1) tai Perä oikea (dir +1)
@@ -725,8 +735,11 @@
     });
     $('mHelp').addEventListener('click', function () { $('helpText').hidden = !$('helpText').hidden; });
     $('groundBtn').addEventListener('click', function () { endRun(G.collision ? 'collision' : 'ground'); });
-    $('dbAgain').addEventListener('click', function () { $('debrief').hidden = true; startRun(); });
-    $('dbStart').addEventListener('click', function () { $('debrief').hidden = true; $('game').hidden = true; $('start').hidden = false; G.mode = 'start'; });
+    $('dbAgain').addEventListener('click', function () {
+      if (isNav()) { $('debrief').hidden = true; $('game').hidden = true; $('start').hidden = false; G.mode = 'start'; crewStatus('Odotetaan, että ruorimies aloittaa uuden ajon.'); crewHello(); return; }
+      $('debrief').hidden = true; startRun();
+    });
+    $('dbStart').addEventListener('click', function () { $('debrief').hidden = true; $('game').hidden = true; $('start').hidden = false; G.mode = 'start'; if (isNav()) crewHello(); });
     // katseen kääntö vetämällä 3D-näkymässä (hiiri ja yksi sormi). Kosketuksen lyhyt napautus palauttaa katseen eteen, hiirellä tuplaklikkaus.
     var v3 = $('v3'), drag = null;
     function gazeActive() { return G.layout.wide || G.main === '3d'; }
@@ -804,6 +817,9 @@
     doc.addEventListener('keydown', function (e) {
       if (G.mode !== 'run' || e.target.tagName === 'INPUT') return;
       var k = e.key, handled = true;
+      // miehistötila: ruorimiehen mittarit peilaavat navigoijaa (ei säätöjä), navigoijalla ei ole komentoja, taukoa eikä aikakerrointa
+      if (isHelm() && (k.length === 1 && ',.[]+=-_mMcCvVrRoO'.indexOf(k) >= 0 || k === 'Escape' || k === 'Delete' || k === 'Backspace')) return;
+      if (isNav() && (/^Arrow/.test(k) || k.length === 1 && ' lLpP1250'.indexOf(k) >= 0)) return;
       var radarKeys = ',.[]+=-_oO'.indexOf(k) >= 0 && k.length === 1;
       if (radarKeys && G.radar && (e.target.id === 'radar' || radarKeyTarget() || ((k === 'o' || k === 'O') && G.radarShown))) { if (e.target.id !== 'radar') { if (G.radar.nappain(k, e.shiftKey)) e.preventDefault(); } return; }   // tutkan ruutu on aktiivinen: tutka käsittelee näppäimen (kohdistettuna tutkalla se on jo käsitellyt sen itse)
       if (k === 'ArrowLeft') cmdHeading(-1, e.shiftKey);
@@ -1109,6 +1125,7 @@
     Array.prototype.forEach.call(doc.querySelectorAll('.cb.sp'), function (b) { b.classList.toggle('cur', Number(b.getAttribute('data-kn')) === S.orderSpeedKn); });
     $('gazeBtn').hidden = !(G.layout.wide || G.main === '3d') || Math.abs(G.view.getGaze()) < 1;
     drawCompass();
+    if (G.crew.role !== 'solo') updateCrewBadge();
   }
   function maybeLoadAids() {
     var S = G.S;
@@ -1155,8 +1172,9 @@
     }
     if (G.mode === 'run') {
       if (G.gazeKey) v.setGaze(v.getGaze() + G.gazeKey * 90 * dtReal * v.gazeSens());
-      stepSim(dtReal);
-      maybeLoadAids(); maybeLoadBoats(); maybeRebase();
+      if (isNav()) crewApply(dtReal); else stepSim(dtReal);
+      maybeLoadAids(); maybeLoadBoats(); if (!isNav()) maybeRebase();
+      if (isHelm()) crewSendState(now); else if (isNav()) crewSendInstr(now);
     }
     v.terrain.tick(G.mode === 'run' ? 4 : 8);
     // 3D piirretään joka kuvalla, kun se on päänäkymä, ja joka toisella pienenä ikkunana
@@ -1193,6 +1211,148 @@
     if (avg > 45) v.setPixelBudget(pb * 0.8); else if (avg < 22) v.setPixelBudget(pb * 1.12);
   }
 
+
+  // ---------- miehistötila (kaksinpeli, 28.10.2026) ----------
+  // Yksi alus, kaksi laitetta. Ruorimies (isäntä) laskee aluksen liikkeen, hänellä ovat komennot, tauko ja aikakerroin, ja hänen plotterinsa ja tutkansa
+  // näyttävät navigoijan näkymän ilman säätöjä. Navigoija saa aluksen tilan noin 5 kertaa sekunnissa (liike tasoitetaan viestien välillä), hänellä ovat
+  // plotteri ja tutka säätöineen, ja komennot annetaan puheella. Reitti, kellonaika ja ajon alku ja loppu tulevat ruorimieheltä. Yhteys: miehisto.js.
+  G.crew = { role: 'solo', code: '', link: null, conn: '', peer: false, lastRx: 0, snap: null, snapT: 0, prev: null, prevT: 0, recT: -1e9, logSent: 0,
+    lastStateT: 0, lastInstrT: 0, lastInstrFull: 0, sentInstr: '', started: false, runId: '', helloT: null };
+  function isNav() { return G.crew.role === 'nav'; }
+  function isHelm() { return G.crew.role === 'helm'; }
+  function crewStatus(t) { var el = $(isHelm() ? 'crewHelmSt' : 'crewNavSt'); if (el) setText(el, t); updateCrewBadge(); }
+  function crewOpen(code) {
+    if (G.crew.link) G.crew.link.close();
+    G.crew.code = code; G.crew.peer = false; G.crew.lastRx = 0;
+    G.crew.link = root.Miehisto.open(code, G.crew.role, onCrewMsg, function (st, x) {
+      G.crew.conn = st;
+      if (st === 'yhdistetty') {
+        if (isNav()) { crewStatus('Yhdistetty istuntoon ' + code + '. Odotetaan, että ruorimies aloittaa ajon.'); crewHello(); }
+        else crewStatus('Odotetaan navigoijaa. Kerro koodi navigoijalle. Voit aloittaa ajon jo nyt.');
+      } else if (st === 'virhe') crewStatus('Yhteysvirhe' + (x ? ': ' + String(x).replace(/\.$/, '') : '') + '.');
+      else if (st === 'yhdistetaan') crewStatus('Yhdistetään…');
+    });
+  }
+  function crewHello() {
+    clearTimeout(G.crew.helloT);
+    if (!isNav() || !G.crew.link) return;
+    G.crew.link.send('hei', {});
+    if (!G.crew.started) G.crew.helloT = setTimeout(crewHello, 2000);
+  }
+  function setCrewRole(v) {
+    if (G.crew.link) { if (isNav()) G.crew.link.send('pois', {}); G.crew.link.close(); G.crew.link = null; }
+    clearTimeout(G.crew.helloT);
+    G.crew.role = v; G.crew.started = false; G.crew.peer = false; G.crew.conn = '';
+    $('crewHelm').hidden = v !== 'helm'; $('crewNav').hidden = v !== 'nav';
+    $('start').classList.toggle('crew-nav', v === 'nav'); $('start').classList.toggle('crew-helm', v === 'helm');
+    if (v === 'helm') { var code = root.Miehisto.newCode(); setText($('crewCode'), code); crewOpen(code); }
+    if (v === 'nav') { crewStatus(''); try { $('crewIn').focus(); } catch (e) {} }
+    updateCrewBadge();
+  }
+  function crewJoin() {
+    var code = root.Miehisto.cleanCode($('crewIn').value);
+    $('crewIn').value = code;
+    if (code.length < 4) { crewStatus('Syötä ruorimiehen laitteella näkyvä istuntokoodi.'); return; }
+    crewOpen(code);
+  }
+  function crewGameClass() { $('game').classList.toggle('crew-nav', isNav()); $('game').classList.toggle('crew-helm', isHelm()); }
+  function updateCrewBadge() {
+    var b = $('crewBadge'); if (!b) return;
+    if (G.crew.role === 'solo' || G.mode === 'start') { b.hidden = true; return; }
+    var now = performance.now(), live = G.crew.conn === 'yhdistetty' && G.crew.lastRx && now - G.crew.lastRx < (isNav() ? 4000 : 7000);
+    var t = (isHelm() ? 'Ruorimies ' : 'Navigoija ') + G.crew.code + (live ? (isHelm() ? ' · navigoija mukana' : ' · yhteys') : (isHelm() ? ' · ei navigoijaa' : ' · ei yhteyttä'));
+    setText(b, t); b.classList.toggle('warn', !live); b.hidden = false;
+  }
+  // Ruorimies: ajon tiedot navigoijalle (ajon alussa ja navigoijan liittyessä kesken ajon)
+  function crewSendStart() {
+    if (!isHelm() || !G.crew.link || !G.S) return;
+    var rex = G.ex !== 'h1' && G.ex !== 'free' ? G.stored.filter(function (x) { return x.id === G.ex; })[0] || null : null;
+    G.crew.logSent = 0;
+    G.crew.link.send('aloita', { id: G.crew.runId, ex: G.ex, rex: rex, dir: G.dir, targetKn: G.targetKn, clockMs: G.S.clockMs });
+  }
+  function crewSnap() { var S = G.S, o = {}; for (var k in S) { var v = S[k]; if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') o[k] = v; } return o; }
+  function crewSendState(now) {
+    var c = G.crew; if (!c.link || !c.link.isReady() || now - c.lastStateT < 200) return; c.lastStateT = now;
+    var S = G.S, log = S.cmdLog.length > c.logSent ? S.cmdLog.slice(c.logSent) : null; c.logSent = S.cmdLog.length;
+    var gb = $('groundBanner').hidden ? null : [$('groundTitle').textContent, $('groundText').textContent];
+    c.link.send('tila', { id: c.runId, s: crewSnap(), o: [G.origin.e, G.origin.n], fr: !!G.frozen, p: !!G.paused, gb: gb, log: log });
+  }
+  // Navigoija: mittarien säädöt ruorimiehelle muuttuessaan (ja vähintään 3 s välein, josta ruorimies näkee yhteyden olevan auki)
+  function crewSendInstr(now) {
+    var c = G.crew; if (!c.link || !c.link.isReady() || now - c.lastInstrT < 300) return; c.lastInstrT = now;
+    var r = G.radar ? G.radar.lue() : null;
+    var m = { pl: G.pl.mirrorState(), ra: r ? { a: r.alue, e: r.ebl, v: r.vrm, o: r.offset, u: r.suuntaYlos, ev: r.ev } : null, i: G.instr };
+    var js = JSON.stringify(m); if (js === c.sentInstr && now - c.lastInstrFull < 3000) return;
+    c.sentInstr = js; c.lastInstrFull = now; c.link.send('mittarit', m);
+  }
+  function onCrewMsg(m) {
+    var c = G.crew; c.lastRx = performance.now();
+    if (isHelm()) {
+      if (m.t === 'hei') { if (!c.peer) crewStatus('Navigoija liittyi.'); c.peer = true; c.link.send('tervetuloa', {}); if (G.mode === 'run' || G.mode === 'loading') crewSendStart(); }
+      else if (m.t === 'pois') { c.peer = false; c.lastRx = 0; crewStatus('Navigoija poistui istunnosta.'); }
+      else if (m.t === 'mittarit') { c.peer = true; onCrewInstr(m.d); }
+    } else if (isNav()) {
+      if (m.t === 'tervetuloa') crewStatus('Liitytty istuntoon ' + c.code + '. Odotetaan, että ruorimies aloittaa ajon.');
+      else if (m.t === 'aloita') crewStartFrom(m.d);
+      else if (m.t === 'tila' && m.d.id === c.runId && (G.mode === 'run' || G.mode === 'loading')) onCrewState(m.d);
+      else if (m.t === 'loppu' && m.d.id === c.runId && G.mode !== 'debrief' && G.mode !== 'start') {
+        if (G.rec) { G.rec.collisions = m.d.col || []; G.rec.groundings = m.d.gr || []; if (m.d.fin) G.rec.finished = true; }
+        endRun(m.d.why);
+      }
+    }
+  }
+  function onCrewInstr(m) {
+    if (!m || !G.pl || (G.mode !== 'run' && G.mode !== 'loading')) return;
+    if (m.pl) G.pl.applyMirror(m.pl);
+    if (m.ra && G.radar) {
+      var r = G.radar.lue();
+      if (r.alue !== m.ra.a) G.radar.asetaAlue(m.ra.a);
+      if (r.suuntaYlos !== m.ra.u) G.radar.asetaSuuntaYlos(m.ra.u);
+      if (r.offset !== m.ra.o) G.radar.asetaOffset(m.ra.o);
+      if (r.ev !== m.ra.ev) G.radar.asetaEV(m.ra.ev);
+      if (Math.abs(r.ebl - m.ra.e) > 0.05) G.radar.asetaEBL(m.ra.e);
+      if (Math.abs(r.vrm - m.ra.v) > 1e-4) G.radar.asetaVRM(m.ra.v);
+    }
+    if ((m.i === 'plot' || m.i === 'radar') && G.instr !== m.i && G.disp === 'both') { G.instr = m.i; applyPanes(); sizeViews(); }
+  }
+  // Navigoija: ajo alkaa ruorimiehen tiedoilla (sama reitti, suunta ja kellonaika)
+  function crewStartFrom(d) {
+    var c = G.crew;
+    if (!d || (d.id === c.runId && (G.mode === 'run' || G.mode === 'loading'))) return;
+    c.started = true; clearTimeout(c.helloT); c.runId = d.id;
+    G.remoteEx = d.rex || null; G.ex = d.ex || 'h1'; G.dir = d.dir === 'rev' ? 'rev' : 'fwd'; if (d.targetKn) G.targetKn = Number(d.targetKn); G.crewClock = d.clockMs;
+    startRun();
+  }
+  function onCrewState(d) {
+    var c = G.crew, now = performance.now();
+    if (G.S && d.o && (d.o[0] !== G.origin.e || d.o[1] !== G.origin.n)) { crewRebase(d.o); c.snap = null; }
+    c.prev = c.snap; c.prevT = c.snapT; c.snap = d; c.snapT = now;
+    if (d.log && G.S) d.log.forEach(function (e) { G.S.cmdLog.push(e); });
+    G.frozen = !!d.fr; G.paused = !!d.p;
+    if (d.gb) { setText($('groundTitle'), d.gb[0]); setText($('groundText'), d.gb[1]); $('groundBanner').hidden = false; }
+    else if (!$('groundBanner').hidden) $('groundBanner').hidden = true;
+  }
+  function crewRebase(o) {   // ruorimiehen vapaassa ajossa siirtämä maailman origo (maybeRebase)
+    var dx = o[0] - G.origin.e, dy = o[1] - G.origin.n;
+    G.origin.e = o[0]; G.origin.n = o[1]; P.setOrigin(G.origin.e, G.origin.n);
+    G.S.x -= dx; G.S.y -= dy; G.trail = [];
+    root.Merkit.rebase(); G.view.rebase(); G.pl.rebase(); root.Pohja.clear(); G.lastMerkitLoad = { x: 1e9, y: 1e9 }; G.lastBoatLoad = { x: 1e9, y: 1e9 };
+  }
+  function wrapDeg(d) { return ((d + 180) % 360 + 360) % 360 - 180; }
+  // Navigoija: aluksen tila viimeisimmästä viestistä, liike jatketaan viestien välillä edellisen ja viimeisimmän viestin nopeudella ja pehmennetään
+  function crewApply(dt) {
+    var c = G.crew, S = G.S, sn = c.snap; if (!sn) return;
+    var s = sn.s, age = Math.min(1.5, (performance.now() - c.snapT) / 1000), vx = 0, vy = 0, vh = 0;
+    if (c.prev && c.snapT > c.prevT) { var pd = (c.snapT - c.prevT) / 1000, ps = c.prev.s; if (pd > 0.05 && pd < 3) { vx = (s.x - ps.x) / pd; vy = (s.y - ps.y) / pd; vh = wrapDeg(s.hdg - ps.hdg) / pd; } }
+    if (G.frozen || G.paused) { vx = vy = vh = 0; }
+    var tx = s.x + vx * age, ty = s.y + vy * age, th = s.hdg + vh * age, k = Math.min(1, dt * 6), sf = s.speedFactor || 0;
+    for (var key in s) if (key !== 'x' && key !== 'y' && key !== 'hdg' && key !== 't' && key !== 'clockMs') S[key] = s[key];
+    if (Math.hypot(tx - S.x, ty - S.y) > 60) { S.x = tx; S.y = ty; S.hdg = ((th % 360) + 360) % 360; }
+    else { S.x += (tx - S.x) * k; S.y += (ty - S.y) * k; S.hdg = ((S.hdg + wrapDeg(th - S.hdg) * k) % 360 + 360) % 360; }
+    S.t = s.t + age * sf; S.clockMs = s.clockMs + age * sf * 1000;
+    if (G.rec && S.t - c.recT >= H.SETTINGS.sampleSec) { c.recT = S.t; G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y)); }
+  }
+
   // ---------- keskeytys ja purku ----------
   function endRun(why) {
     if (G.mode === 'debrief') return;
@@ -1202,6 +1362,8 @@
     if (G.view && G.view.isBino()) { G.view.setBinoculars(false); binoUi(false); }
     if (G.radar) G.radar.vapautaRuudut();     // tutkan ruudukko (enintään noin 39 Mt) vapautetaan, uusi ajo rakentaa sen uudelleen
     if (G.rec) { G.rec.aborted = why === 'aborted'; G.rec.endMs = G.S.clockMs; }
+    if (isHelm() && G.crew.link) G.crew.link.send('loppu', { id: G.crew.runId, why: why, col: G.rec ? G.rec.collisions : [], gr: G.rec ? G.rec.groundings : [], fin: !!(G.rec && G.rec.finished) });
+    if (isNav()) { G.crew.started = false; G.crew.snap = G.crew.prev = null; }
     $('groundBanner').hidden = true; $('toast').hidden = true; $('menu').hidden = true;
     $('game').hidden = true; $('debrief').hidden = false;
     var an = H.analyze(G.rec, G.S); root.__analysis = an;
