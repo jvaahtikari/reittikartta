@@ -520,21 +520,20 @@
         ctx.beginPath(); ctx.moveTo(T[0] - dy / l * 7, T[1] + dx / l * 7); ctx.lineTo(T[0] + dy / l * 7, T[1] - dx / l * 7); ctx.stroke();
         labelBox(kblText(p.dist), Lb[0], Lb[1], col);
       });
-      (route.rkTurns || []).forEach(function (t) {
+      // Käännösetäisyyksiä ei piirretä (käyttäjä 28.10.2026: ei SARNavissa)
+      if (false) (route.rkTurns || []).forEach(function (t) {
         var A = toScreen(t.wp[0], t.wp[1]), T = toScreen(t.tgt[0], t.tgt[1]); if (!vis(A, T)) return;
         var col = '#6a3b8f';
         ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
         labelBox(kblText(t.dist), (A[0] + T[0]) / 2, (A[1] + T[1]) / 2, col);
       });
     }
-    // Reittipisteet SARNavin tapaan: musta ympyrä ja valkoinen kaksinumeroinen järjestysnumero (01, 02, ...)
+    // Reittipisteet pieninä renkaina (numerot poistettu 28.10.2026)
     function drawWaypoints() {
       ctx.font = '700 10px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       for (var vi = 0; vi < route.pts.length; vi += 2) {
         var q = toScreen(route.pts[vi], route.pts[vi + 1]); if (q[0] < -20 || q[1] < -20 || q[0] > w + 20 || q[1] > h + 20) continue;
-        var no = vi / 2 + 1, t = no < 10 ? '0' + no : String(no);
-        ctx.beginPath(); ctx.arc(q[0], q[1], 10, 0, 2 * Math.PI); ctx.fillStyle = '#111'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-        ctx.fillStyle = '#fff'; ctx.fillText(t, q[0], q[1] + 0.5);
+        ctx.beginPath(); ctx.arc(q[0], q[1], 4, 0, 2 * Math.PI); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = route.color; ctx.lineWidth = 2; ctx.stroke();
       }
     }
     function drawRouteNotes() {
@@ -575,7 +574,7 @@
         cands.push({ L: L, A: A, B: B, plen: plen, vis: vis, vlen: vlen });
       }
       cands.sort(function (a, b) { return b.vlen - a.vlen; });
-      var BW = 56, BH = 58;   // kaksoisnuolen ja numeroiden ympäröivä laatikko
+      var BW = 60, BH = 56;   // kaksoisnuolen ja numeroiden ympäröivä laatikko
       function free(cx, cy) {
         if (cx - BW / 2 < 2 || cx + BW / 2 > w - 2 || cy - BH / 2 < 2 || cy + BH / 2 > h - 2) return false;
         for (var k = 0; k < placed.length; k++) if (Math.abs(placed[k][0] - cx) < BW + 4 && Math.abs(placed[k][1] - cy) < BH + 4) return false;
@@ -600,19 +599,19 @@
       var A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), ang = Math.atan2(B[1] - A[1], B[0] - A[0]), flip = Math.cos(ang) < 0;
       var dPlus = flip ? L.brg + 180 : L.brg, dMinus = dPlus + 180;
       var n3 = function (b) { var t = String(Math.round(((b % 360) + 360) % 360) % 360); while (t.length < 3) t = '0' + t; return t; };
-      // SARNavin suuntanuotti (käyttäjän esimerkki): kaksi kiinni toisissaan olevaa paksua nuolta vastakkaisiin suuntiin. Kummankin nuolen kärki levenee vain
-      // ulkosyrjälle ja sisäreuna on suora, joten yhdessä ne ovat halkaistu kaksoisnuoli. Numero mustana kunkin nuolen ulkopuolella, nuolen suuntaisesti.
-      var len = 44, g = 0.5, sw = 10, hx = 5, hl = 17, GREEN = '#2f7d3c', RED = '#c62828';
-      function arrow(dir, side, fill) {   // dir: +1 = nuoli +x:ään, side: -1 = yläpuoli, +1 = alapuoli
-        var x0 = -dir * len / 2, xs = dir * (len / 2 - hl), xt = dir * len / 2;
-        ctx.beginPath(); ctx.moveTo(x0, side * g); ctx.lineTo(xt, side * g); ctx.lineTo(xs, side * (sw + hx)); ctx.lineTo(xs, side * sw); ctx.lineTo(x0, side * sw); ctx.closePath();
-        ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1; ctx.stroke();
+      // SARNavin suuntanuotti (käyttäjän esimerkki): kaksi rinnakkaista nuolta vastakkaisiin suuntiin, varret kiinni toisissaan (valkoinen raja). Kummallakin
+      // on täysi, vartta leveämpi kärki, ja kärjet ovat vastakkaisissa päissä, joten kärki ulottuu naapurinuolen hännän ohi. Numero mustana nuolen ulkopuolella.
+      var sh = 15, sw = 6, hw = 10.5, hl = 12, GREEN = '#2f7d3c', RED = '#c62828';
+      function arrow(dir, yc, fill) {   // dir: +1 = nuoli +x:ään, yc = nuolen keskilinja
+        var xt = dir * (sh + hl), xs = dir * sh, x0 = -dir * sh;
+        ctx.beginPath(); ctx.moveTo(x0, yc - sw); ctx.lineTo(xs, yc - sw); ctx.lineTo(xs, yc - hw); ctx.lineTo(xt, yc); ctx.lineTo(xs, yc + hw); ctx.lineTo(xs, yc + sw); ctx.lineTo(x0, yc + sw); ctx.closePath();
+        ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.lineJoin = 'miter'; ctx.stroke();
       }
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(flip ? ang + Math.PI : ang);
-      arrow(1, -1, flip ? RED : GREEN);    // yläpuolen nuoli +x:ään: kulkusuunta, kun kuviota ei käännetty
-      arrow(-1, 1, flip ? GREEN : RED);
+      arrow(1, -sw, flip ? RED : GREEN);    // yläpuolen nuoli +x:ään: kulkusuunta, kun kuviota ei käännetty
+      arrow(-1, sw, flip ? GREEN : RED);
       ctx.font = '800 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-      [[n3(dPlus), -5, -(sw + hx + 6)], [n3(dMinus), 5, sw + hx + 6]].forEach(function (t) {
+      [[n3(dPlus), -3, -(2 * sw + 8)], [n3(dMinus), 3, 2 * sw + 8]].forEach(function (t) {
         ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeText(t[0], t[1], t[2]); ctx.fillStyle = '#111'; ctx.fillText(t[0], t[1], t[2]);
       });
       ctx.restore();
