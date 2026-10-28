@@ -4980,6 +4980,19 @@ body.night .ais-n.sar { color: #ff9a5c; }
     });
     var tip = (r.name || 'Nimetön reitti') + (r.status === 'approved' ? ' (hyväksytty)' : ' (luonnos)');
     line.bindTooltip(tip, { sticky: true, direction: 'top', opacity: 0.9 });
+    // Kosketusnäytöllä 3–4 px:n viivaan ei osu sormella, jolloin pitkä painallus avasi kartan valikon eikä reitin valikkoa
+    // (sivuutusetäisyys jäi lisäämättä puhelimella). Näkymätön leveä osuma-alue avaa saman valikon, ja tavalliset napautukset
+    // menevät sen läpi kartalle, jotta pisteiden, sivuutusten ja nuottien sijoitus toimii viivan vierestäkin.
+    if (UI.isTouch()) {
+      var hit = L.polyline(ll, { color: '#000', weight: 28, opacity: 0, bubblingMouseEvents: true }).addTo(g);
+      hit.on('contextmenu', function (e) { L.DomEvent.stop(e); lineMenu(r, e); });
+      hit.on('click', function (e) {
+        if (App.mode() !== 'idle') return;
+        L.DomEvent.stop(e);
+        setHighlight(r.id, true);
+      });
+      line.bringToFront();
+    }
 
     // legien suuntanuotit: jokaiselle näkymässä näkyvälle legille, myös väylällä kulkeville.
     // Vaakasuora laatikko kuten SARNavissa: kulkusuunta isolla, nuoli kulkusuuntaan, vastasuunta ja matka pienellä.
