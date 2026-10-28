@@ -268,10 +268,20 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .sn-panel.narrow .sn-big b{font-size:24px}
 .sn-panel.narrow .sn-pos{font-size:8.5px}
 .sn-panel.narrow .sn-clock b{font-size:12px}
+.sn-panel.narrow i{white-space:normal;text-align:right}
 .sn-panel.short .sn-big{flex-direction:row;justify-content:flex-end;align-items:baseline;gap:6px;margin-bottom:2px}
 .sn-panel.short .sn-big b{font-size:26px}
 .sn-panel.short .sn-big i{order:-1}
 .sn-panel.short .sn-pos{margin-top:3px}
+.sn-panel.short .sn-clock b{font-size:14px}
+/* kapea ja matala (iPad pystyssä molemmat mittarit, puhelin vaakasuunnassa): rivit eivät mahdu leveyteen, joten työkalukenttä ja kello pysyvät allekkain ja pienempinä */
+.sn-panel.narrow.short .sn-big b{font-size:21px}
+.sn-panel.narrow.short .sn-y.sn-big,.sn-panel.narrow.short .sn-mid,.sn-panel.narrow.short .sn-clock{flex-direction:column;align-items:flex-end;gap:0}
+.sn-panel.narrow.short .sn-y.sn-big i,.sn-panel.narrow.short .sn-mid i,.sn-panel.narrow.short .sn-clock i{order:0}
+.sn-panel.narrow.short .sn-mid b{font-size:15px}
+.sn-panel.narrow.short .sn-clock b{font-size:12px}
+.sn-panel.tight .sn-tool .sn-pos{display:none}
+.sn-panel.tighter > .sn-pos{display:none}
 
 /* SARNavin toimintopainikkeet: tumma pystypalkki vasemmassa yläkulmassa, päällä oleva työkalu harmaalla taustalla */
 .plot-info{left:4px;top:4px}
@@ -11886,13 +11896,23 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       container.parentNode.appendChild(panel);
       panel.k = {}; Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (e) { panel.k[e.getAttribute('data-k')] = e; });
     }
+    // Sovitus korkeuteen: tiivis asettelu (short), sitten kursorin sijainti pois (tight), sitten oma sijainti pois (tighter), kunnes kaikki mahtuu.
+    // Tarkistetaan, kun ruudun koko tai työkalukentän näkyvyys muuttuu.
+    var fitDirty = true, fitTool = null, FIT = ['short', 'tight', 'tighter'];
+    function panelYli() { return panel.scrollHeight > panel.clientHeight + 1 || panel.k.clock.getBoundingClientRect().bottom > panel.getBoundingClientRect().bottom - 1; }
+    function fitPanel() {
+      fitDirty = false;
+      FIT.forEach(function (c) { panel.classList.remove(c); });
+      var yli = panelYli;
+      for (var i = 0; i < FIT.length && yli(); i++) panel.classList.add(FIT[i]);
+    }
     function setPanelText(k, t) { var e = panel && panel.k[k]; if (e && e.textContent !== t) e.textContent = t; }
     function panelWidth() {
       var pn = container.parentNode; if (!panel || !pn) return 0;
       var small = pn.classList.contains('small'), W = pn.clientWidth;
       panel.hidden = small || !W;
-      var pw = small || !W ? 0 : W < 520 ? 78 : 118;
-      panel.classList.toggle('narrow', pw === 78); panel.classList.toggle('short', pn.clientHeight < 330);   // matalassa ruudussa (työpöydän deck) pienemmät luvut, jotta kello mahtuu
+      var pw = small || !W ? 0 : W < 520 ? 88 : 118;
+      panel.classList.toggle('narrow', pw === 88); fitDirty = true;
       (pn.parentNode || pn).style.setProperty('--pw', pw + 'px');   // #stage: myös pieni 3D-ikkuna väistää palstaa (sim.css)
       return pw;
     }
@@ -11917,6 +11937,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       setPanelText('brgLbl', evOn && evLock && !hs ? 'Suuntima · lukittu' : 'Suuntima');
       if (tb != null) { setPanelText('brg', pad3(((tb % 360) + 360) % 360)); setPanelText('dst', td.toFixed(2)); setPanelText('clat', ddm(tp.lat, true)); setPanelText('clon', ddm(tp.lon, false)); }
       setPanelText('clock', clockTxt);
+      if (fitDirty || fitTool !== tl.hidden || panelYli()) { fitTool = tl.hidden; fitPanel(); }
     }
     function setClock(ms) {
       var d = new Date(ms), p2 = function (n) { return (n < 10 ? '0' : '') + n; };
