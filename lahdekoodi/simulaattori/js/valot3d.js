@@ -5,7 +5,7 @@
  * valoa ei näy. Sektorit ovat merikartan tapaan suuntia merelta valoa kohti. Kirkkaus himmenee näkyvyysetäisyyden mukaan ja hämärän mukaan
  * (pimeys 0 päivällä, 1 yöllä). Rytmi tulkitaan valotunnuksesta (rytmi()).
  *
- * Valonheitin: kohdevalo (THREE.SpotLight) ohjaamon katolla, suunta keulasta (aste, positiivinen oikealle). Valaisee Lambert-materiaalit (maasto,
+ * Valonheittimet: kaksi kohdevaloa (THREE.SpotLight) ohjaamon katolla ruorimiehen ja navigoijan yläpuolella, kummallakin oma, suunta keulasta (aste, positiivinen oikealle). Valaisee Lambert-materiaalit (maasto,
  * rakennukset, veneet, sillat, laiturit), vesi saa valaistun alueen omassa shaderissaan (nakyma.js uSpot*), ja keila näkyy ilmassa heikkona kartiona.
  * Valo on aina näkymässä (voimakkuus 0, kun pois), jotta valojen määrän muutos ei käännä varjostimia uudelleen kesken ajon.
  *
@@ -71,7 +71,7 @@
   function create(view, opts) {
     opts = opts || {};
     var THREE = root.THREE, P = root.Paikka, scene = view.scene, U = view.uniforms;
-    var S = { valoPx: 15, heitinKulma: 5.5, heitinMatka: 900, heitinI: 3.2, heitinX: 1.6, heitinY: 2.35, keilaPituus: 320, keilaAlfa: 0.075 };
+    var S = { valoPx: 15, heijPx: 8, heijMatka: 3000, heitinKulma: 5.5, heitinMatka: 900, heitinI: 3.2, heitinX: 1.1, heitinY: 3.05, heitinSivu: 0.75, keilaPituus: 320, keilaAlfa: 0.075 };
     if (opts.settings) for (var k in opts.settings) S[k] = opts.settings[k];
 
     // loistot: pistepilvi, jonka attribuutit päivitetään joka kuvalla
@@ -87,24 +87,54 @@
     var pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.renderOrder = 50; scene.add(pts);
     var lista = [], listaSrc = null, vaihe = [];
 
-    // valonheitin aluksen katolla (rig: +x keula, +y ylös, +z oikea puoli)
-    var spot = new THREE.SpotLight(0xfff1d6, 0, S.heitinMatka, S.heitinKulma * RAD, 0.45, 1);
-    spot.position.set(S.heitinX, S.heitinY, 0); view.rig.add(spot);
-    var tgt = new THREE.Object3D(); view.rig.add(tgt); spot.target = tgt;
-    // näkyvä keila: kartio kärki valossa, avautuu valon suuntaan
-    var keilaGeo = new THREE.ConeGeometry(Math.tan(S.heitinKulma * RAD) * S.keilaPituus, S.keilaPituus, 28, 1, true);
-    keilaGeo.translate(0, -S.keilaPituus / 2, 0); keilaGeo.rotateZ(Math.PI / 2);   // kärki origossa, kartio +x-suuntaan
-    var keilaMat = new THREE.ShaderMaterial({
-      uniforms: { uA: { value: 0 }, uL: { value: S.keilaPituus } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false,
-      vertexShader: 'varying float vX; varying vec3 vN; varying vec3 vP; void main(){ vX = position.x; vN = normalMatrix * normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vP = mv.xyz; gl_Position = projectionMatrix * mv; }',
-      fragmentShader: 'uniform float uA; uniform float uL; varying float vX; varying vec3 vN; varying vec3 vP; void main(){ float r = abs(dot(normalize(vN), normalize(-vP))); float a = uA * r * r * pow(1.0 - clamp(vX / uL, 0.0, 1.0), 1.6) * smoothstep(0.0, 6.0, vX); gl_FragColor = vec4(vec3(1.0, 0.95, 0.85) * a, 1.0); }'
-    });
-    var keila = new THREE.Mesh(keilaGeo, keilaMat); keila.frustumCulled = false; keila.renderOrder = 60; keila.position.copy(spot.position); view.rig.add(keila);
-    var heitin = { on: false, kulma: 0, korotus: -1.5 };
-    var tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+    // heijastimet (viitat, poijut, reunamerkit, kummelit): pienet välkkeet, jotka syttyvät valonheittimen keilassa. Heijastin palauttaa valon
+    // takaisin valon suuntaan, joten katolla olevan valonheittimen alla oleva silmä näkee sen selkeällä säällä paljon kauempaa kuin
+    // keila valaisee maastoa (S.heijMatka vs. S.heitinMatka). Sumussa valo kulkee matkan kahdesti, joten matka on enintään puolet näkyvyydestä.
+    var maxH = 900, hPos = new Float32Array(maxH * 3), hCol = new Float32Array(maxH * 3), hAlf = new Float32Array(maxH);
+    var hGeo = new THREE.BufferGeometry();
+    hGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3)); hGeo.setAttribute('aColor', new THREE.BufferAttribute(hCol, 3)); hGeo.setAttribute('aI', new THREE.BufferAttribute(hAlf, 1));
+    hGeo.setDrawRange(0, 0);
+    var hMat = mat.clone(); hMat.uniforms = { uPx: { value: S.heijPx }, uDpr: { value: 1 } };
+    var hPts = new THREE.Points(hGeo, hMat); hPts.frustumCulled = false; hPts.renderOrder = 51; scene.add(hPts);
+    var hLista = [], hSrc = null, nakyvyysM = 0;
 
-    function asetaHeitin(on) { heitin.on = !!on; }
-    function asetaSuunta(deg) { heitin.kulma = Math.max(-170, Math.min(170, Number(deg) || 0)); }
+    // valonheittimet ohjaamon katolla ruorimiehen (oikea) ja navigoijan (vasen) yläpuolella (rig: +x keula, +y ylös, +z oikea puoli).
+    // Kummallakin on oma valonsa: 'helm' ja 'nav'.
+    function teeHeitin(id, sivu) {
+      var h = { id: id, on: false, kulma: 0, korotus: -1.5 };
+      h.spot = new THREE.SpotLight(0xfff1d6, 0, S.heitinMatka, S.heitinKulma * RAD, 0.45, 1);
+      h.spot.position.set(S.heitinX, S.heitinY, sivu * S.heitinSivu); view.rig.add(h.spot);
+      h.tgt = new THREE.Object3D(); view.rig.add(h.tgt); h.spot.target = h.tgt;
+      // näkyvä keila: kartio kärki valossa, avautuu valon suuntaan
+      var g = new THREE.ConeGeometry(Math.tan(S.heitinKulma * RAD) * S.keilaPituus, S.keilaPituus, 28, 1, true);
+      g.translate(0, -S.keilaPituus / 2, 0); g.rotateZ(Math.PI / 2);   // kärki origossa, kartio +x-suuntaan
+      h.mat = new THREE.ShaderMaterial({
+        uniforms: { uA: { value: 0 }, uL: { value: S.keilaPituus } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false,
+        vertexShader: 'varying float vX; varying vec3 vN; varying vec3 vP; void main(){ vX = position.x; vN = normalMatrix * normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vP = mv.xyz; gl_Position = projectionMatrix * mv; }',
+        fragmentShader: 'uniform float uA; uniform float uL; varying float vX; varying vec3 vN; varying vec3 vP; void main(){ float r = abs(dot(normalize(vN), normalize(-vP))); float a = uA * r * r * pow(1.0 - clamp(vX / uL, 0.0, 1.0), 1.6) * smoothstep(0.0, 6.0, vX); gl_FragColor = vec4(vec3(1.0, 0.95, 0.85) * a, 1.0); }'
+      });
+      h.keila = new THREE.Mesh(g, h.mat); h.keila.frustumCulled = false; h.keila.renderOrder = 60; h.keila.position.copy(h.spot.position); h.keila.visible = false; view.rig.add(h.keila);
+      h.wPos = new THREE.Vector3(); h.wDir = new THREE.Vector3(1, 0, 0);
+      return h;
+    }
+    var heittimet = { helm: teeHeitin('helm', 1), nav: teeHeitin('nav', -1) };
+    var tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+    function hh(id) { return heittimet[id] || heittimet.helm; }
+    function asetaHeitin(id, on) { hh(id).on = !!on; }
+    function asetaSuunta(id, deg) { hh(id).kulma = Math.max(-170, Math.min(170, Number(deg) || 0)); }
+    // näkyvyys metreinä (0 = selkeä sää), rajaa heijastimien näkymistä
+    function asetaNakyvyys(m) { nakyvyysM = Number(m) > 0 ? Number(m) : 0; }
+
+    function rakennaHeijastimet() {
+      var v = view.aids.heijastimet ? view.aids.heijastimet() : [];
+      if (v === hSrc) return;
+      hSrc = v; hLista = (v || []).slice(0, maxH);
+      hLista.forEach(function (h, i) {
+        hPos[i * 3] = h.x; hPos[i * 3 + 1] = h.z; hPos[i * 3 + 2] = -h.y;
+        hCol[i * 3] = h.rgb[0]; hCol[i * 3 + 1] = h.rgb[1]; hCol[i * 3 + 2] = h.rgb[2];
+      });
+      hGeo.attributes.position.needsUpdate = true; hGeo.attributes.aColor.needsUpdate = true; hGeo.setDrawRange(0, hLista.length);
+    }
 
     function rakennaLista() {
       var v = view.aids.valot ? view.aids.valot() : [];
@@ -146,22 +176,50 @@
       }
       geo.attributes.aColor.needsUpdate = true; geo.attributes.aI.needsUpdate = true;
       pts.visible = pimeys > 0.01 && n > 0;
-      // valonheitin
-      var a = heitin.kulma * RAD, e = heitin.korotus * RAD;
-      tgt.position.set(S.heitinX + Math.cos(a) * Math.cos(e) * 100, S.heitinY + Math.sin(e) * 100, Math.sin(a) * Math.cos(e) * 100);
-      spot.intensity = heitin.on ? S.heitinI : 0;
-      keila.rotation.set(0, -a, e); keilaMat.uniforms.uA.value = heitin.on ? S.keilaAlfa * Math.max(0.15, pimeys) : 0; keila.visible = heitin.on;
-      // vesi: valonheittimen paikka ja suunta maailmassa
-      if (U && U.uSpotI) {
-        view.rig.updateMatrixWorld(true);
-        spot.getWorldPosition(tmpA); tgt.getWorldPosition(tmpB);
-        U.uSpotPos.value.copy(tmpA); U.uSpotDir.value.copy(tmpB.sub(tmpA).normalize());
-        U.uSpotCos.value = Math.cos(S.heitinKulma * RAD); U.uSpotI.value = heitin.on ? 1 : 0;
+      // valonheittimet
+      view.rig.updateMatrixWorld(true);
+      var paalla = [];
+      ['helm', 'nav'].forEach(function (id, j) {
+        var h = heittimet[id], a = h.kulma * RAD, e = h.korotus * RAD, sp = h.spot.position;
+        h.tgt.position.set(sp.x + Math.cos(a) * Math.cos(e) * 100, sp.y + Math.sin(e) * 100, sp.z + Math.sin(a) * Math.cos(e) * 100);
+        h.spot.intensity = h.on ? S.heitinI : 0;
+        h.keila.rotation.set(0, -a, e); h.mat.uniforms.uA.value = h.on ? S.keilaAlfa * Math.max(0.15, pimeys) : 0; h.keila.visible = h.on;
+        h.tgt.updateMatrixWorld(true);
+        h.spot.getWorldPosition(h.wPos); h.tgt.getWorldPosition(tmpB); h.wDir.copy(tmpB.sub(h.wPos).normalize());
+        if (h.on) paalla.push(h);
+        // vesi: valonheittimen paikka ja suunta maailmassa
+        var sfx = j ? '2' : '';
+        if (U && U['uSpotI' + sfx]) {
+          U['uSpotPos' + sfx].value.copy(h.wPos); U['uSpotDir' + sfx].value.copy(h.wDir);
+          U.uSpotCos.value = Math.cos(S.heitinKulma * RAD); U['uSpotI' + sfx].value = h.on ? 1 : 0;
+        }
+      });
+      // heijastimet keilan sisällä
+      rakennaHeijastimet();
+      var nh = hLista.length, Rh = nakyvyysM > 0 ? Math.min(S.heijMatka, nakyvyysM * 0.5) : S.heijMatka;
+      var c1 = Math.cos(S.heitinKulma * 1.25 * RAD), c0 = Math.cos(S.heitinKulma * 0.55 * RAD);
+      hMat.uniforms.uDpr.value = mat.uniforms.uDpr.value;
+      for (var q = 0; q < nh; q++) {
+        var Ih = 0;
+        if (paalla.length && pimeys > 0.01) {
+          for (var w = 0; w < paalla.length; w++) {
+            var L = paalla[w], hx = hPos[q * 3] - L.wPos.x, hy = hPos[q * 3 + 1] - L.wPos.y, hz = hPos[q * 3 + 2] - L.wPos.z, hd = Math.sqrt(hx * hx + hy * hy + hz * hz);
+            if (hd < 1 || hd > Rh) continue;
+            var cs = (hx * L.wDir.x + hy * L.wDir.y + hz * L.wDir.z) / hd;
+            if (cs <= c1) continue;
+            var kk = Math.min(1, (cs - c1) / (c0 - c1)), dd = 1 - hd / Rh;
+            Ih = Math.max(Ih, kk * kk * (3 - 2 * kk) * Math.min(1, 0.25 + 1.1 * Math.pow(dd, 0.8)));
+          }
+        }
+        hAlf[q] = Ih * pimeys;
       }
+      hGeo.attributes.aI.needsUpdate = true;
+      hPts.visible = paalla.length > 0 && nh > 0 && pimeys > 0.01;
     }
-    function rebase() { listaSrc = null; }
-    function tila() { return { valoja: lista.length, palaa: alf.reduce(function (s, v) { return s + (v > 0.05 ? 1 : 0); }, 0), heitin: { on: heitin.on, kulma: heitin.kulma } }; }
-    return { paivita: paivita, asetaHeitin: asetaHeitin, asetaSuunta: asetaSuunta, heitin: function () { return { on: heitin.on, kulma: heitin.kulma }; }, rebase: rebase, tila: tila, settings: S };
+    function rebase() { listaSrc = null; hSrc = null; }
+    function tila() { return { valoja: lista.length, palaa: alf.reduce(function (s, v) { return s + (v > 0.05 ? 1 : 0); }, 0), heijastimia: hLista.length, heijastaa: hAlf.reduce(function (s, v, i) { return s + (i < hLista.length && v > 0.05 ? 1 : 0); }, 0), heitin: heitin('helm'), heitin2: heitin('nav') }; }
+    function heitin(id) { var h = hh(id); return { on: h.on, kulma: h.kulma }; }
+    return { paivita: paivita, asetaHeitin: asetaHeitin, asetaSuunta: asetaSuunta, asetaNakyvyys: asetaNakyvyys, heitin: heitin, rebase: rebase, tila: tila, settings: S };
   }
 
   var api = { tulkitse: tulkitse, rytmi: rytmi, sektori: sektori, create: create };

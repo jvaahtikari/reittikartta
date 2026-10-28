@@ -560,7 +560,7 @@
     G.auto = qs.get('auto') ? H.createAuto(G.route, Number(qs.get('auto')), G.origin) : null;
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setSimTime(G.S.clockMs);
-    G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; if (G.valot) { G.valot.asetaHeitin(false); G.valot.asetaSuunta(0); } $('spotBtn').setAttribute('aria-pressed', 'false'); $('spotAim').hidden = true; $('spotLbl').hidden = true; $('spotAim').value = '0';
+    G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; G.spotSel = null; if (G.valot) { ['helm', 'nav'].forEach(function (id) { G.valot.asetaHeitin(id, false); G.valot.asetaSuunta(id, 0); }); spotUi(); }
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
     G.view.setGaze(0); if (G.view.isBino()) { G.view.setBinoculars(false); binoUi(false); }
     $('exName').textContent = G.route ? G.route.nimi + (G.route.kuvaus ? ': ' + G.route.kuvaus : '') + (G.route.reverse ? ' (käänteinen)' : '') : 'Vapaa ajo, Mustalahti';
@@ -734,7 +734,8 @@
     $('instrBtn').addEventListener('click', cycleInstr);
     $('gazeBtn').addEventListener('click', function () { G.view.setGaze(0); G.view.setBinoPitch(0); });
     $('binoBtn').addEventListener('click', function () { setBino(!G.view.isBino()); });
-    $('spotBtn').addEventListener('click', function () { setSpot(!(G.valot && G.valot.heitin().on)); });
+    $('spotBtn').addEventListener('click', function () { toggleSpot(G.crew.role === 'solo' ? 'helm' : spotOwn()); });
+    $('spot2Btn').addEventListener('click', function () { toggleSpot('nav'); });
     $('spotAim').addEventListener('input', function () { aimSpot(Number($('spotAim').value)); });
     $('menuBtn').addEventListener('click', function () { $('menu').hidden = false; });
     $('mClose').addEventListener('click', function () { $('menu').hidden = true; });
@@ -742,7 +743,7 @@
     $('mSeat').addEventListener('click', function () { G.seated = !G.seated; G.view.setSeat(G.seated); toast(G.seated ? 'Istuen' : 'Seisten', 1000); });
     $('mEye').addEventListener('click', function () {
       G.eye = G.eye === 'nav' ? 'helm' : 'nav'; G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
-      $('mEye').textContent = 'Silmäpiste: ' + (G.eye === 'nav' ? 'navigoija' : 'ruorimies');
+      $('mEye').textContent = 'Silmäpiste: ' + (G.eye === 'nav' ? 'navigoija' : 'ruorimies'); spotUi();
     });
     $('mHelp').addEventListener('click', function () { $('helpText').hidden = !$('helpText').hidden; });
     $('groundBtn').addEventListener('click', function () { endRun(G.collision ? 'collision' : 'ground'); });
@@ -840,8 +841,8 @@
       else if (k === ' ') crash();
       else if (k === 'l' || k === 'L') toggleGentle();
       else if (k === 'b' || k === 'B') setBino(!G.view.isBino());
-      else if (k === 'h' || k === 'H') setSpot(!(G.valot && G.valot.heitin().on));
-      else if ((k === 'j' || k === 'J' || k === 'k' || k === 'K') && G.valot && G.valot.heitin().on) aimSpot(G.valot.heitin().kulma + ((k === 'j' || k === 'J') ? -1 : 1) * (e.shiftKey ? 30 : 10));
+      else if (k === 'h' || k === 'H') toggleSpot(e.shiftKey && G.crew.role === 'solo' ? (spotSel() === 'helm' ? 'nav' : 'helm') : spotSel());
+      else if ((k === 'j' || k === 'J' || k === 'k' || k === 'K') && G.valot && G.valot.heitin(spotSel()).on) aimSpot(G.valot.heitin(spotSel()).kulma + ((k === 'j' || k === 'J') ? -1 : 1) * (e.shiftKey ? 30 : 10));
       else if (k === 'q' || k === 'Q') { if (!e.repeat) G.gazeT = performance.now(); G.gazeKey = -1; }
       else if (k === 'e' || k === 'E') { if (!e.repeat) G.gazeT = performance.now(); G.gazeKey = 1; }
       else if (k === ',') G.pl.stepEBL(e.shiftKey ? -10 : -1);
@@ -1249,23 +1250,52 @@
       var e = v.sun().elevDeg, n = G.night;
       n.elev = e; n.dark = smooth01((3 - e) / 9);
       var dusk = e < 1;
-      if (dusk !== n.dusk) { n.dusk = dusk; $('spotBox').hidden = !dusk; if (!dusk && G.valot && G.valot.heitin().on) setSpot(false); }
+      if (dusk !== n.dusk) { n.dusk = dusk; $('spotBox').hidden = !dusk; if (!dusk && G.valot) { setSpot(false, spotOwn()); if (G.crew.role === 'solo') setSpot(false, spotOwn() === 'helm' ? 'nav' : 'helm'); } }
       var pn = e < -2; if (pn !== n.plotNight) { n.plotNight = pn; $('paneP').classList.toggle('yo', pn); }
+      if (G.valot) G.valot.asetaNakyvyys(G.ext === 'google' ? G.fogKm * 1000 : 0);   // sumukerros on vain Google 3D -näkymässä
       $('v3').style.setProperty('--g3dim', String(Math.round((1 - 0.88 * n.dark) * 100) / 100));
     }
     if (G.valot && G.mode === 'run') G.valot.paivita(S, (S.clockMs / 1000) % 86400, G.night.dark);
   }
-  function setSpot(on) {
-    if (!G.valot) return; on = !!on && G.night.dusk;
-    G.valot.asetaHeitin(on);
-    $('spotBtn').setAttribute('aria-pressed', on ? 'true' : 'false'); $('spotAim').hidden = !on; $('spotLbl').hidden = !on;
+  // Valonheittimet: kaksi valoa katolla, ruorimiehen ('helm') ja navigoijan ('nav') yläpuolella. Miehistötilassa kumpikin ohjaa omaansa ja toisen
+  // valo tulee yhteyden kautta. Yksin ajaessa molemmat ovat käytössä: säädin ohjaa valittua valoa (oletus oma silmäpiste).
+  function spotOwn() { return isHelm() ? 'helm' : isNav() ? 'nav' : (G.eye === 'helm' ? 'helm' : 'nav'); }
+  function spotSel() { return G.crew.role !== 'solo' ? spotOwn() : (G.spotSel || spotOwn()); }
+  function spotUi() {
+    if (!G.valot) return;
+    var solo = G.crew.role === 'solo', sel = spotSel(), hs = G.valot.heitin(sel);
+    var b1 = $('spotBtn'), b2 = $('spot2Btn');
+    if (solo) {
+      setText(b1, 'Ruori'); setText(b2, 'Navi'); b2.hidden = false;
+      b1.setAttribute('aria-pressed', G.valot.heitin('helm').on ? 'true' : 'false'); b2.setAttribute('aria-pressed', G.valot.heitin('nav').on ? 'true' : 'false');
+      b1.classList.toggle('sel', sel === 'helm'); b2.classList.toggle('sel', sel === 'nav');
+      b1.setAttribute('aria-label', 'Ruorimiehen valonheitin päälle tai pois'); b2.setAttribute('aria-label', 'Navigoijan valonheitin päälle tai pois');
+    } else {
+      setText(b1, 'Valonheitin'); b2.hidden = true; b1.classList.remove('sel');
+      b1.setAttribute('aria-pressed', hs.on ? 'true' : 'false'); b1.setAttribute('aria-label', 'Oma valonheitin päälle tai pois (näppäin H)');
+    }
+    $('spotAim').hidden = !hs.on; $('spotLbl').hidden = !hs.on; $('spotAim').value = String(hs.kulma);
+    setText($('spotLbl'), (hs.kulma === 0 ? '' : hs.kulma > 0 ? 'O ' : 'V ') + Math.abs(hs.kulma) + '°');
+  }
+  function setSpot(on, id) {
+    if (!G.valot) return; on = !!on && G.night.dusk; id = id || spotSel();
+    G.valot.asetaHeitin(id, on);
+    if (on && G.crew.role === 'solo') G.spotSel = id;
+    spotUi();
     if (G.S && G.mode === 'run') logCustom('valonheitin', on ? 1 : 0);
   }
+  function toggleSpot(id) { id = id || spotSel(); if (G.valot) setSpot(!G.valot.heitin(id).on, id); }
   function aimSpot(deg) {
     if (!G.valot) return; deg = Math.max(-150, Math.min(150, Math.round(deg)));
-    G.valot.asetaSuunta(deg); $('spotAim').value = String(deg);
-    setText($('spotLbl'), (deg === 0 ? '' : deg > 0 ? 'O ' : 'V ') + Math.abs(deg) + '°');
+    G.valot.asetaSuunta(spotSel(), deg); spotUi();
   }
+  // toisen miehistön jäsenen valonheitin viestistä: [päällä, suunta]
+  function applyPeerSpot(sp) {
+    if (!G.valot || !Array.isArray(sp)) return;
+    var id = spotOwn() === 'helm' ? 'nav' : 'helm';
+    G.valot.asetaHeitin(id, !!sp[0]); G.valot.asetaSuunta(id, Number(sp[1]) || 0);
+  }
+  function ownSpotMsg() { if (!G.valot) return null; var h = G.valot.heitin(spotOwn()); return [h.on ? 1 : 0, h.kulma]; }
 
   // ---------- miehistötila (kaksinpeli, 28.10.2026) ----------
   // Yksi alus, kaksi laitetta. Ruorimies (isäntä) laskee aluksen liikkeen, hänellä ovat komennot, tauko ja aikakerroin, ja hänen plotterinsa ja tutkansa
@@ -1330,13 +1360,13 @@
     var c = G.crew; if (!c.link || !c.link.isReady() || now - c.lastStateT < 200) return; c.lastStateT = now;
     var S = G.S, log = S.cmdLog.length > c.logSent ? S.cmdLog.slice(c.logSent) : null; c.logSent = S.cmdLog.length;
     var gb = $('groundBanner').hidden ? null : [$('groundTitle').textContent, $('groundText').textContent];
-    c.link.send('tila', { id: c.runId, s: crewSnap(), o: [G.origin.e, G.origin.n], fr: !!G.frozen, p: !!G.paused, gb: gb, log: log });
+    c.link.send('tila', { id: c.runId, s: crewSnap(), o: [G.origin.e, G.origin.n], fr: !!G.frozen, p: !!G.paused, gb: gb, log: log, sp: ownSpotMsg() });
   }
   // Navigoija: mittarien säädöt ruorimiehelle muuttuessaan (ja vähintään 3 s välein, josta ruorimies näkee yhteyden olevan auki)
   function crewSendInstr(now) {
     var c = G.crew; if (!c.link || !c.link.isReady() || now - c.lastInstrT < 300) return; c.lastInstrT = now;
     var r = G.radar ? G.radar.lue() : null;
-    var m = { pl: G.pl.mirrorState(), ra: r ? { a: r.alue, e: r.ebl, v: r.vrm, o: r.offset, u: r.suuntaYlos, ev: r.ev } : null, i: G.instr };
+    var m = { pl: G.pl.mirrorState(), ra: r ? { a: r.alue, e: r.ebl, v: r.vrm, o: r.offset, u: r.suuntaYlos, ev: r.ev } : null, i: G.instr, sp: ownSpotMsg() };
     var js = JSON.stringify(m); if (js === c.sentInstr && now - c.lastInstrFull < 3000) return;
     c.sentInstr = js; c.lastInstrFull = now; c.link.send('mittarit', m);
   }
@@ -1359,6 +1389,7 @@
   function onCrewInstr(m) {
     if (!m || !G.pl || (G.mode !== 'run' && G.mode !== 'loading')) return;
     if (m.pl) G.pl.applyMirror(m.pl);
+    if (m.sp) applyPeerSpot(m.sp);
     if (m.ra && G.radar) {
       var r = G.radar.lue();
       if (r.alue !== m.ra.a) G.radar.asetaAlue(m.ra.a);
@@ -1383,7 +1414,7 @@
     if (G.S && d.o && (d.o[0] !== G.origin.e || d.o[1] !== G.origin.n)) { crewRebase(d.o); c.snap = null; }
     c.prev = c.snap; c.prevT = c.snapT; c.snap = d; c.snapT = now;
     if (d.log && G.S) d.log.forEach(function (e) { G.S.cmdLog.push(e); });
-    G.frozen = !!d.fr; G.paused = !!d.p;
+    G.frozen = !!d.fr; G.paused = !!d.p; if (d.sp) applyPeerSpot(d.sp);
     if (d.gb) { setText($('groundTitle'), d.gb[0]); setText($('groundText'), d.gb[1]); $('groundBanner').hidden = false; }
     else if (!$('groundBanner').hidden) $('groundBanner').hidden = true;
   }
