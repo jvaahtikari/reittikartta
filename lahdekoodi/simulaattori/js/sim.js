@@ -456,6 +456,13 @@
     $('gazeBtn').hidden = !(wide || !instrMain) || Math.abs(G.view ? G.view.getGaze() : 0) < 1;
     syncG3Small();
     if (G.view && G.view.isBino() && !(wide || !instrMain)) setBino(false);   // kiikari vain, kun 3D on päänäkymä
+    // Päällekkäisyydet (28.10.2026): 3D:n oikean reunan katsenappi pikkukuvan alle, jos pikkukuva peittäisi sen (puhelin vaaka-asennossa)
+    var gr = $('gazeR'); gr.style.top = ''; gr.style.transform = '';
+    if (!wide && !instrMain) {
+      var sr = ip.getBoundingClientRect(), pr3 = p3.getBoundingClientRect(), gb = gr.getBoundingClientRect();
+      if (gb.width && gb.top < sr.bottom && gb.bottom > sr.top && gb.right > sr.left) { gr.style.top = Math.round(sr.bottom - pr3.top + 8) + 'px'; gr.style.transform = 'none'; }
+    }
+    fitG3Badge();
   }
   // pieni 3D-ikkuna peittää osan tutkan kuvasta: tutka siirtää peittyvät lukemat ikkunan viereen
   function updateRadarReserve() {
@@ -987,11 +994,19 @@
     if (G.ext === 'google') { if (t) G.g3Text = t === 'Google 3D (testi)' ? '' : t; } else G.g3Text = '';   // valmiina vain pieni vaihtonappi, teksti vain latauksen ja virheen aikana
     updateG3Badge();
   }
+  // Google-merkin leveys rajataan Kiikari-napin oikeaan reunaan asti, ettei pitkä tilateksti tai suuri tekstikoko peitä nappia (tila lyhenee "…")
+  function fitG3Badge() {
+    var b = $('g3dBadge'); if (!b || b.hidden) return;
+    var pr = $('pane3d').getBoundingClientRect(), kr = $('binoBtn').getBoundingClientRect();
+    var lim = kr.width ? pr.right - kr.right - 18 : pr.width - 12;
+    b.style.maxWidth = Math.max(100, Math.round(lim)) + 'px';
+  }
   function updateG3Badge() {
     var g = G.ext === 'google', on = G.mode === 'run' && (g || !!(root.Google3D && root.Google3D.getKey()));
     $('g3dBadge').hidden = !on; if (!on) return;
     var st = $('g3dStatus'); st.hidden = !g || !G.g3Text; if (!st.hidden) setText(st, G.g3Text);
     $('g3dBack').hidden = !g; $('g3dGo').hidden = g;
+    fitG3Badge();
   }
   function g3Info(title, text) {
     $('g3dInfoTitle').textContent = title; $('g3dInfoText').textContent = text;
