@@ -312,3 +312,4 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 @media (max-height:500px){.spot{left:78px;gap:5px}.spot button{padding:4px 8px}.spot input[type=range]{width:min(110px,18vw)}.spot-lbl{min-width:36px}}
 #paneP.yo .plot-canvas{filter:invert(.92) hue-rotate(180deg) brightness(.72) contrast(1.05) saturate(.75)}
 .g3d-box{filter:brightness(var(--g3dim,1))}
+#segMoon{margin-top:6px}
