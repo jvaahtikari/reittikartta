@@ -63,7 +63,7 @@
     opts = opts || {};
     var S = {}; for (var k in SETTINGS) S[k] = SETTINGS[k];
     var holder = new THREE.Group(); holder.name = 'turvalaitteet'; scene.add(holder);
-    var last = { x: 1e9, y: 1e9, n: -1, unknown: 0, t: 0 }, count = 0, valotList = [], stats = { kohteita: 0, piirtokutsuja: 0, kolmioita: 0, varamalleja: 0 };
+    var last = { x: 1e9, y: 1e9, n: -1, unknown: 0, t: 0 }, count = 0, valotList = [], heijList = [], stats = { kohteita: 0, piirtokutsuja: 0, kolmioita: 0, varamalleja: 0 };
     var groundAt = opts.groundAt || function () { return null; };
     MM.ASETUKSET.minPx = S.minPx; MM.asetaNakyvyys(1);
     var bino = false;
@@ -107,7 +107,7 @@
       var list = M.near(x, y, radius());
       if (!force && list.length === last.n && !(last.unknown > 0 && now - last.t > 2500) && Math.hypot(x - last.x, y - last.y) < 800) return;
       last.x = x; last.y = y; last.n = list.length; last.t = now;
-      var boards = M.nearBoards(x, y, radius()), items = [], unknown = 0, lights = [], kumItems = [];
+      var boards = M.nearBoards(x, y, radius()), items = [], unknown = 0, lights = [], kumItems = [], refl = [];
       list.forEach(function (a) {
         var fixed = a.tyyppi !== 'Viitta' && a.tyyppi !== 'Poiju';
         var gz = 0, t = a;
@@ -120,6 +120,7 @@
           t = Object.create(a); t.maanpinta = mp;
         }
         var it = { turvalaite: t, x: a.x, y: a.y, z: gz };
+        var hj = heijastin(t, gz); if (hj) refl.push(hj);
         if (a.tyyppi === 'Linjamerkki') { var f = boardFacing(a, boards); if (f != null) it.suunta = f; }
         else if (a.tyyppi === 'Kummeli') {
           it.suunta = (Number(a.numero) * 37) % 360;   // toistettava kääntö, jotta kummelit eivät ole identtisiä
@@ -153,8 +154,21 @@
       holder.add(g);
       stats = g.userData.tilasto;
       if (kum.length) stats.kohteita -= kum.length;   // kummelit on listattu kahdesti (lähi- ja kaukomalli), mutta piirtyy kummastakin vain toinen
-      valotList = lights; count = list.length;   // (vaihe 3g: tämä rivi oli aiemmin kommentin jatkona, joten valot()-lista jäi tyhjäksi)
+      valotList = lights; heijList = refl; count = list.length;   // (vaihe 3g: tämä rivi oli aiemmin kommentin jatkona, joten valot()-lista jäi tyhjäksi)
       holder.userData.valot = valotList; holder.userData.tilasto = stats;
+    }
+    // Heijastinnauhat ja -levyt valonheitintä varten (valot3d.js): paikka, korkeus vedestä ja ylimmän heijastimen väri
+    // (Liikenneviraston määräys 28.5.2015, merimerkit3d.js HEIJASTIN). Korkeudet vastaavat merimerkit3d.js:n malleja.
+    var HEIJ_RGB = { r: [1, 0.16, 0.1], g: [0.15, 1, 0.35], y: [1, 0.85, 0.12], sini: [0.3, 0.5, 1], w: [1, 1, 1] };
+    var HEIJ_NL = { 1: 'r', 2: 'g', 3: 'sini', 4: 'y', 5: 'y', 6: 'sini', 7: 'r', 8: 'w', 9: 'y' };
+    function heijastin(t, gz) {
+      var p = MM._normalisoi(t, MM.ASETUKSET), k = p.tyyppiAvain, h;
+      if (k === 'viitta') h = (p.valaistu ? Math.max(p.valoKorkeus || 2.5, (p.jaaviitta ? 3.6 : 2.0) + 0.15) - 0.15 : (p.jaaviitta ? 3.6 : 2.0)) - 0.25;
+      else if (k === 'poiju') h = (p.valaistu ? Math.max(p.valoKorkeus || 3.2, 2.4) - 0.15 : 3.0) - 0.25;
+      else if (k === 'reunamerkki') h = Math.max((p.valaistu ? (p.valoKorkeus || 4.5) - p.maanpinta + 0.9 : 4.0), 3.0) - 0.25 + (p.maanpinta || 0);
+      else if (k === 'kummeli') { if (t.kaukana) return null; h = 1.95 + (p.maanpinta || 0); }
+      else return null;
+      return { x: t.x, y: t.y, z: (k === 'viitta' || k === 'poiju' ? 0 : gz - (p.maanpinta || 0)) + h, rgb: k === 'kummeli' ? HEIJ_RGB.w : HEIJ_RGB[HEIJ_NL[p.nl] || 'w'], tyyppi: k };
     }
     function rebase() { last.n = -1; last.x = 1e9; }
     function radius() { return bino ? S.binoRadius : S.showRadius; }
@@ -162,7 +176,7 @@
     function setPixel(worldPerDevPx, worldPerBufPx) { MM.asetaPikseli(worldPerDevPx, worldPerBufPx); }
     // kiikari päälle tai pois: näkyvyysrajat kerrotaan suurennuksella (mult) ja näytettävien laitteiden säde kasvaa. Kutsuja huolehtii latauksesta (loadRadius).
     function setBino(on, mult) { bino = !!on; MM.asetaNakyvyys(bino ? mult : 1); last.n = -1; last.x = 1e9; }
-    return { group: holder, sync: sync, setPixel: setPixel, setBino: setBino, radius: radius, rebase: rebase, settings: S, count: function () { return count; }, valot: function () { return valotList; }, tilasto: function () { return stats; }, addAid: null, Builder: Builder };
+    return { group: holder, sync: sync, setPixel: setPixel, setBino: setBino, radius: radius, rebase: rebase, settings: S, count: function () { return count; }, valot: function () { return valotList; }, heijastimet: function () { return heijList; }, tilasto: function () { return stats; }, addAid: null, Builder: Builder };
   }
 
   var api = { create: create, Builder: Builder, SETTINGS: SETTINGS, EC: EC };

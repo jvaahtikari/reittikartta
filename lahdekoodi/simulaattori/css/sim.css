@@ -294,9 +294,11 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #pane3d.g3d .spot{bottom:86px}
 .spot button{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:9px;background:rgba(14,28,40,.9);color:#fff;font-weight:650}
 .spot button[aria-pressed=true]{background:#8a6a10;border-color:#ffd24a}
+.spot button.sel{box-shadow:0 0 0 2px #ffd24a inset}
+.spot button[hidden]{display:none}
 .spot input[type=range]{width:min(170px,30vw);min-height:36px;accent-color:#ffd24a}
 .spot-lbl{min-width:44px;font:600 13px ui-monospace,Menlo,monospace;color:#ffd24a;text-align:right}
 .pane.small .spot,#pane3d.binoon .spot{display:none}
-@media (max-height:500px){.spot{left:78px}}
+@media (max-height:500px){.spot{left:78px;gap:5px}.spot button{padding:4px 8px}.spot input[type=range]{width:min(110px,18vw)}.spot-lbl{min-width:36px}}
 #paneP.yo .plot-canvas{filter:invert(.92) hue-rotate(180deg) brightness(.72) contrast(1.05) saturate(.75)}
 .g3d-box{filter:brightness(var(--g3dim,1))}
