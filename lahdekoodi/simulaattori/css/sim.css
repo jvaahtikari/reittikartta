@@ -205,6 +205,11 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 
 /* SARNav-tyylinen tietopalsta plotterin oikeassa reunassa (28.10.2026, vain ulkoasu) */
 #stage:has(#paneP.main) #pane3d.small:not(.bl){right:calc(var(--pw,0px) + 8px)}
+/* 3D päänäkymänä: mittarin pikkukuva kompassinauhan alle, jotta nauha näkyy kokonaan (28.10.2026) */
+#stage:has(#pane3d.main) .pane.small:not(.bl){top:38px}
+/* pikkukuvan koko myös näkymän korkeuden mukaan (puhelimen vaaka-asento: korkeintaan noin 40 % korkeudesta), jotta katsenapit ja Google-merkki mahtuvat */
+#stage{container-type:size}
+@supports (width:1cqh){.pane.small{width:min(42cqw,210px,53cqh)}}
 /* zoomausnapit SARNavin tapaan oikeaan alakulmaan vaakariviin, mittakaavajanan yläpuolelle */
 #paneP .hud-zoom{left:auto;right:calc(var(--pw,0px) + 4px);bottom:22px;flex-direction:row;width:auto;gap:4px}
 #paneP .hud-zoom button{width:48px;border-radius:10px}
