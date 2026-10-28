@@ -502,7 +502,7 @@
     function brgText(b) { b = ((b % 360) + 360) % 360; var t = String(Math.round(b) % 360); while (t.length < 3) t = '0' + t; return t + '°'; }
     function nmText(m) { var nm = m / 1852; return (nm < 10 ? nm.toFixed(2) : nm.toFixed(1)).replace('.', ',') + ' mpk'; }
     // Sivuutus- ja käännösetäisyydet Reittikartan tapaan (routes.js): sininen katkoviiva legiltä kohteeseen, poikkiviiva kohteessa ja lukema kaapeleina
-    // valkoisessa laatikossa Reittikartassa valittuun paikkaan; käännösetäisyys violettina pisteviivana reittipisteestä kohteeseen, lukema keskellä (↻).
+    // valkoisessa laatikossa Reittikartassa valittuun paikkaan; käännösetäisyys violettina pisteviivana reittipisteestä kohteeseen, lukema keskellä.
     function kblText(m) { return (m / 185.2).toFixed(1).replace('.', ',') + ' kbl'; }
     function labelBox(text, x, y, col) {
       ctx.font = '700 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -524,7 +524,7 @@
         var A = toScreen(t.wp[0], t.wp[1]), T = toScreen(t.tgt[0], t.tgt[1]); if (!vis(A, T)) return;
         var col = '#6a3b8f';
         ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
-        labelBox('\u21bb ' + kblText(t.dist), (A[0] + T[0]) / 2, (A[1] + T[1]) / 2, col);
+        labelBox(kblText(t.dist), (A[0] + T[0]) / 2, (A[1] + T[1]) / 2, col);
       });
     }
     // Reittipisteet SARNavin tapaan: musta ympyrä ja valkoinen kaksinumeroinen järjestysnumero (01, 02, ...)
@@ -575,7 +575,7 @@
         cands.push({ L: L, A: A, B: B, plen: plen, vis: vis, vlen: vlen });
       }
       cands.sort(function (a, b) { return b.vlen - a.vlen; });
-      var BW = 60, BH = 44;   // kaksoisnuolen ympäröivä laatikko
+      var BW = 56, BH = 58;   // kaksoisnuolen ja numeroiden ympäröivä laatikko
       function free(cx, cy) {
         if (cx - BW / 2 < 2 || cx + BW / 2 > w - 2 || cy - BH / 2 < 2 || cy + BH / 2 > h - 2) return false;
         for (var k = 0; k < placed.length; k++) if (Math.abs(placed[k][0] - cx) < BW + 4 && Math.abs(placed[k][1] - cy) < BH + 4) return false;
@@ -600,18 +600,21 @@
       var A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), ang = Math.atan2(B[1] - A[1], B[0] - A[0]), flip = Math.cos(ang) < 0;
       var dPlus = flip ? L.brg + 180 : L.brg, dMinus = dPlus + 180;
       var n3 = function (b) { var t = String(Math.round(((b % 360) + 360) % 360) % 360); while (t.length < 3) t = '0' + t; return t; };
-      // kaksi vierekkäistä nuolta: varsi (puolileveys sw) ja kolmiokärki (puolileveys hw, pituus hl). Yläpuolen nuoli osoittaa +x:ään, alapuolen -x:ään.
-      var len = 58, cy0 = 8, sw = 6, hw = 8, hl = 13, GREEN = '#2f7d3c', RED = '#c62828';
-      function arrow(dir, yc, fill) {
+      // SARNavin suuntanuotti (käyttäjän esimerkki): kaksi kiinni toisissaan olevaa paksua nuolta vastakkaisiin suuntiin. Kummankin nuolen kärki levenee vain
+      // ulkosyrjälle ja sisäreuna on suora, joten yhdessä ne ovat halkaistu kaksoisnuoli. Numero mustana kunkin nuolen ulkopuolella, nuolen suuntaisesti.
+      var len = 44, g = 0.5, sw = 10, hx = 5, hl = 17, GREEN = '#2f7d3c', RED = '#c62828';
+      function arrow(dir, side, fill) {   // dir: +1 = nuoli +x:ään, side: -1 = yläpuoli, +1 = alapuoli
         var x0 = -dir * len / 2, xs = dir * (len / 2 - hl), xt = dir * len / 2;
-        ctx.beginPath(); ctx.moveTo(x0, yc - sw); ctx.lineTo(xs, yc - sw); ctx.lineTo(xs, yc - hw); ctx.lineTo(xt, yc); ctx.lineTo(xs, yc + hw); ctx.lineTo(xs, yc + sw); ctx.lineTo(x0, yc + sw); ctx.closePath();
-        ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x0, side * g); ctx.lineTo(xt, side * g); ctx.lineTo(xs, side * (sw + hx)); ctx.lineTo(xs, side * sw); ctx.lineTo(x0, side * sw); ctx.closePath();
+        ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1; ctx.stroke();
       }
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(flip ? ang + Math.PI : ang);
-      arrow(1, -cy0, flip ? RED : GREEN);    // +x: kulkusuunta, kun kuviota ei käännetty
-      arrow(-1, cy0, flip ? GREEN : RED);
-      ctx.font = '700 10px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
-      ctx.fillText(n3(dPlus), -hl / 2, -cy0 + 0.5); ctx.fillText(n3(dMinus), hl / 2, cy0 + 0.5);
+      arrow(1, -1, flip ? RED : GREEN);    // yläpuolen nuoli +x:ään: kulkusuunta, kun kuviota ei käännetty
+      arrow(-1, 1, flip ? GREEN : RED);
+      ctx.font = '800 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      [[n3(dPlus), -5, -(sw + hx + 6)], [n3(dMinus), 5, sw + hx + 6]].forEach(function (t) {
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeText(t[0], t[1], t[2]); ctx.fillStyle = '#111'; ctx.fillText(t[0], t[1], t[2]);
+      });
       ctx.restore();
     }
     // heading line ja COG/SOG-vektori (plot-koordinaateissa)
@@ -620,22 +623,13 @@
       var hh = S.hdgTrue * RAD, far = (w + h) * inv * 1.5;
       ctx.beginPath(); ctx.moveTo(S.px, S.py); ctx.lineTo(S.px + Math.sin(hh) * far, S.py + Math.cos(hh) * far);
       ctx.strokeStyle = 'rgba(17,17,17,0.75)'; ctx.lineWidth = 1.2 * inv; ctx.setLineDash([6 * inv, 5 * inv]); ctx.stroke(); ctx.setLineDash([]);   // SARNav: keulan eteen heikko katkoviiva
-      // COG/SOG-vektori: pituus = nopeus * aika, poikkiviivat minuutin välein, loppupäässä nuoli
+      // COG/SOG-vektori: pituus = nopeus * aika
       var sec = VEC_SEC[vecIdx], ch = S.cogTrue * RAD, sx = Math.sin(ch), sy = Math.cos(ch), cl = view.cl;
       var len = S.sog * sec / cl;                      // plot-metrejä (Mercator-venymä huomioitu)
       if (len * view.s < 3) return;
       var ex = S.px + sx * len, ey = S.py + sy * len;
-      ctx.beginPath(); ctx.moveTo(S.px, S.py); ctx.lineTo(ex, ey); ctx.strokeStyle = '#1f3fd6'; ctx.lineWidth = 2.6 * inv; ctx.stroke();   // SARNavin sininen vektori
-      var nx = -sy, ny = sx, tk = 5 * inv;
-      ctx.lineWidth = 1.6 * inv; ctx.beginPath();
-      for (var t = 60; t < sec + 1; t += 60) {
-        var d = S.sog * t / cl, tx = S.px + sx * d, ty = S.py + sy * d;
-        ctx.moveTo(tx - nx * tk, ty - ny * tk); ctx.lineTo(tx + nx * tk, ty + ny * tk);
-      }
-      ctx.stroke();
-      // nuolenkärki
-      var ah = 8 * inv; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - sx * ah + nx * ah * 0.45, ey - sy * ah + ny * ah * 0.45); ctx.lineTo(ex - sx * ah - nx * ah * 0.45, ey - sy * ah - ny * ah * 0.45); ctx.closePath();
-      ctx.fillStyle = '#1f3fd6'; ctx.fill();
+      // SARNav: liikevektori pelkkänä sinisenä viivana, ei minuuttiviivoja eikä nuolenkärkeä
+      ctx.beginPath(); ctx.moveTo(S.px, S.py); ctx.lineTo(ex, ey); ctx.strokeStyle = '#1f3fd6'; ctx.lineWidth = 3 * inv; ctx.lineCap = 'butt'; ctx.stroke(); ctx.lineCap = 'round';
     }
     function haloText(txt, x, y, font, fill, align) {
       ctx.font = font; ctx.textAlign = align || 'left'; ctx.textBaseline = 'middle';
