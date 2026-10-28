@@ -40,6 +40,10 @@
       </div>
       <div class="hint" id="exInfo"></div>
       <div class="hint" id="routeHint"></div>
+      <button type="button" id="gpxBtn" class="big">Tuo reitti GPX-tiedostosta</button>
+      <input type="file" id="gpxIn" hidden aria-label="GPX-tiedosto">
+      <div class="hint" id="gpxMsg" role="status"></div>
+      <button type="button" id="gpxClear" class="linkbtn" hidden>Poista tuodut reitit</button>
     </div>
     <div class="field" id="fldDir" role="group" aria-labelledby="lblDir">
       <div class="lbl" id="lblDir">Lähtöpaikka</div>
@@ -249,6 +253,7 @@
 <script src="js/symbols.js"></script>
 <script src="js/signs.js"></script>
 <script src="js/geo.js"></script>
+<script src="js/gpx.js"></script>
 <script src="simulaattori/js/paikka.js"></script>
 <script src="simulaattori/js/liike.js"></script>
 <script src="simulaattori/js/mvt.js"></script>

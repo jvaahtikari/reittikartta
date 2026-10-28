@@ -91,11 +91,11 @@
   }
   // Reittikartan reitit (localStorage reittikartta.v1) luetaan aloitusnäytön avautuessa ja aina, kun toinen välilehti muuttaa niitä.
   function refreshStored() {
-    G.stored = H.listStored(); G.showRk = H.storedShow();
+    G.stored = H.listStored().concat(H.listImported()); G.showRk = H.storedShow();
     if (G.ex !== 'h1' && G.ex !== 'free' && !G.stored.some(function (x) { return x.id === G.ex; })) G.ex = 'h1';
     renderExList();
   }
-  function statusText(ex) { return ex.status === 'approved' ? 'hyväksytty' : 'luonnos'; }
+  function statusText(ex) { return (ex.status === 'approved' ? 'hyväksytty' : 'luonnos') + (ex.tuotu ? ' · GPX' : ''); }
   function renderExList() {
     var seg = $('segEx'), freeBtn = seg.querySelector('button[data-v="free"]');
     Array.prototype.slice.call(seg.querySelectorAll('button[data-rk]')).forEach(function (b) { seg.removeChild(b); });
@@ -110,8 +110,11 @@
     var hint = $('routeHint');
     hint.textContent = '';
     var a = doc.createElement('a'); a.href = 'index.html'; a.id = 'rkLink';
-    if (G.stored.length) { hint.appendChild(doc.createTextNode('Reitit ovat Reittikartasta. ')); a.textContent = 'Avaa Reittikartta'; hint.appendChild(a); }
-    else { hint.appendChild(doc.createTextNode('Tallennettuja reittejä ei löytynyt. ')); a.textContent = 'Suunnittele reitti Reittikartassa'; hint.appendChild(a); hint.appendChild(doc.createTextNode('.')); }
+    a.href = 'https://reittikartta-6qn2.vercel.app/'; a.target = '_blank'; a.rel = 'noopener';
+    hint.appendChild(doc.createTextNode(G.stored.length ? 'Reitit ovat Reittikartasta. ' : 'Ei reittejä. '));
+    a.textContent = 'Suunnittele reitti Reittikartassa'; hint.appendChild(a);
+    hint.appendChild(doc.createTextNode(', vie se reitin valikosta GPX-tiedostoksi ja tuo tiedosto tähän.'));
+    $('gpxClear').hidden = !G.stored.some(function (x) { return x.tuotu; });
     updateBudgetHint();
   }
   // Valittu reitti (null = vapaa ajo), käänteisenä, jos lähtö on viimeisestä pisteestä
@@ -171,6 +174,23 @@
     segInit('segEx', function (v) { G.ex = v; updateBudgetHint(); });
     segInit('segDir', function (v) { G.dir = v; updateBudgetHint(); });
     refreshStored();
+    // GPX-tuonti (28.10.2026): Reittikartasta viety reitti toimii myös eri osoitteessa ja eri laitteella
+    $('gpxBtn').addEventListener('click', function () { $('gpxIn').value = ''; $('gpxIn').click(); });
+    function gpxMsg(t) { $('gpxMsg').textContent = t; }
+    $('gpxIn').addEventListener('change', function () {
+      var f = $('gpxIn').files && $('gpxIn').files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        var ids = [];
+        try { ids = H.importGpx(root.GPX.parse(String(rd.result || ''))); } catch (e) { gpxMsg(e.message || 'Tiedostoa ei voitu lukea.'); return; }
+        if (!ids.length) { gpxMsg('Tiedostossa ei ollut reittiä (vähintään kaksi pistettä).'); return; }
+        G.ex = ids[0]; refreshStored();
+        gpxMsg(ids.length === 1 ? 'Reitti tuotu ja valittu.' : ids.length + ' reittiä tuotu, ensimmäinen valittu.');
+      };
+      rd.onerror = function () { gpxMsg('Tiedostoa ei voitu lukea.'); };
+      rd.readAsText(f);
+    });
+    $('gpxClear').addEventListener('click', function () { H.clearImported(); refreshStored(); gpxMsg('Tuodut reitit poistettu.'); });
     root.addEventListener('storage', function (e) { if (G.mode === 'start' && (!e.key || e.key === H.STORE_KEY)) refreshStored(); });
     root.addEventListener('focus', function () { if (G.mode === 'start') refreshStored(); }); root.addEventListener('pageshow', function () { if (G.mode === 'start') refreshStored(); });
     segInit('segSpeed', function (v) { G.targetKn = Number(v); updateBudgetHint(); });

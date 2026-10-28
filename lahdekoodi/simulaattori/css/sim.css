@@ -69,6 +69,7 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #plotOff .big{width:180px}
 #groundBanner{position:absolute;left:10px;right:10px;bottom:10px;z-index:60;background:rgba(150,20,20,.95);border-radius:12px;padding:10px 14px;text-align:center}
 #groundBanner b{display:block;font-size:20px}#groundBanner span{display:block;margin-top:2px}
+.linkbtn{display:block;min-height:44px;margin:4px 0 0;padding:0;border:0;background:none;color:var(--muted);text-decoration:underline;font-size:14px}.linkbtn[hidden]{display:none}
 .gbtns{display:flex;gap:10px}.gbtns .big{flex:1 1 0;margin-top:10px}.gbtns .big[hidden]{display:none}
 #toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:70;background:rgba(14,28,40,.94);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-weight:600;max-width:90%}
 

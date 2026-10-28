@@ -90,6 +90,39 @@
       return out;
     } catch (e) { return []; }
   }
+  // ---------- GPX-tuonti (28.10.2026) ----------
+  // Reittikartan localStorage näkyy vain samassa osoitteessa ja samalla laitteella. Reittikartasta viety GPX-tiedosto (Vie GPX-tiedostoksi)
+  // tuodaan simulaattoriin ja tallennetaan simulaattorin omaan muistiin (sim.tuodutReitit) samassa muodossa kuin Reittikartan reitit.
+  // data = GPX.parse-funktion tulos: reitit (rte, Reittikartan lisätiedot meta-kentässä: from, to, speed, status) ja jäljet (trk).
+  var IMPORT_KEY = 'sim.tuodutReitit';
+  function readImported(storage) {
+    try { storage = storage || localStorage; var a = JSON.parse(storage.getItem(IMPORT_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+  }
+  function importGpx(data, storage) {
+    storage = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+    var list = readImported(storage), added = [], stamp = Date.now().toString(36);
+    var src = (data.routes || []).map(function (r) { return { name: r.name, points: r.points, meta: r.meta || {} }; })
+      .concat((data.tracks || []).map(function (t) { return { name: t.name, points: t.points, meta: {} }; }));
+    src.forEach(function (r, i) {
+      var m = r.meta || {};
+      var raw = { id: 'gpx-' + stamp + '-' + i, name: r.name || '', from: m.from || '', via: m.via || '', to: m.to || '', speed: m.speed, status: m.status === 'approved' ? 'approved' : 'draft', tuotu: true,
+        points: (r.points || []).map(function (p) { return { lat: Number(p.lat), lng: Number(p.lng) }; }) };
+      if (!fromStored(raw)) return;
+      // sama reitti uudelleen tuotuna korvaa vanhan (nimi ja pisteet samat)
+      var key = JSON.stringify([storedName(raw), raw.points]);
+      list = list.filter(function (o) { return JSON.stringify([storedName(o), o.points]) !== key; });
+      list.push(raw); added.push('rk:' + raw.id);
+    });
+    try { if (storage) storage.setItem(IMPORT_KEY, JSON.stringify(list)); } catch (e) {}
+    return added;
+  }
+  function listImported(storage) {
+    var out = [];
+    readImported(storage).forEach(function (r) { var ex = fromStored(r); if (ex) { ex.tuotu = true; out.push(ex); } });
+    return out;
+  }
+  function clearImported(storage) { try { (storage || localStorage).removeItem(IMPORT_KEY); } catch (e) {} }
+
   // Reittikartan asetukset, jotka vaikuttavat reittimerkintöihin plotterilla (legin suunta ja matka, käännösmerkit)
   function storedShow(storage) {
     var o = { legBrg: true, turnTicks: true };
@@ -374,7 +407,7 @@
   var api = {
     SETTINGS: SETTINGS, EXERCISES: EXERCISES, buildRoute: buildRoute, project: project, distToRoute: distToRoute, nextTurn: nextTurn,
     createAuto: createAuto, createRecorder: createRecorder, analyze: analyze, cmdText: cmdText, collisionText: collisionText, mmss: mmss, fmt1: fmt1, wrap180: wrap180, norm360: norm360,
-    fromStored: fromStored, listStored: listStored, storedShow: storedShow, reversed: reversed, settleSpeed: settleSpeed, DEFAULT_START_KN: DEFAULT_START_KN, STORE_KEY: STORE_KEY
+    fromStored: fromStored, listStored: listStored, importGpx: importGpx, listImported: listImported, clearImported: clearImported, storedShow: storedShow, reversed: reversed, settleSpeed: settleSpeed, DEFAULT_START_KN: DEFAULT_START_KN, STORE_KEY: STORE_KEY
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Harjoitus = api;
 })(typeof window !== 'undefined' ? window : globalThis);
