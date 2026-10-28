@@ -274,12 +274,15 @@
     var evOn = interactive && opts.ev !== false, ebl = 0, vrm = 0.5, vecIdx = 1, onEV = opts.onEV || null;
     var route = { pts: [], turns: [], legs: [], color: '#cc22cc', legBrg: true, turnTicks: true, approved: true }, nextPt = null, trail = { src: null, n: 0, arr: [] };
     var extraLines = [], extraPts = [];
+    var showNotes = true, showPasses = true;            // SARNavin näkyvyyspainikkeet (reittinuotit, sivuutusetäisyydet)
+    var harp = { on: false, pts: [], cur: null };        // harppi: pisteet { X, Y, lat, lon } plot-koordinaateissa, cur = hiiren kursori
+    var peekTimer = null;                                 // kurkistus: keskitys palaa noin 2 s kuluttua vedon päättymisestä
     var aidList = [], lastAidSync = 0, wantStamp = 0, lastNeedKey = '', dirty = false, readyFlag = false, destroyed = false;
     var view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0, s: 1, sx: 0, sy: 0 };
 
     // ---- SARNav-tyylinen tietopalsta oikeassa reunassa (28.10.2026, vain ulkoasu): HDG, SOG ja COG isoina, sijainti, kursorin sijainti keltaisena ja kello.
     // Kartta-alue kapenee palstan verran (--pw). Pikkukuvassa ja purun kartassa palstaa ei ole.
-    var panel = null, panelT = 0, clockTxt = '', curLL = null;
+    var panel = null, panelT = 0, clockTxt = '', curLL = null, curPx = null;
     function pad3(v) { var t = String(Math.round(v) % 360); while (t.length < 3) t = '0' + t; return t; }
     function ddm(v, lat) {
       var a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60; if (m >= 59.9995) { d++; m = 0; }
@@ -288,10 +291,13 @@
     }
     if (interactive && container.parentNode) {
       panel = document.createElement('div'); panel.className = 'sn-panel'; panel.setAttribute('aria-label', 'Plotterin tiedot');
-      panel.innerHTML = '<div class="sn-big"><b data-k="hdg">---</b><i>HDG</i></div><div class="sn-big"><b data-k="sog">-</b><i>SOG</i></div><div class="sn-big"><b data-k="cog">---</b><i>COG</i></div>' +
+      // Yläosa: mittaristo (HDG valkoisena, SOG ja COG harmaina, POS). Alaosa: työkalun tietokenttä (suuntima, etäisyys ja kursori keltaisina) ja kello.
+      panel.innerHTML = '<div class="sn-big sn-hdg"><b data-k="hdg">---</b><i>HDG</i></div><div class="sn-big sn-g"><b data-k="sog">-</b><i>SOG</i></div><div class="sn-big sn-g"><b data-k="cog">---</b><i>COG</i></div>' +
         '<div class="sn-pos"><span data-k="lat"></span><span data-k="lon"></span><i>POS</i></div>' +
-        '<div class="sn-pos sn-cur" hidden><span data-k="clat"></span><span data-k="clon"></span><i>Kursori</i></div>' +
-        '<div class="sn-clock" data-k="clock"></div>';
+        '<div class="sn-tool" hidden><div class="sn-big sn-y"><b data-k="brg"></b><i>Suuntima</i></div><div class="sn-mid sn-y"><b data-k="dst"></b><i>Etäisyys</i></div>' +
+        '<div class="sn-mid sn-y sn-tot"><b data-k="tot"></b><i>Reitti</i></div>' +
+        '<div class="sn-pos sn-y"><span data-k="clat"></span><span data-k="clon"></span><i>Kursori</i></div></div>' +
+        '<div class="sn-clock"><b data-k="clock"></b><i>Kello</i></div>';
       container.parentNode.appendChild(panel);
       panel.k = {}; Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (e) { panel.k[e.getAttribute('data-k')] = e; });
     }
@@ -308,10 +314,22 @@
     function updatePanel(force) {
       if (!panel || panel.hidden) return;
       var now = Date.now(); if (!force && now - panelT < 200) return; panelT = now;
-      setPanelText('hdg', pad3(S.hdgTrue)); setPanelText('sog', (Math.round(S.sog / 0.514444 * 10) / 10).toFixed(1)); setPanelText('cog', S.sog > 0.05 ? pad3(S.cogTrue) : '---');
+      // SARNav: SOG kokonaislukuna, COG viivoina, kun alus on paikallaan
+      var kn = S.sog / 0.514444;
+      setPanelText('hdg', pad3(S.hdgTrue)); setPanelText('sog', String(Math.round(kn))); setPanelText('cog', kn >= 0.5 ? pad3(S.cogTrue) : '---');
       var ll = P.worldToLonLat(S.x, S.y); setPanelText('lat', ddm(ll.lat, true)); setPanelText('lon', ddm(ll.lon, false));
-      var cur = panel.querySelector('.sn-cur'); cur.hidden = !curLL;
-      if (curLL) { setPanelText('clat', ddm(curLL.lat, true)); setPanelText('clon', ddm(curLL.lon, false)); }
+      // Työkalun kenttä: hiiren kursori (suuntima ja etäisyys omasta aluksesta) tai EBL/VRM-piste, kun EBL/VRM on päällä
+      var tl = panel.querySelector('.sn-tool'), tb = null, td = 0, tp = null, hs = harp.on ? harpStats() : null;
+      panel.classList.toggle('harp', !!hs);
+      if (hs) { if (hs.brg != null) { tb = hs.brg; td = hs.d; } else { tb = 0; td = 0; } tp = hs.pos; setPanelText('tot', hs.tot.toFixed(2)); }
+      else if (curLL) {
+        var mlat = 1852 * 60, dN = (curLL.lat - ll.lat) * mlat, dE = (curLL.lon - ll.lon) * mlat * Math.cos(ll.lat * RAD);
+        tb = Math.atan2(dE, dN) / RAD; td = Math.hypot(dE, dN) / 1852; tp = curLL;
+      } else if (evOn) {
+        tb = ebl; td = vrm; tp = { lat: ll.lat + vrm * Math.cos(ebl * RAD) / 60, lon: ll.lon + vrm * Math.sin(ebl * RAD) / (60 * Math.cos(ll.lat * RAD)) };
+      }
+      tl.hidden = tb == null;
+      if (tb != null) { setPanelText('brg', pad3(((tb % 360) + 360) % 360)); setPanelText('dst', td.toFixed(2)); setPanelText('clat', ddm(tp.lat, true)); setPanelText('clon', ddm(tp.lon, false)); }
       setPanelText('clock', clockTxt);
     }
     function setClock(ms) {
@@ -323,9 +341,12 @@
       canvas.addEventListener('pointermove', function (ev) {
         if (ev.pointerType !== 'mouse' || !S.has) return;
         var rc = canvas.getBoundingClientRect(), g = toPlot(ev.clientX - rc.left, ev.clientY - rc.top), wd = plotToWorld(g[0], g[1]);
-        curLL = P.worldToLonLat(wd.x, wd.y); updatePanel(true);
+        curLL = P.worldToLonLat(wd.x, wd.y); curPx = [ev.clientX - rc.left, ev.clientY - rc.top];
+        if (evOn && !harp.on && S.has) draw();
+        if (harp.on) { harp.cur = { X: g[0], Y: g[1], lat: curLL.lat, lon: curLL.lon }; if (S.has) draw(); }
+        updatePanel(true);
       });
-      canvas.addEventListener('pointerleave', function () { curLL = null; updatePanel(true); });
+      canvas.addEventListener('pointerleave', function () { curLL = null; curPx = null; if (evOn && S.has) draw(); if (harp.cur) { harp.cur = null; if (S.has) draw(); } updatePanel(true); });
     }
     function resize() {
       panelWidth();
@@ -520,8 +541,9 @@
       if (!route.legs.length || !w || !h) return;
       var legs = route.legs, i;
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      drawPasses();
+      if (showPasses) drawPasses();
       drawWaypoints();
+      drawHarp();
       var color = route.color;
       // käännösmerkit: 2 ja 1 kaapelia (0,2 ja 0,1 mpk) ennen reittipistettä, kohtisuoraan legiä vastaan
       if (route.turnTicks) {
@@ -543,7 +565,7 @@
           });
         }
       }
-      if (!route.legBrg) return;
+      if (!route.legBrg || !showNotes) return;
       var M = 40, cands = [], placed = [];
       for (i = 0; i < legs.length; i++) {
         var L = legs[i], A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), plen = Math.hypot(B[0] - A[0], B[1] - A[1]);
@@ -553,7 +575,7 @@
         cands.push({ L: L, A: A, B: B, plen: plen, vis: vis, vlen: vlen });
       }
       cands.sort(function (a, b) { return b.vlen - a.vlen; });
-      var BW = 92, BH = 38;
+      var BW = 60, BH = 44;   // kaksoisnuolen ympäröivä laatikko
       function free(cx, cy) {
         if (cx - BW / 2 < 2 || cx + BW / 2 > w - 2 || cy - BH / 2 < 2 || cy + BH / 2 > h - 2) return false;
         for (var k = 0; k < placed.length; k++) if (Math.abs(placed[k][0] - cx) < BW + 4 && Math.abs(placed[k][1] - cy) < BH + 4) return false;
@@ -572,32 +594,32 @@
         }
       });
     }
+    // Suuntanuotti SARNavin tapaan (28.10.2026): tummanvihreä kaksoisnuoli legin suuntaisesti, toisella puoliskolla kulkusuunta ja toisella vastasuunta
+    // (asteet ilman merkkiä), valkoinen teksti. Kuvio käännetään niin, että teksti on aina oikein päin.
     function drawLegBox(cx, cy, bw, bh, L, color) {
-      var x0 = cx - bw / 2, y0 = cy - bh / 2, r = 4;
-      ctx.beginPath(); ctx.moveTo(x0 + r, y0); ctx.lineTo(x0 + bw - r, y0); ctx.arcTo(x0 + bw, y0, x0 + bw, y0 + r, r); ctx.lineTo(x0 + bw, y0 + bh - r); ctx.arcTo(x0 + bw, y0 + bh, x0 + bw - r, y0 + bh, r);
-      ctx.lineTo(x0 + r, y0 + bh); ctx.arcTo(x0, y0 + bh, x0, y0 + bh - r, r); ctx.lineTo(x0, y0 + r); ctx.arcTo(x0, y0, x0 + r, y0, r); ctx.closePath();
-      ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
-      ctx.font = '800 15px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      var t1 = brgText(L.brg), tw1 = ctx.measureText(t1).width, gap = 4, aw = 13, tot = aw + gap + tw1, sx = cx - tot / 2;
-      // nuoli kulkusuuntaan (kartan suuntaan nähden: plotterin kartta voi olla käännetty, joten nuolen kulma lasketaan näytön suunnasta)
-      var A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), ang = Math.atan2(B[0] - A[0], -(B[1] - A[1]));
-      ctx.save(); ctx.translate(sx + aw / 2, cy - 8); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(0, -6.5); ctx.lineTo(4.8, 5.5); ctx.lineTo(0, 3); ctx.lineTo(-4.8, 5.5); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
-      ctx.fillStyle = '#111'; ctx.fillText(t1, sx + aw + gap, cy - 8);
-      ctx.font = '600 10.5px ' + FONT; ctx.textAlign = 'center'; ctx.fillStyle = '#444';
-      ctx.fillText(brgText(L.brg + 180) + ' · ' + nmText(L.dist), cx, cy + 9);
+      var A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), ang = Math.atan2(B[1] - A[1], B[0] - A[0]), flip = Math.cos(ang) < 0;
+      var dPlus = flip ? L.brg + 180 : L.brg, dMinus = dPlus + 180, len = 50, hh = 12, tip = 9;
+      var n3 = function (b) { var t = String(Math.round(((b % 360) + 360) % 360) % 360); while (t.length < 3) t = '0' + t; return t; };
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(flip ? ang + Math.PI : ang);
+      ctx.beginPath(); ctx.moveTo(-len / 2, -hh); ctx.lineTo(len / 2 - tip, -hh); ctx.lineTo(len / 2 + 3, 0); ctx.lineTo(-len / 2, 0); ctx.closePath();   // yläpuolisko: nuoli +x
+      ctx.moveTo(len / 2, 0); ctx.lineTo(len / 2, hh); ctx.lineTo(-len / 2 + tip, hh); ctx.lineTo(-len / 2 - 3, 0); ctx.closePath();                    // alapuolisko: nuoli -x
+      ctx.fillStyle = '#2f6b3c'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.font = '700 11px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+      ctx.fillText(n3(dPlus), -3, -hh / 2 + 0.5); ctx.fillText(n3(dMinus), 3, hh / 2 + 0.5);
+      ctx.restore();
     }
     // heading line ja COG/SOG-vektori (plot-koordinaateissa)
     function drawOwnLines(inv) {
       if (opts.noOwnLines) return;
       var hh = S.hdgTrue * RAD, far = (w + h) * inv * 1.5;
       ctx.beginPath(); ctx.moveTo(S.px, S.py); ctx.lineTo(S.px + Math.sin(hh) * far, S.py + Math.cos(hh) * far);
-      ctx.strokeStyle = 'rgba(17,17,17,0.85)'; ctx.lineWidth = 1 * inv; ctx.stroke();
+      ctx.strokeStyle = 'rgba(17,17,17,0.75)'; ctx.lineWidth = 1.2 * inv; ctx.setLineDash([6 * inv, 5 * inv]); ctx.stroke(); ctx.setLineDash([]);   // SARNav: keulan eteen heikko katkoviiva
       // COG/SOG-vektori: pituus = nopeus * aika, poikkiviivat minuutin välein, loppupäässä nuoli
       var sec = VEC_SEC[vecIdx], ch = S.cogTrue * RAD, sx = Math.sin(ch), sy = Math.cos(ch), cl = view.cl;
       var len = S.sog * sec / cl;                      // plot-metrejä (Mercator-venymä huomioitu)
       if (len * view.s < 3) return;
       var ex = S.px + sx * len, ey = S.py + sy * len;
-      ctx.beginPath(); ctx.moveTo(S.px, S.py); ctx.lineTo(ex, ey); ctx.strokeStyle = '#e8590c'; ctx.lineWidth = 2.2 * inv; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(S.px, S.py); ctx.lineTo(ex, ey); ctx.strokeStyle = '#1f3fd6'; ctx.lineWidth = 2.6 * inv; ctx.stroke();   // SARNavin sininen vektori
       var nx = -sy, ny = sx, tk = 5 * inv;
       ctx.lineWidth = 1.6 * inv; ctx.beginPath();
       for (var t = 60; t < sec + 1; t += 60) {
@@ -607,7 +629,7 @@
       ctx.stroke();
       // nuolenkärki
       var ah = 8 * inv; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - sx * ah + nx * ah * 0.45, ey - sy * ah + ny * ah * 0.45); ctx.lineTo(ex - sx * ah - nx * ah * 0.45, ey - sy * ah - ny * ah * 0.45); ctx.closePath();
-      ctx.fillStyle = '#e8590c'; ctx.fill();
+      ctx.fillStyle = '#1f3fd6'; ctx.fill();
     }
     function haloText(txt, x, y, font, fill, align) {
       ctx.font = font; ctx.textAlign = align || 'left'; ctx.textBaseline = 'middle';
@@ -649,21 +671,51 @@
       }
     }
     // EBL, VRM ja niiden leikkauspiste
+    // Suuntima SARNavin tapaan (28.10.2026): punainen viiva omasta aluksesta suuntimapisteeseen ja sen jatkeena katkoviiva. Hiirellä viiva seuraa kursoria,
+    // kosketuksella napautus asettaa pisteen (EBL = tosisuuntima, VRM = etäisyys). Lukemat tietopalstan alaosassa.
     function drawEV() {
-      if (!evOn) return;
-      var sx = view.sx, sy = view.sy, eb = (ebl - (headUp ? S.hdgTrue : 0)) * RAD, dx = Math.sin(eb), dy = -Math.cos(eb);
-      var far = (w + h) * 1.5;
-      ctx.lineCap = 'butt';
-      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + dx * far, sy + dy * far); ctx.strokeStyle = '#0a84c8'; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
-      var r = vrm * NM / view.mpp;
-      if (r > 2 && r < 20000) { ctx.beginPath(); ctx.arc(sx, sy, r, 0, 2 * Math.PI); ctx.strokeStyle = '#b27d00'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]); }
-      var cx = sx + dx * r, cy = sy + dy * r;
-      if (r > 2 && r < 20000) {
-        ctx.beginPath(); ctx.moveTo(cx - 6, cy - 6); ctx.lineTo(cx + 6, cy + 6); ctx.moveTo(cx - 6, cy + 6); ctx.lineTo(cx + 6, cy - 6);
-        ctx.strokeStyle = '#7a1fa2'; ctx.lineWidth = 2; ctx.stroke();
-      }
+      if (!evOn || harp.on) return;
+      var sx = view.sx, sy = view.sy, cx, cy;
+      if (curPx) { cx = curPx[0]; cy = curPx[1]; }
+      else { var eb = (ebl - (headUp ? S.hdgTrue : 0)) * RAD, r = Math.min(vrm * NM / view.mpp, 20000); cx = sx + Math.sin(eb) * r; cy = sy - Math.cos(eb) * r; }
+      var dl = Math.hypot(cx - sx, cy - sy) || 1, far = (w + h) * 1.5;
       ctx.lineCap = 'round';
+      ctx.setLineDash([7, 6]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + (cx - sx) / dl * far, cy + (cy - sy) / dl * far); ctx.strokeStyle = 'rgba(200,40,120,.75)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx, cy); ctx.strokeStyle = '#d81e1e'; ctx.lineWidth = 2.5; ctx.stroke();
+      var rv = vrm * NM / view.mpp;   // VRM vihreänä renkaana aluksen ympärillä
+      if (rv > 3 && rv < 20000) { ctx.beginPath(); ctx.arc(sx, sy, rv, 0, 2 * Math.PI); ctx.strokeStyle = '#1e7a32'; ctx.lineWidth = 1.5; ctx.stroke(); }
     }
+    // ---- harppi (SARNav): punainen monipisteviiva, pisteissä renkaat, viimeisestä pisteestä kursoriin katkoviiva ja lukema "309°(T) 0.56 mpk / Reitti: 1.70 mpk" ----
+    function llDist(a, b) { var dN = (b.lat - a.lat) * 111120, dE = (b.lon - a.lon) * 111120 * Math.cos((a.lat + b.lat) / 2 * RAD); return { d: Math.hypot(dE, dN) / NM, brg: norm360(Math.atan2(dE, dN) / RAD) }; }
+    function harpStats() {
+      if (!harp.pts.length) return null;
+      var tot = 0, i; for (i = 1; i < harp.pts.length; i++) tot += llDist(harp.pts[i - 1], harp.pts[i]).d;
+      var last = harp.pts[harp.pts.length - 1], tgt = harp.cur || (harp.pts.length > 1 ? last : null), from = harp.cur ? last : harp.pts[harp.pts.length - 2];
+      if (!tgt || !from) return { brg: null, d: 0, tot: tot, pos: last };
+      var lg = llDist(from, tgt); return { brg: lg.brg, d: lg.d, tot: harp.cur ? tot + lg.d : tot, pos: tgt };
+    }
+    function harpPoint(u, v) { var g = toPlot(u, v), wd = plotToWorld(g[0], g[1]), ll = P.worldToLonLat(wd.x, wd.y); return { X: g[0], Y: g[1], lat: ll.lat, lon: ll.lon }; }
+    function drawHarp() {
+      if (!harp.on) return;
+      var sp = harp.pts.map(function (p) { return toScreen(p.X, p.Y); }), i;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#e02020'; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+      if (sp.length > 1) { ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1]); for (i = 1; i < sp.length; i++) ctx.lineTo(sp[i][0], sp[i][1]); ctx.stroke(); }
+      if (harp.cur && sp.length) { var c = toScreen(harp.cur.X, harp.cur.Y); ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(sp[sp.length - 1][0], sp[sp.length - 1][1]); ctx.lineTo(c[0], c[1]); ctx.stroke(); ctx.setLineDash([]); }
+      sp.forEach(function (q) { ctx.beginPath(); ctx.arc(q[0], q[1], 6, 0, 2 * Math.PI); ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fill(); ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.beginPath(); ctx.arc(q[0], q[1], 1.6, 0, 2 * Math.PI); ctx.fillStyle = '#222'; ctx.fill(); });
+      if (harp.cur) { var k = toScreen(harp.cur.X, harp.cur.Y); ctx.strokeStyle = '#e02020'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(k[0] - 9, k[1]); ctx.lineTo(k[0] + 9, k[1]); ctx.moveTo(k[0], k[1] - 9); ctx.lineTo(k[0], k[1] + 9); ctx.stroke(); }
+      var st = harpStats(); if (!st || st.brg == null) return;
+      var l1 = pad3(st.brg) + '°(T)  ' + st.d.toFixed(2) + ' mpk', l2 = 'Reitti: ' + st.tot.toFixed(2) + ' mpk';
+      ctx.font = '700 13px ' + FONT; var bw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 12, bx = w - bw - 6, by = h - 64;
+      ctx.fillStyle = 'rgba(0,0,0,.88)'; ctx.fillRect(bx, by, bw, 38); ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(l1, bx + 6, by + 10); ctx.fillText(l2, bx + 6, by + 28);
+    }
+    function setHarp(on) {
+      on = !!on; harp.on = on; harp.pts = []; harp.cur = null;
+      var pn = container.parentNode, hb = pn && pn.querySelector('#harpBtn'); if (hb) hb.setAttribute('aria-pressed', on ? 'true' : 'false');
+      canvas.style.cursor = on ? 'crosshair' : '';
+      updateReadouts(); if (S.has) draw();
+    }
+    function harpUndo() { if (harp.on && harp.pts.length) { harp.pts.pop(); updateReadouts(); if (S.has) draw(); } }
     // DOM: oma alus, lisämerkit, lukemat
     function placeOverlay() {
       if (own) {
@@ -687,6 +739,7 @@
       scaleEls.bar.style.width = wpx + 'px'; scaleEls.lab.textContent = pick[1]; scaleEls.hh.textContent = 'Näkymä ' + fnum(rangeNm, 2) + ' mpk';
     }
     function updateReadouts() {
+      if (S.has) updatePanel(true);
       var pn = container.parentNode, zc = pn && interactive && pn.querySelector('.zm-ctr');
       if (zc) { zc.setAttribute('aria-pressed', follow ? 'true' : 'false'); zc.title = follow ? 'Seuranta päällä' : 'Keskitä aluksen kohdalle'; }
       var info = pn && pn.querySelector('.plot-info');
@@ -802,7 +855,8 @@
         if (S.has && w) computeView();
         if (ptrs.size === 1) {
           var l = local(ev);
-          gest = { mode: 'tap', x0: ev.clientX, y0: ev.clientY, slop: ev.pointerType === 'mouse' ? 4 : 8, g: toPlot(l[0], l[1]) };
+          clearTimeout(peekTimer);
+          gest = { mode: 'tap', x0: ev.clientX, y0: ev.clientY, slop: ev.pointerType === 'mouse' ? 4 : 8, g: toPlot(l[0], l[1]), wasFollow: follow };
         } else if (ptrs.size === 2) {
           var m = mid2();
           gest = { mode: 'pinch', d0: Math.max(10, dist2()), range0: rangeNm, g: toPlot(m[0], m[1]) };
@@ -830,7 +884,10 @@
         ptrs.delete(ev.pointerId);
         try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
         if (ptrs.size === 0) {
-          if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && evOn) { setPoint(ev); endPoint(); }
+          if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && harp.on) { var hl = local(ev); harp.pts.push(harpPoint(hl[0], hl[1])); updateReadouts(); if (S.has) draw(); }
+          else if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && evOn) { setPoint(ev); endPoint(); }
+          // kurkistus: keskityksen aikana vedetty kartta palaa alukseen noin 2 s kuluttua
+          if (gest && gest.mode === 'pan' && gest.wasFollow) { clearTimeout(peekTimer); peekTimer = setTimeout(function () { if (!ptrs.size) recenter(); }, 2000); }
           gest = null;
         } else if (ptrs.size === 1) gest = { mode: 'jaa' };     // sormen nosto nipistyksen jälkeen ei siirrä karttaa eikä EBL:ää
       };
@@ -843,7 +900,15 @@
       var info = pane && pane.querySelector('.plot-info');
       if (info) {
         var tg = info.querySelector('.ro-tgl'), vb = info.querySelector('.ro-vec');
-        if (tg) tg.addEventListener('click', function () { setEV(!evOn); });
+        if (tg) tg.addEventListener('click', function () { if (harp.on) setHarp(false); setEV(!evOn); });
+        var hb = info.querySelector('#harpBtn'), nb = info.querySelector('#notesBtn'), pb = info.querySelector('#passBtn');
+        if (hb) hb.addEventListener('click', function () { setHarp(!harp.on); });
+        // SARNav: sivuutukset eivät näy ilman nuotteja. Sivuutusten kytkentä päälle kytkee nuotit, nuottien poisto poistaa sivuutukset.
+        var vis = function () { nb.setAttribute('aria-pressed', showNotes ? 'true' : 'false'); pb.setAttribute('aria-pressed', showPasses ? 'true' : 'false'); dirty = true; if (S.has) draw(); };
+        if (nb && pb) {
+          nb.addEventListener('click', function () { showNotes = !showNotes; if (!showNotes) showPasses = false; vis(); });
+          pb.addEventListener('click', function () { showPasses = !showPasses; if (showPasses) showNotes = true; vis(); });
+        }
         if (vb) vb.addEventListener('click', function () { cycleVec(); });
       }
       var zin = pane && pane.querySelector('.zm-in'), zout = pane && pane.querySelector('.zm-out'), zc = pane && pane.querySelector('.zm-ctr');
@@ -862,7 +927,7 @@
       setRasterVisible: setRasterVisible, isRaster: function () { return rasterMode; }, redraw: redraw, rebase: rebase, ready: ready,
       setHeadUp: setHeadUp, isHeadUp: function () { return headUp; },
       heading: function () { return S.hdgTrue; },
-      setClock: setClock, setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
+      setClock: setClock, setHarp: setHarp, harpUndo: harpUndo, isHarp: function () { return harp.on; }, setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
       setVectorIdx: setVecIdx, getVecIdx: function () { return vecIdx; }, cycleVector: cycleVec, vectorSec: function () { return VEC_SEC[vecIdx]; },
       toScreen: function (x, y) { var p = worldToPlot(x, y); return toScreen(p[0], p[1]); },
       canvas: canvas, destroy: destroy, view: function () { return { z: view.z, mpp: view.mpp, sx: view.sx, sy: view.sy, ax: view.ax, ay: view.ay, w: w, h: h, follow: follow, rangeNm: rangeNm }; },

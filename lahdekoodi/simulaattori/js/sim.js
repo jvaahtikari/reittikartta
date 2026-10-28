@@ -812,8 +812,11 @@
       else if (k === '.') G.pl.stepEBL(e.shiftKey ? 10 : 1);
       else if (k === '[') G.pl.scaleVRM(1 / 1.05);
       else if (k === ']') G.pl.scaleVRM(1.05);
-      else if (k === '+' || k === '=') G.pl.zoomBy(G.pl.limits.step);
-      else if (k === '-' || k === '_') G.pl.zoomBy(1 / G.pl.limits.step);
+      else if (k === '+' || k === '=') G.pl.zoomBy(1 / G.pl.limits.step);   // SARNav: + loitontaa (alue suuremmaksi, kuten tutkan RANGE +), − lähentää
+      else if (k === '-' || k === '_') G.pl.zoomBy(G.pl.limits.step);
+      else if ((k === 'm' || k === 'M') && G.pl.setHarp) G.pl.setHarp(!G.pl.isHarp());   // harppi (SARNav: M)
+      else if (k === 'Escape' && G.pl.isHarp && G.pl.isHarp()) G.pl.setHarp(false);
+      else if ((k === 'Delete' || k === 'Backspace') && G.pl.isHarp && G.pl.isHarp()) G.pl.harpUndo();
       else if (k === 'c' || k === 'C') G.pl.recenter();
       else if (k === 'v' || k === 'V') { G.pl.cycleVector(); G.vecIdx = G.pl.getVecIdx(); savePrefs(); }
       else if (k === 'Tab') swapViews();

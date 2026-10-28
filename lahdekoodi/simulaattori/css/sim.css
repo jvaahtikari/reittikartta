@@ -130,7 +130,7 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 #game.deck.tp #cmd{height:auto;align-self:auto;border-left:0;display:block;flex:none}
 #game.deck #pane3d.small .hud,#game.deck .pane.small .hud{display:block}
 #game.deck #swapBtn{display:none}
-#game.deck .plot-info{left:auto;right:calc(var(--pw,0px) + 8px);align-items:flex-end}
+#game.deck .plot-info{left:8px;right:auto;align-items:flex-start}   /* SARNav: toimintopainikkeet vasemmassa yläkulmassa */
 #game.deck #instrBtn{display:none}
 /* tutka */
 #paneR{background:#020a06}
@@ -211,17 +211,52 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .sn-panel{position:absolute;top:0;right:0;bottom:0;width:var(--pw,118px);z-index:22;background:#000;color:#fff;display:flex;flex-direction:column;align-items:stretch;padding:4px 8px 6px;box-sizing:border-box;overflow:hidden;font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;pointer-events:none;border-left:1px solid #333}
 .sn-panel[hidden]{display:none}
 .sn-big{display:flex;flex-direction:column;align-items:flex-end;line-height:1;margin-bottom:4px}
-.sn-big b{font-weight:700;font-size:40px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.sn-panel{font-family:"Arial Narrow","Roboto Condensed","Helvetica Neue",Arial,sans-serif}
+.sn-big b{font-weight:700;font-size:44px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
 .sn-big i,.sn-pos i{font-style:normal;font-size:10px;color:#9aa3a8;margin-top:1px}
 .sn-pos{display:flex;flex-direction:column;align-items:flex-end;margin-top:6px;font:600 11px/1.25 ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
 .sn-pos[hidden]{display:none}
-.sn-cur span{color:#ffd400}
-.sn-clock{margin-top:auto;text-align:right;font:700 15px/1 ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.sn-hdg b{color:#fff}.sn-g b{color:#b5b5b5}
+.sn-big i,.sn-pos i,.sn-mid i,.sn-clock i{font-style:normal;font-weight:700;font-size:10px;color:#fff}
+.sn-tool{margin-top:auto;display:flex;flex-direction:column}
+.sn-tool[hidden]{display:none}
+.sn-y b,.sn-y span,.sn-y i{color:#f5c242}
+.sn-mid{display:flex;flex-direction:column;align-items:flex-end;line-height:1}
+.sn-mid b{font-weight:700;font-size:24px;font-variant-numeric:tabular-nums}
+.sn-clock{display:flex;flex-direction:column;align-items:flex-end;line-height:1;margin-top:6px}
+.sn-clock b{color:#c8c8c8}
+.sn-tool[hidden] + .sn-clock{margin-top:auto}
+.sn-panel.narrow .sn-mid b{font-size:16px}
+.sn-panel.short .sn-mid{flex-direction:row;justify-content:flex-end;align-items:baseline;gap:6px}
+.sn-panel.short .sn-mid b{font-size:18px}
+.sn-panel.short .sn-mid i{order:-1}
+.sn-panel.short .sn-clock{flex-direction:row;justify-content:flex-end;align-items:baseline;gap:6px;margin-top:3px}
+.sn-panel.short .sn-clock i{order:-1}
+#paneP:has(.sn-panel:not([hidden])) .plot-info .ro-ebl,#paneP:has(.sn-panel:not([hidden])) .plot-info .ro-vrm{display:none}   /* EBL ja VRM näkyvät tietopalstassa suuntimana ja etäisyytenä */
+.sn-clock b{font:700 17px/1 ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 .sn-panel.narrow{padding:3px 5px 5px}
 .sn-panel.narrow .sn-big b{font-size:24px}
 .sn-panel.narrow .sn-pos{font-size:8.5px}
-.sn-panel.narrow .sn-clock{font-size:11px}
+.sn-panel.narrow .sn-clock b{font-size:12px}
 .sn-panel.short .sn-big{flex-direction:row;justify-content:flex-end;align-items:baseline;gap:6px;margin-bottom:2px}
 .sn-panel.short .sn-big b{font-size:26px}
 .sn-panel.short .sn-big i{order:-1}
 .sn-panel.short .sn-pos{margin-top:3px}
+
+/* SARNavin toimintopainikkeet: tumma pystypalkki vasemmassa yläkulmassa, päällä oleva työkalu harmaalla taustalla */
+.plot-info{left:4px;top:4px}
+.sn-tools{display:flex;flex-direction:column;gap:2px;padding:3px;background:#262626;border-radius:6px;pointer-events:auto;margin-bottom:6px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.plot-info .sn-tb{width:44px;height:44px;min-height:44px;margin:0;padding:0;border-radius:4px;background:#161616;display:flex;align-items:center;justify-content:center}
+.plot-info .sn-tb[aria-pressed=true]{background:#9a9a9a}
+.plot-info .sn-tb#evBtn[aria-pressed=true],.plot-info .sn-tb#harpBtn[aria-pressed=true]{background:#9a9a9a}
+.plot-info .sn-tb svg{display:block;pointer-events:none}
+/* zoomaus ja keskitys: tummat neliöpainikkeet, keskityksen vene vihreä (päällä) tai punainen (pois) */
+#paneP .hud-zoom{gap:3px;padding:3px;background:#262626;border-radius:6px}
+#paneP .hud-zoom button{width:44px;height:44px;min-height:44px;padding:0;border-radius:4px;background:#1c1c1c;background-clip:border-box}
+#paneP .hud-zoom button svg{display:block;margin:auto;pointer-events:none}
+#paneP .hud-zoom button.zm-ctr[aria-pressed=true]{background:#1c1c1c}
+#paneP .hud-zoom button.zm-ctr[aria-pressed=false]{background:#1c1c1c}
+.zm-ctr .zc-boat{fill:#4cbb5e}
+.zm-ctr[aria-pressed=false] .zc-boat{fill:#ff2020}
+.sn-panel:not(.harp) .sn-tot{display:none}
+.sn-panel.short .sn-tool .sn-pos{display:none}   /* matalassa ruudussa kursorin koordinaatit pois, jotta kello mahtuu */
