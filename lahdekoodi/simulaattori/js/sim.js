@@ -839,6 +839,7 @@
       else if (k === '-' || k === '_') G.pl.zoomBy(G.pl.limits.step);
       else if ((k === 'm' || k === 'M') && G.pl.setHarp) G.pl.setHarp(!G.pl.isHarp());   // harppi (SARNav: M)
       else if (k === 'Escape' && G.pl.isHarp && G.pl.isHarp()) G.pl.setHarp(false);
+      else if (k === 'Escape' && G.pl.isEVLocked && G.pl.isEVLocked()) G.pl.unlockEV();   // suuntima seuraa taas hiirtä
       else if ((k === 'Delete' || k === 'Backspace') && G.pl.isHarp && G.pl.isHarp()) G.pl.harpUndo();
       else if (k === 'c' || k === 'C') G.pl.recenter();
       else if (k === 'v' || k === 'V') { G.pl.cycleVector(); G.vecIdx = G.pl.getVecIdx(); savePrefs(); }
