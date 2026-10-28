@@ -272,12 +272,63 @@
     var S = { x: 0, y: 0, hdg: 0, cog: 0, sog: 0, hdgTrue: 0, cogTrue: 0, px: 0, py: 0, lat: 61.5, has: false };
     var headUp = opts.fixedHeadUp ? true : opts.headUp !== false;
     var evOn = interactive && opts.ev !== false, ebl = 0, vrm = 0.5, vecIdx = 1, onEV = opts.onEV || null;
-    var route = { pts: [], turns: [], legs: [], color: '#d4237f', legBrg: true, turnTicks: true, approved: true }, nextPt = null, trail = { src: null, n: 0, arr: [] };
+    var route = { pts: [], turns: [], legs: [], color: '#cc22cc', legBrg: true, turnTicks: true, approved: true }, nextPt = null, trail = { src: null, n: 0, arr: [] };
     var extraLines = [], extraPts = [];
     var aidList = [], lastAidSync = 0, wantStamp = 0, lastNeedKey = '', dirty = false, readyFlag = false, destroyed = false;
     var view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0, s: 1, sx: 0, sy: 0 };
 
+    // ---- SARNav-tyylinen tietopalsta oikeassa reunassa (28.10.2026, vain ulkoasu): HDG, SOG ja COG isoina, sijainti, kursorin sijainti keltaisena ja kello.
+    // Kartta-alue kapenee palstan verran (--pw). Pikkukuvassa ja purun kartassa palstaa ei ole.
+    var panel = null, panelT = 0, clockTxt = '', curLL = null;
+    function pad3(v) { var t = String(Math.round(v) % 360); while (t.length < 3) t = '0' + t; return t; }
+    function ddm(v, lat) {
+      var a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60; if (m >= 59.9995) { d++; m = 0; }
+      var ds = String(d); while (ds.length < (lat ? 2 : 3)) ds = '0' + ds;
+      return ds + '° ' + (m < 10 ? '0' : '') + m.toFixed(3) + "' " + (lat ? (v < 0 ? 'S' : 'N') : (v < 0 ? 'W' : 'E'));
+    }
+    if (interactive && container.parentNode) {
+      panel = document.createElement('div'); panel.className = 'sn-panel'; panel.setAttribute('aria-label', 'Plotterin tiedot');
+      panel.innerHTML = '<div class="sn-big"><b data-k="hdg">---</b><i>HDG</i></div><div class="sn-big"><b data-k="sog">-</b><i>SOG</i></div><div class="sn-big"><b data-k="cog">---</b><i>COG</i></div>' +
+        '<div class="sn-pos"><span data-k="lat"></span><span data-k="lon"></span><i>POS</i></div>' +
+        '<div class="sn-pos sn-cur" hidden><span data-k="clat"></span><span data-k="clon"></span><i>Kursori</i></div>' +
+        '<div class="sn-clock" data-k="clock"></div>';
+      container.parentNode.appendChild(panel);
+      panel.k = {}; Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (e) { panel.k[e.getAttribute('data-k')] = e; });
+    }
+    function setPanelText(k, t) { var e = panel && panel.k[k]; if (e && e.textContent !== t) e.textContent = t; }
+    function panelWidth() {
+      var pn = container.parentNode; if (!panel || !pn) return 0;
+      var small = pn.classList.contains('small'), W = pn.clientWidth;
+      panel.hidden = small || !W;
+      var pw = small || !W ? 0 : W < 520 ? 78 : 118;
+      panel.classList.toggle('narrow', pw === 78); panel.classList.toggle('short', pn.clientHeight < 330);   // matalassa ruudussa (työpöydän deck) pienemmät luvut, jotta kello mahtuu
+      (pn.parentNode || pn).style.setProperty('--pw', pw + 'px');   // #stage: myös pieni 3D-ikkuna väistää palstaa (sim.css)
+      return pw;
+    }
+    function updatePanel(force) {
+      if (!panel || panel.hidden) return;
+      var now = Date.now(); if (!force && now - panelT < 200) return; panelT = now;
+      setPanelText('hdg', pad3(S.hdgTrue)); setPanelText('sog', (Math.round(S.sog / 0.514444 * 10) / 10).toFixed(1)); setPanelText('cog', S.sog > 0.05 ? pad3(S.cogTrue) : '---');
+      var ll = P.worldToLonLat(S.x, S.y); setPanelText('lat', ddm(ll.lat, true)); setPanelText('lon', ddm(ll.lon, false));
+      var cur = panel.querySelector('.sn-cur'); cur.hidden = !curLL;
+      if (curLL) { setPanelText('clat', ddm(curLL.lat, true)); setPanelText('clon', ddm(curLL.lon, false)); }
+      setPanelText('clock', clockTxt);
+    }
+    function setClock(ms) {
+      var d = new Date(ms), p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+      try { var f = new Intl.DateTimeFormat('fi-FI', { timeZone: 'Europe/Helsinki', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(d); clockTxt = f.replace(/\./g, ':'); }
+      catch (e) { clockTxt = p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()); }
+    }
+    if (panel) {
+      canvas.addEventListener('pointermove', function (ev) {
+        if (ev.pointerType !== 'mouse' || !S.has) return;
+        var rc = canvas.getBoundingClientRect(), g = toPlot(ev.clientX - rc.left, ev.clientY - rc.top), wd = plotToWorld(g[0], g[1]);
+        curLL = P.worldToLonLat(wd.x, wd.y); updatePanel(true);
+      });
+      canvas.addEventListener('pointerleave', function () { curLL = null; updatePanel(true); });
+    }
     function resize() {
+      panelWidth();
       w = container.clientWidth; h = container.clientHeight;
       if (!w || !h) return;
       canvas.width = Math.round(w * DPR); canvas.height = Math.round(h * DPR);
@@ -408,13 +459,8 @@
     function drawRouteLayers(inv) {
       if (route.pts.length >= 4) {
         polyPath(route.pts); ctx.strokeStyle = route.color; ctx.globalAlpha = 0.95; ctx.lineWidth = 3 * inv; ctx.stroke(); ctx.globalAlpha = 1;
-        // reittipisteet pieninä pisteinä, käännöspisteet (suunta muuttuu vähintään 12°) rengastettuina
-        ctx.fillStyle = route.color;
-        for (var vi = 0; vi < route.pts.length; vi += 2) { ctx.beginPath(); ctx.arc(route.pts[vi], route.pts[vi + 1], 3 * inv, 0, 2 * Math.PI); ctx.fill(); }
+        // reittipisteet piirretään numeroituina mustina ympyröinä SARNavin tapaan (drawWaypoints, näytön koordinaateissa)
       }
-      route.turns.forEach(function (p) {
-        ctx.beginPath(); ctx.arc(p[0], p[1], 4.5 * inv, 0, 2 * Math.PI); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = route.color; ctx.lineWidth = 2 * inv; ctx.stroke();
-      });
       if (trail.arr.length >= 4) { polyPath(trail.arr); ctx.strokeStyle = 'rgba(31,78,156,0.8)'; ctx.lineWidth = 2.5 * inv; ctx.stroke(); }
       extraLines.forEach(function (l) {
         if (l.pts.length < 4) return;
@@ -460,11 +506,22 @@
         labelBox('\u21bb ' + kblText(t.dist), (A[0] + T[0]) / 2, (A[1] + T[1]) / 2, col);
       });
     }
+    // Reittipisteet SARNavin tapaan: musta ympyrä ja valkoinen kaksinumeroinen järjestysnumero (01, 02, ...)
+    function drawWaypoints() {
+      ctx.font = '700 10px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (var vi = 0; vi < route.pts.length; vi += 2) {
+        var q = toScreen(route.pts[vi], route.pts[vi + 1]); if (q[0] < -20 || q[1] < -20 || q[0] > w + 20 || q[1] > h + 20) continue;
+        var no = vi / 2 + 1, t = no < 10 ? '0' + no : String(no);
+        ctx.beginPath(); ctx.arc(q[0], q[1], 10, 0, 2 * Math.PI); ctx.fillStyle = '#111'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.fillText(t, q[0], q[1] + 0.5);
+      }
+    }
     function drawRouteNotes() {
       if (!route.legs.length || !w || !h) return;
       var legs = route.legs, i;
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       drawPasses();
+      drawWaypoints();
       var color = route.color;
       // käännösmerkit: 2 ja 1 kaapelia (0,2 ja 0,1 mpk) ennen reittipistettä, kohtisuoraan legiä vastaan
       if (route.turnTicks) {
@@ -649,6 +706,7 @@
       S.hdgTrue = P.gridToTrue(hdg, x, y); S.cogTrue = P.gridToTrue(S.cog, x, y);
       var p = worldToPlot(x, y); S.px = p[0]; S.py = p[1]; S.lat = p[2]; S.has = true;
       draw();
+      updatePanel(false);
       return view;
     }
     function ready() { return !w || !S.has || readyFlag; }
@@ -660,7 +718,7 @@
       route.pts = cvt(pts); route.turns = (turnPts || []).map(function (p) { var q = worldToPlot(p.x, p.y); return [q[0], q[1]]; });
       route.legs = (ro.legs || []).map(function (l) { var a = worldToPlot(l.a.x, l.a.y), b = worldToPlot(l.b.x, l.b.y); return { ax: a[0], ay: a[1], bx: b[0], by: b[1], brg: l.brg, dist: l.dist }; });
       route.legBrg = ro.legBrg !== false; route.turnTicks = ro.turnTicks !== false; route.approved = ro.approved !== false;
-      route.color = route.approved ? '#d4237f' : '#9a5b2a';
+      route.color = route.approved ? '#cc22cc' : '#9a5b2a';   // SARNavin magenta reitti
       var pp = function (q) { var o = worldToPlot(q.x, q.y); return [o[0], o[1]]; };
       route.passes = (ro.passes || []).map(function (p) { return { foot: pp(p.foot), tgt: pp(p.tgt), lab: pp(p.lab), dist: p.dist }; });
       route.rkTurns = (ro.rkTurns || []).map(function (t) { return { wp: pp(t.wp), tgt: pp(t.tgt), dist: t.dist }; });
@@ -804,7 +862,7 @@
       setRasterVisible: setRasterVisible, isRaster: function () { return rasterMode; }, redraw: redraw, rebase: rebase, ready: ready,
       setHeadUp: setHeadUp, isHeadUp: function () { return headUp; },
       heading: function () { return S.hdgTrue; },
-      setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
+      setClock: setClock, setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
       setVectorIdx: setVecIdx, getVecIdx: function () { return vecIdx; }, cycleVector: cycleVec, vectorSec: function () { return VEC_SEC[vecIdx]; },
       toScreen: function (x, y) { var p = worldToPlot(x, y); return toScreen(p[0], p[1]); },
       canvas: canvas, destroy: destroy, view: function () { return { z: view.z, mpp: view.mpp, sx: view.sx, sy: view.sy, ax: view.ax, ay: view.ay, w: w, h: h, follow: follow, rangeNm: rangeNm }; },

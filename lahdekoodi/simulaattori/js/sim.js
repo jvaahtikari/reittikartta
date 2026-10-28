@@ -1069,7 +1069,7 @@
   function P_norm(b) { b = b % 360; return b < 0 ? b + 360 : b; }
   function updateUi() {
     var S = G.S;
-    setText($('clock'), fmtClock(S.clockMs));
+    setText($('clock'), fmtClock(S.clockMs)); if (G.pl && G.pl.setClock) G.pl.setClock(S.clockMs);
     setText($('ordHdg'), L.orderHeadingText(S)); setText($('ordSpd'), L.speedText(S.orderSpeedKn));
     // peruutuksessa (käsketty nopeus alle 0) suuntanapit ovat Perä vasen ja Perä oikea ja Loiva-nappi on Suoraan
     var rev = S.orderSpeedKn < 0;
