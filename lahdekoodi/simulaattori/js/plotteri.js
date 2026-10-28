@@ -696,7 +696,7 @@
       ctx.lineCap = 'round';
       ctx.setLineDash([7, 6]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + (cx - sx) / dl * far, cy + (cy - sy) / dl * far); ctx.strokeStyle = 'rgba(200,40,120,.75)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx, cy); ctx.strokeStyle = '#d81e1e'; ctx.lineWidth = 2.5; ctx.stroke();
-      var rv = vrm * NM / view.mpp;   // VRM vihreänä renkaana aluksen ympärillä
+      var rv = curPx ? Math.hypot(cx - sx, cy - sy) : vrm * NM / view.mpp;   // VRM vihreänä renkaana: hiirellä kursorin etäisyydellä (kuten tietopalstan Etäisyys), muuten asetetulla etäisyydellä
       if (rv > 3 && rv < 20000) { ctx.beginPath(); ctx.arc(sx, sy, rv, 0, 2 * Math.PI); ctx.strokeStyle = '#1e7a32'; ctx.lineWidth = 1.5; ctx.stroke(); }
     }
     // ---- harppi (SARNav): punainen monipisteviiva, pisteissä renkaat, viimeisestä pisteestä kursoriin katkoviiva ja lukema "309°(T) 0.56 mpk / Reitti: 1.70 mpk" ----
