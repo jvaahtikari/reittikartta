@@ -131,7 +131,7 @@
     if (ex.builtin) { info.textContent = ''; h.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).'; }
     else {
       h.textContent = '';
-      info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Lähtönopeus ' + fnum(ex.startKn, 0) + ' kn (' + (ex.speedFromRoute ? 'reitin nopeus' : 'oletus') + '), aikabudjetti ' + H.mmss(rt.total / (ex.startKn * KN)) + '.';
+      info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Alkaa levosta. Aikabudjetti ' + fnum(ex.startKn, 0) + ' kn mukaan (' + (ex.speedFromRoute ? 'reitin nopeus' : 'oletus') + '): ' + H.mmss(rt.total / (ex.startKn * KN)) + '.';
     }
   }
   function updateDispHint() {
@@ -496,12 +496,11 @@
     var id = v.indexOf('rk:') === 0 ? v : 'rk:' + v;
     return G.stored.some(function (x) { return x.id === id; }) ? id : null;
   }
-  // Tavoitenopeus ja lähtönopeus: sisäänrakennettu harjoitus alkaa levosta, tallennettu reitti ja vapaa ajo kulussa (reitin nopeus tai 12 kn, vapaassa ajossa auto-parametrin nopeus)
+  // Lähtönopeus: kaikki ajot alkavat levosta lähtöpisteessä (28.10.2026, myös Reittikartan reitit). Vain testien auto-parametri antaa lähtönopeuden.
   function startSpeedKn(ex) {
     var auto = Number(qs.get('auto')) > 0 ? Number(qs.get('auto')) : 0;
-    if (!ex) return auto;
-    if (ex.builtin) return 0;
-    return auto > 0 ? auto : ex.startKn;
+    if (!ex || ex.builtin) return ex ? 0 : auto;
+    return auto;
   }
   function startRun() {
     refreshStored();
@@ -516,7 +515,7 @@
     if (G.ext === 'google') setExtView(false);
     var ex = currentEx();
     G.route = ex ? H.buildRoute(ex) : null;
-    G.budgetKn = ex && !ex.builtin ? startSpeedKn(ex) : G.targetKn;
+    G.budgetKn = ex && !ex.builtin ? (startSpeedKn(ex) || ex.startKn) : G.targetKn;   // aikabudjetti reitin nopeudella, vaikka lähtö on levosta
     // maailmakoordinaatiston origo: harjoituksessa reitin keskipiste, vapaassa ajossa Mustalahti
     if (G.route) {
       var es = G.route.pts.map(function (p) { return p.e; }), ns = G.route.pts.map(function (p) { return p.n; });
@@ -575,7 +574,17 @@
       } else { brg = P.gridToTrue(rt.legs[i].brg, wp[i].x, wp[i].y); dist = rt.legs[i].len; }
       legs.push({ a: wp[i], b: wp[i + 1], brg: brg, dist: dist });
     }
-    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft' });
+    // Sivuutusetäisyys: kohteen kohtisuora etäisyys legin linjasta (sama kuin Reittikartassa), käännösetäisyys: reittipisteen etäisyys kohteesta
+    var passes = G.showRk.passes === false ? [] : (rt.passes || []).filter(function (p) { return rt.pts[p.leg + 1]; }).map(function (p) {
+      var a = rt.pts[p.leg], b = rt.pts[p.leg + 1], dx = b.e - a.e, dy = b.n - a.n, L2 = dx * dx + dy * dy || 1;
+      var t = ((p.tgt.e - a.e) * dx + (p.tgt.n - a.n) * dy) / L2, fe = a.e + t * dx, fn = a.n + t * dy;
+      return { foot: P.enToWorld(fe, fn), tgt: P.enToWorld(p.tgt.e, p.tgt.n), lab: P.enToWorld(p.lab.e, p.lab.n), dist: Math.hypot(p.tgt.e - fe, p.tgt.n - fn) };
+    });
+    var rkTurns = G.showRk.passes === false ? [] : (rt.rkTurns || []).filter(function (t) { return rt.pts[t.wp]; }).map(function (t) {
+      var w = rt.pts[t.wp]; return { wp: P.enToWorld(w.e, w.n), tgt: P.enToWorld(t.tgt.e, t.tgt.n), dist: Math.hypot(t.tgt.e - w.e, t.tgt.n - w.n) };
+    });
+    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft', passes: passes, rkTurns: rkTurns,
+      notes: (rt.notes || []).filter(function (q) { return rt.pts[q.leg + 1]; }).map(function (q) { return { leg: q.leg, at: P.enToWorld(q.e, q.n) }; }) });
   }
 
   // ---------- tutka ----------
@@ -804,8 +813,11 @@
       else if (k === '.') G.pl.stepEBL(e.shiftKey ? 10 : 1);
       else if (k === '[') G.pl.scaleVRM(1 / 1.05);
       else if (k === ']') G.pl.scaleVRM(1.05);
-      else if (k === '+' || k === '=') G.pl.zoomBy(G.pl.limits.step);
-      else if (k === '-' || k === '_') G.pl.zoomBy(1 / G.pl.limits.step);
+      else if (k === '+' || k === '=') G.pl.zoomBy(1 / G.pl.limits.step);   // SARNav: + loitontaa (alue suuremmaksi, kuten tutkan RANGE +), − lähentää
+      else if (k === '-' || k === '_') G.pl.zoomBy(G.pl.limits.step);
+      else if ((k === 'm' || k === 'M') && G.pl.setHarp) G.pl.setHarp(!G.pl.isHarp());   // harppi (SARNav: M)
+      else if (k === 'Escape' && G.pl.isHarp && G.pl.isHarp()) G.pl.setHarp(false);
+      else if ((k === 'Delete' || k === 'Backspace') && G.pl.isHarp && G.pl.isHarp()) G.pl.harpUndo();
       else if (k === 'c' || k === 'C') G.pl.recenter();
       else if (k === 'v' || k === 'V') { G.pl.cycleVector(); G.vecIdx = G.pl.getVecIdx(); savePrefs(); }
       else if (k === 'Tab') swapViews();
@@ -1061,7 +1073,7 @@
   function P_norm(b) { b = b % 360; return b < 0 ? b + 360 : b; }
   function updateUi() {
     var S = G.S;
-    setText($('clock'), fmtClock(S.clockMs));
+    setText($('clock'), fmtClock(S.clockMs)); if (G.pl && G.pl.setClock) G.pl.setClock(S.clockMs);
     setText($('ordHdg'), L.orderHeadingText(S)); setText($('ordSpd'), L.speedText(S.orderSpeedKn));
     // peruutuksessa (käsketty nopeus alle 0) suuntanapit ovat Perä vasen ja Perä oikea ja Loiva-nappi on Suoraan
     var rev = S.orderSpeedKn < 0;

@@ -127,19 +127,25 @@
     <!-- plotteri -->
     <div id="paneP" class="pane">
       <div id="plot" class="plot-view">
-        <svg class="plot-own" viewBox="-12 -16 24 32" width="26" height="34"><path d="M0 -14L9 12L0 7L-9 12Z" fill="#1f4e9c" stroke="#fff" stroke-width="2"/></svg>
+        <svg class="plot-own" viewBox="-12 -12 24 24" width="24" height="24"><circle r="9.5" fill="#f0a64a" stroke="#5a3a10" stroke-width="1.5"/><path d="M0 -6L4.5 4.5L-4.5 4.5Z" fill="#3a2a10"/></svg>
       </div>
       <div class="plot-info" id="plotInfo">
-        <button type="button" class="hud pbtn ro-tgl" id="evBtn" aria-pressed="true" aria-label="EBL ja VRM päälle tai pois">EBL VRM</button>
+        <!-- SARNavin toimintopainikkeet (28.10.2026): harppi, suuntima (EBL/VRM), reittinuotit ja sivuutusetäisyydet -->
+        <div class="sn-tools" role="toolbar" aria-label="Työkalut">
+          <button type="button" class="pbtn sn-tb" id="harpBtn" aria-pressed="false" aria-label="Harppi, matkan mittaus (näppäin M)"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2v3M12 5L5 22M12 5l7 17M7.5 16h9" stroke="#1e9bff" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="12" cy="5" r="2" fill="#1e9bff"/></svg></button>
+          <button type="button" class="pbtn sn-tb ro-tgl" id="evBtn" aria-pressed="true" aria-label="Suuntima, tosisuuntima ja etäisyys (EBL ja VRM)"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M3 3l9 9" stroke="#e02020" stroke-width="2" stroke-dasharray="2.5 2.2" fill="none"/><path d="M12.5 20.5c-1-3 0-7 4-10.5l4.5-1.5-1.5 4.5c-3.5 4-7.5 5-10.5 4z" fill="#1e9bff" transform="rotate(0)"/></svg></button>
+          <button type="button" class="pbtn sn-tb" id="notesBtn" aria-pressed="true" aria-label="Reittinuottien näkyvyys"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M5 19L19 5M19 5h-6M19 5v6M5 19h6M5 19v-6" stroke="#1e9bff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button type="button" class="pbtn sn-tb" id="passBtn" aria-pressed="true" aria-label="Reitin sivuutusetäisyyksien näkyvyys"><svg viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="12" r="8" fill="#555" stroke="#777" stroke-width="1.5"/></svg></button>
+        </div>
         <div class="hud ro ro-ebl">EBL 000° T</div>
         <div class="hud ro ro-vrm">VRM 0,50 mpk</div>
         <div class="hud ro ro-vec" id="vecBtn" role="button" tabindex="0" aria-label="Vaihda vektorin aika">Vektori 1 min</div>
       </div>
       <div id="plotOff" hidden>Plotteri pois<button type="button" id="plotOnBtn" class="big">Päälle</button></div>
       <div class="hud hud-zoom" id="zoomBox" role="group" aria-label="Zoomaus ja keskitys">
-        <button type="button" class="zm zm-in" id="zIn" aria-label="Lähennä (näppäin +)">+</button>
-        <button type="button" class="zm zm-out" id="zOut" aria-label="Loitonna (näppäin −)">&minus;</button>
-        <button type="button" class="zm zm-ctr" id="zCtr" aria-pressed="true" aria-label="Keskitä alukseen (näppäin C)">Keskitä</button>
+        <button type="button" class="zm zm-out" id="zOut" aria-label="Loitonna, alue suuremmaksi (näppäin +)"><svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="9.5" fill="none" stroke="#d0d0d0" stroke-width="2.2"/><path d="M7 12h10M12 7v10" stroke="#d0d0d0" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+        <button type="button" class="zm zm-in" id="zIn" aria-label="Lähennä (näppäin −)"><svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="9.5" fill="none" stroke="#d0d0d0" stroke-width="2.2"/><path d="M7 12h10" stroke="#d0d0d0" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+        <button type="button" class="zm zm-ctr" id="zCtr" aria-pressed="true" aria-label="Keskitys alukseen (näppäin C)"><svg viewBox="0 0 24 24" width="30" height="30"><path class="zc-boat" d="M7 21c-1.5-5 .5-12 9-18l3 1c-2 9-6 15-12 17z" stroke="#222" stroke-width="1"/></svg></button>
       </div>
       <div class="hud hud-scale" id="scaleBox" aria-label="Mittakaava"><div class="sb-line"><i class="sb-bar"></i><span class="sb-lab"></span></div><span class="sb-h"></span></div>
     </div>
@@ -220,7 +226,7 @@
     <button type="button" class="big" id="mPort">Satamat (Google 3D): omat veneet</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus ja miinus, hiiren rulla ja kahden sormen nipistys zoomaavat (0,1 ... 12 mpk). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus loitontaa ja miinus lähentää kuten SARNavissa (alue suuremmaksi tai pienemmäksi, 0,1 ... 12 mpk), samoin hiiren rulla ja kahden sormen nipistys. Kartan voi vetää keskityksen aikana hetkeksi sivuun, ja se palaa alukseen noin 2 sekunnissa. M: harppi (napautukset lisäävät pisteitä, Del poistaa edellisen, Esc lopettaa). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
   </div>
 </div>
 
