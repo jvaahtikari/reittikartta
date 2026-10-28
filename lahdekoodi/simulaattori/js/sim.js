@@ -163,8 +163,8 @@
     el.classList.toggle('start-night', night);
     if (night) {
       var hr = new Date(ms + helsinkiOffsetMin(ms) * 60000).getUTCHours(), after = hr >= 12;
-      el.textContent = (after ? 'Valittu aika on auringonlaskun jälkeen. ' : 'Valittu aika on ennen auringonnousua. ') + 'Yönäkymä tulee myöhemmässä vaiheessa, ja näkymä on tumma.';
-    } else el.textContent = 'Päivänäkymä. Auringon korkeus ' + Math.round(sun.elevDeg) + '°.';
+      el.textContent = (after ? 'Auringonlaskun jälkeen' : 'Ennen auringonnousua') + (sun.elevDeg < -6 ? ', yö. ' : ', hämärä. ') + 'Loistot palavat valotunnustensa mukaan, plotteri on yönäytöllä ja valonheitin on käytettävissä (auringon korkeus ' + Math.round(sun.elevDeg) + '°).';
+    } else el.textContent = (sun.elevDeg < 3 ? 'Hämärä alkaa, loistot syttyvät. ' : 'Päivänäkymä. ') + 'Auringon korkeus ' + Math.round(sun.elevDeg) + '°. Näkymä seuraa kelloa: yö tulee ajon aikana, kun aurinko laskee.';
   }
   // Google Maps -avain: luetaan vain Vercelin ympäristömuuttujasta (GOOGLE_API, reitti /api/google), aloitusnäytössä ei ole avainkenttää (28.10.2026)
   function updateSceneHint() {
@@ -239,6 +239,7 @@
     G.view.setQuality(gfxNow());
     if (qs.get('vesi') !== 'iso') splitWater(G.view);   // vesitason syvyystarkkuus (vaihe 3l)
     G.boats = root.Veneet3D && qs.get('veneet') !== 'ei' ? attachBoats(G.view) : null;   // laituriveneet (vaihe 3l)
+    G.valot = root.Valot3D ? G.view.addExtra(root.Valot3D.create(G.view)) : null;          // yön valot ja valonheitin (vaihe 4)
     applyBoatsQuality();
     new ResizeObserver(function () { layout(); }).observe($('stage'));
     new ResizeObserver(function () { sizeViews(); }).observe($('pane3d'));
@@ -559,6 +560,7 @@
     G.auto = qs.get('auto') ? H.createAuto(G.route, Number(qs.get('auto')), G.origin) : null;
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setSimTime(G.S.clockMs);
+    G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; if (G.valot) { G.valot.asetaHeitin(false); G.valot.asetaSuunta(0); } $('spotBtn').setAttribute('aria-pressed', 'false'); $('spotAim').hidden = true; $('spotLbl').hidden = true; $('spotAim').value = '0';
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
     G.view.setGaze(0); if (G.view.isBino()) { G.view.setBinoculars(false); binoUi(false); }
     $('exName').textContent = G.route ? G.route.nimi + (G.route.kuvaus ? ': ' + G.route.kuvaus : '') + (G.route.reverse ? ' (käänteinen)' : '') : 'Vapaa ajo, Mustalahti';
@@ -732,6 +734,8 @@
     $('instrBtn').addEventListener('click', cycleInstr);
     $('gazeBtn').addEventListener('click', function () { G.view.setGaze(0); G.view.setBinoPitch(0); });
     $('binoBtn').addEventListener('click', function () { setBino(!G.view.isBino()); });
+    $('spotBtn').addEventListener('click', function () { setSpot(!(G.valot && G.valot.heitin().on)); });
+    $('spotAim').addEventListener('input', function () { aimSpot(Number($('spotAim').value)); });
     $('menuBtn').addEventListener('click', function () { $('menu').hidden = false; });
     $('mClose').addEventListener('click', function () { $('menu').hidden = true; });
     $('mAbort').addEventListener('click', function () { $('menu').hidden = true; endRun('aborted'); });
@@ -836,6 +840,8 @@
       else if (k === ' ') crash();
       else if (k === 'l' || k === 'L') toggleGentle();
       else if (k === 'b' || k === 'B') setBino(!G.view.isBino());
+      else if (k === 'h' || k === 'H') setSpot(!(G.valot && G.valot.heitin().on));
+      else if ((k === 'j' || k === 'J' || k === 'k' || k === 'K') && G.valot && G.valot.heitin().on) aimSpot(G.valot.heitin().kulma + ((k === 'j' || k === 'J') ? -1 : 1) * (e.shiftKey ? 30 : 10));
       else if (k === 'q' || k === 'Q') { if (!e.repeat) G.gazeT = performance.now(); G.gazeKey = -1; }
       else if (k === 'e' || k === 'E') { if (!e.repeat) G.gazeT = performance.now(); G.gazeKey = 1; }
       else if (k === ',') G.pl.stepEBL(e.shiftKey ? -10 : -1);
@@ -1193,6 +1199,7 @@
       if (isHelm()) crewSendState(now); else if (isNav()) crewSendInstr(now);
     }
     v.terrain.tick(G.mode === 'run' ? 4 : 8);
+    updateNight(now);
     // 3D piirretään joka kuvalla, kun se on päänäkymä, ja joka toisella pienenä ikkunana
     var big3d = G.layout.wide || G.main === '3d';
     var drawOwn = big3d || frameN % 2 === 0;   // vaihe 3n: oma kerros piirtyy Googlen päällä kuten oma näkymä (joka kuvalla pääruutuna, muuten joka toisella)
@@ -1227,6 +1234,38 @@
     if (avg > 45) v.setPixelBudget(pb * 0.8); else if (avg < 22) v.setPixelBudget(pb * 1.12);
   }
 
+
+
+  // ---------- yömoodi (vaihe 4, 28.10.2026) ----------
+  // Kello ohjaa: näkymän aurinko, taivas ja valaistus päivitetään simulaation kellosta sekunnin välein (aiemmin vain ajon alussa). Pimeys 0 ... 1
+  // auringon korkeudesta (0 yli 3°, 1 alle -6°). Hämärässä (alle 1°) loistot syttyvät, valonheitin tulee käyttöön ja plotteri vaihtuu yönäytölle
+  // auringon ollessa alle -2°. Google 3D -kuva on päivänvalossa otettu, joten sitä himmennetään pimeyden mukaan.
+  G.night = { dark: 0, elev: 45, lastT: -1e9, dusk: false, plotNight: false };
+  function smooth01(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
+  function updateNight(now) {
+    var S = G.S, v = G.view; if (!S || !v) return;
+    if (now - G.night.lastT > 1000) {
+      G.night.lastT = now; v.setSimTime(S.clockMs);
+      var e = v.sun().elevDeg, n = G.night;
+      n.elev = e; n.dark = smooth01((3 - e) / 9);
+      var dusk = e < 1;
+      if (dusk !== n.dusk) { n.dusk = dusk; $('spotBox').hidden = !dusk; if (!dusk && G.valot && G.valot.heitin().on) setSpot(false); }
+      var pn = e < -2; if (pn !== n.plotNight) { n.plotNight = pn; $('paneP').classList.toggle('yo', pn); }
+      $('v3').style.setProperty('--g3dim', String(Math.round((1 - 0.88 * n.dark) * 100) / 100));
+    }
+    if (G.valot && G.mode === 'run') G.valot.paivita(S, (S.clockMs / 1000) % 86400, G.night.dark);
+  }
+  function setSpot(on) {
+    if (!G.valot) return; on = !!on && G.night.dusk;
+    G.valot.asetaHeitin(on);
+    $('spotBtn').setAttribute('aria-pressed', on ? 'true' : 'false'); $('spotAim').hidden = !on; $('spotLbl').hidden = !on;
+    if (G.S && G.mode === 'run') logCustom('valonheitin', on ? 1 : 0);
+  }
+  function aimSpot(deg) {
+    if (!G.valot) return; deg = Math.max(-150, Math.min(150, Math.round(deg)));
+    G.valot.asetaSuunta(deg); $('spotAim').value = String(deg);
+    setText($('spotLbl'), (deg === 0 ? '' : deg > 0 ? 'O ' : 'V ') + Math.abs(deg) + '°');
+  }
 
   // ---------- miehistötila (kaksinpeli, 28.10.2026) ----------
   // Yksi alus, kaksi laitetta. Ruorimies (isäntä) laskee aluksen liikkeen, hänellä ovat komennot, tauko ja aikakerroin, ja hänen plotterinsa ja tutkansa
