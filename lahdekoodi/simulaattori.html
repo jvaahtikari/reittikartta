@@ -32,7 +32,27 @@
     <h1>Simulaattori</h1>
     <p class="sub">Pv417 Repa Näsijärvellä, päivänavigointi. Roolina navigoija.</p>
 
-    <div class="field" role="group" aria-labelledby="lblEx">
+    <div class="field" role="group" aria-labelledby="lblCrew">
+      <div class="lbl" id="lblCrew">Miehistö</div>
+      <div class="seg" id="segCrew">
+        <button type="button" data-v="solo" class="on">Yksin<small>yksi laite</small></button>
+        <button type="button" data-v="helm">Ruorimies<small>aloittaa istunnon</small></button>
+        <button type="button" data-v="nav">Navigoija<small>liittyy koodilla</small></button>
+      </div>
+      <div id="crewHelm" class="crew-box" hidden>
+        <div>Istuntokoodi <b id="crewCode" class="crew-code">----</b></div>
+        <div class="hint" id="crewHelmSt"></div>
+        <div class="hint">Navigoija valitsee omalla laitteellaan Navigoija ja syöttää koodin. Ruorimiehellä ovat komennot ja navigoijan plotteri tai tutka ilman säätöjä. Puhe kulkee erikseen.</div>
+      </div>
+      <div id="crewNav" class="crew-box" hidden>
+        <input type="text" id="crewIn" class="keyin" maxlength="6" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="Istuntokoodi" aria-label="Istuntokoodi">
+        <button type="button" id="crewJoin" class="big primary">Liity</button>
+        <div class="hint" id="crewNavSt"></div>
+        <div class="hint">Navigoijalla ovat plotteri ja tutka säätöineen, komennot annetaan ruorimiehelle puheella. Reitti, aika ja ajo tulevat ruorimiehen laitteelta.</div>
+      </div>
+    </div>
+
+    <div class="field crew-hide" role="group" aria-labelledby="lblEx">
       <div class="lbl" id="lblEx">Reitti</div>
       <div class="seg list" id="segEx">
         <button type="button" data-v="h1" class="on">Harjoitus 1: Mustalahti – Siilinkari – Aitolahti<small>Sisäänrakennettu reitti, alkaa levosta</small></button>
@@ -45,14 +65,14 @@
       <div class="hint" id="gpxMsg" role="status"></div>
       <button type="button" id="gpxClear" class="linkbtn" hidden>Poista tuodut reitit</button>
     </div>
-    <div class="field" id="fldDir" role="group" aria-labelledby="lblDir">
+    <div class="field crew-hide" id="fldDir" role="group" aria-labelledby="lblDir">
       <div class="lbl" id="lblDir">Lähtöpaikka</div>
       <div class="seg" id="segDir">
         <button type="button" data-v="fwd" class="on">Ensimmäinen piste<small>reitin suuntaan</small></button>
         <button type="button" data-v="rev">Viimeinen piste<small>käänteiseen suuntaan</small></button>
       </div>
     </div>
-    <div class="field" id="fldSpeed" role="group" aria-labelledby="lblSp">
+    <div class="field crew-hide" id="fldSpeed" role="group" aria-labelledby="lblSp">
       <div class="lbl" id="lblSp">Tavoitenopeus</div>
       <div class="seg" id="segSpeed">
         <button type="button" data-v="10">10 kn</button>
@@ -70,14 +90,14 @@
       </div>
       <div class="hint" id="dispHint"></div>
     </div>
-    <div class="field" role="group" aria-labelledby="lblEye">
+    <div class="field crew-hide crew-hide-helm" role="group" aria-labelledby="lblEye">
       <div class="lbl" id="lblEye">Silmäpiste kuljettajan näkymässä</div>
       <div class="seg" id="segEye">
         <button type="button" data-v="nav" class="on">Navigoija</button>
         <button type="button" data-v="helm">Ruorimies</button>
       </div>
     </div>
-    <div class="field" role="group" aria-labelledby="lblClk">
+    <div class="field crew-hide" role="group" aria-labelledby="lblClk">
       <div class="lbl" id="lblClk">Kello</div>
       <div class="seg" id="segClock">
         <button type="button" data-v="custom" class="on">Valittu aika<small>oletus tänään 12.00</small></button>
@@ -96,7 +116,7 @@
       <div class="hint" id="sceneHint"></div>
     </div>
 
-    <button type="button" id="startBtn" class="big primary">Aloita</button>
+    <button type="button" id="startBtn" class="big primary crew-hide">Aloita</button>
     <div class="warn"><b>Ei navigointikäyttöön.</b> Aineistot ovat avointa dataa, eikä ohjelma täytä asianmukaisen merikartan vaatimuksia.</div>
     <details class="src"><summary>Lähteet ja käyttöehdot</summary>
       <p id="srcText">Sisältää Maanmittauslaitoksen, Väyläviraston, Liikenne- ja viestintäviraston, Luonnonvarakeskuksen sekä Digi- ja väestötietoviraston avointa aineistoa. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.</p>
@@ -116,6 +136,7 @@
     </button>
     <div id="clock" aria-label="Kello">--:--:--</div>
     <div id="exName" class="ex-name"></div>
+    <span id="crewBadge" class="crew-badge" hidden></span>
     <button type="button" class="ib txt" id="instrBtn" aria-label="Vaihda mittari" hidden>Tutka</button>
     <button type="button" class="ib txt" id="speedBtn" aria-label="Aikakerroin">1×</button>
     <button type="button" class="ib" id="pauseBtn" aria-label="Tauko">
@@ -257,6 +278,7 @@
 
 <script src="lib/pmtiles.js"></script>
 <script src="simulaattori/lib/three.min.js"></script>
+<script src="simulaattori/lib/supabase.js"></script>
 <script src="js/symbols.js"></script>
 <script src="js/signs.js"></script>
 <script src="js/geo.js"></script>
@@ -277,6 +299,7 @@
 <script src="simulaattori/js/maasto.js"></script>
 <script src="simulaattori/js/vesimaski3d.js"></script>
 <script src="simulaattori/js/nakyma.js"></script>
+<script src="simulaattori/js/miehisto.js"></script>
 <script src="simulaattori/js/google3d.js"></script>
 <script src="simulaattori/js/kalibrointi.js"></script>
 <script src="simulaattori/js/plotteri.js"></script>
