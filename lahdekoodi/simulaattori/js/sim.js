@@ -18,10 +18,10 @@
 
   var G = {
     S: null, view: null, pl: null, route: null, auto: null, rec: null, mode: 'start', main: 'plot', origin: { e: 0, n: 0 },
-    ex: 'h1', dir: 'fwd', stored: [], showRk: { legBrg: true, turnTicks: true }, budgetKn: 30, targetKn: 30, eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
+    ex: 'h1', dir: 'fwd', stored: [], showRk: { legBrg: true, turnTicks: true }, targetKn: 30, eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
     plotterOn: true, lastPlotT: 0, lastTrailT: 0, trail: [], gazeKey: 0, lastMerkitLoad: { x: 1e9, y: 1e9 }, lastVis: -1e9,
     speedSteps: [1, 2, 5, 10], speedIdx: 0, seated: false, ground: null, lastConvT: -1e9, loadedLandmarks: false, ready: false,
-    layout: { land: false, wide: false, tri: false, tp: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, budgetSec: null, finishedAt: null,
+    layout: { land: false, wide: false, tri: false, tp: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, finishedAt: null,
     // mittarit: disp = aloitusvalinta (plot, radar, both), instr = näytettävä mittari (plot, radar, both = kolme ruutua)
     disp: 'plot', instr: 'plot', plotShown: true, radar: null, radarOpt: null, radarOn: true, radarShown: false, radarMain: false, radarReady: true,
     collision: null, collMs: { n: 0, sum: 0, max: 0 }, lastTorE: 1e9, lastTorN: 1e9,
@@ -133,10 +133,10 @@
     var info = $('exInfo'), ex = currentEx();
     $('fldDir').hidden = !ex;
     if (!ex) { info.textContent = 'Alus lähtee Mustalahdesta levosta, ei reittiä. Purku näyttää ajetun matkan, nopeudet, komennot ja etäisyydet rantaan ja matalikkoon.'; return; }
-    var rt = H.buildRoute(ex), sec = rt.total / (G.targetKn * KN);
-    if (ex.builtin) info.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Alkaa levosta. Aikabudjetti ' + H.mmss(sec) + ' (' + G.targetKn + ' kn koko matkan).';
+    var rt = H.buildRoute(ex);
+    if (ex.builtin) info.textContent = 'Reitti ' + fnum(rt.total / 1852, 1) + ' mpk. Alkaa levosta.';
     else {
-      info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Alkaa levosta. Aikabudjetti ' + fnum(ex.startKn, 0) + ' kn mukaan (' + (ex.speedFromRoute ? 'reitin nopeus' : 'oletus') + '): ' + H.mmss(rt.total / (ex.startKn * KN)) + '.';
+      info.textContent = 'Reitti ' + fnum(rt.total / 1852, 2) + ' mpk, ' + rt.pts.length + ' pistettä, ' + rt.turns.length + ' käännöstä. Alkaa levosta.';
     }
   }
   function updateDispHint() {
@@ -535,7 +535,6 @@
     if (G.ext === 'google') setExtView(false);
     var ex = currentEx();
     G.route = ex ? H.buildRoute(ex) : null;
-    G.budgetKn = ex && !ex.builtin ? (startSpeedKn(ex) || ex.startKn) : G.targetKn;   // aikabudjetti reitin nopeudella, vaikka lähtö on levosta
     // maailmakoordinaatiston origo: harjoituksessa reitin keskipiste, vapaassa ajossa Mustalahti
     if (G.route) {
       var es = G.route.pts.map(function (p) { return p.e; }), ns = G.route.pts.map(function (p) { return p.n; });
@@ -1182,8 +1181,7 @@
       v.render(S, dtReal);
       if (idle || t > 60) {
         $('loading').hidden = true; G.mode = 'run'; G.ready = true; G.lastT = performance.now();
-        if (G.auto == null && !G.route) toast('Anna nopeus ja suunta', 1800);
-        if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.budgetKn * KN)), 2600);
+        if (G.auto == null || G.route) toast('Anna nopeus ja suunta', 1800);
         if (G.rec) G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y));
         applyPanes(); sizeViews();
         if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma' && v.sun().elevDeg < 1) { G.nightOff = true; updateG3Badge(); toast(NIGHT_G3, 4000); }
@@ -1515,7 +1513,7 @@
     if (a === 0) return 'käännöspisteellä';
     return a + ' m ' + (m < 0 ? 'ennen' : 'jälkeen');
   }
-  // Purku. Reitti on valinnainen: vapaassa ajossa (G.route == null) reittiin sidotut osat (poikkeama, käännökset, aikabudjetti) jäävät pois ja tilalle tulevat
+  // Purku. Reitti on valinnainen: vapaassa ajossa (G.route == null) reittiin sidotut osat (poikkeama, käännökset) jäävät pois ja tilalle tulevat
   // ajetun matkan, nopeuksien, rannan ja matalikon etäisyyksien sekä väyläalueen ulkopuolella ajetun matkan tiedot.
   function renderDebrief(an, why) {
     var rt = G.route, S = G.S, h = [], free = !rt;
@@ -1524,13 +1522,11 @@
     $('dbStatus').innerHTML = (free ? 'Vapaa ajo' : esc(rt.nimi + (rt.kuvaus ? ': ' + rt.kuvaus : '') + (rt.reverse ? ' (käänteinen)' : ''))) + ' ' + stat;
     if (!an.ok) { $('dbBody').innerHTML = '<p>Ajoa ei ole tarpeeksi purettavaksi.</p>'; return; }
     // 5. yhteenveto
-    var budgetSec = rt ? rt.total / (G.budgetKn * KN) : 0;
     h.push('<div class="db-sec"><h2>Yhteenveto</h2><div class="tblwrap"><table class="db"><tbody>' +
       '<tr><td>Kokonaisaika</td><td class="n" id="dbTime">' + H.mmss(an.timeSec) + '</td></tr>' +
       '<tr><td>Ajettu matka</td><td class="n" id="dbDist">' + fnum(an.distM / 1852, 2) + ' mpk' + (rt ? ' (reitti ' + fnum(rt.total / 1852, 2) + ' mpk)' : '') + '</td></tr>' +
       '<tr><td>Keskinopeus</td><td class="n">' + fnum(an.avgKn, 1) + ' kn</td></tr>' +
       (free ? '<tr><td>Suurin nopeus</td><td class="n">' + fnum(an.maxKn, 1) + ' kn</td></tr>' : '') +
-      (rt ? '<tr><td>Aikabudjetti ' + fnum(G.budgetKn, 0) + ' kn</td><td class="n">' + H.mmss(budgetSec) + (an.finished ? ' (' + (an.timeSec <= budgetSec ? '−' : '+') + H.mmss(Math.abs(an.timeSec - budgetSec)) + ')' : '') + '</td></tr>' : '') +
       '<tr><td>Pohjakosketukset</td><td class="n">' + (an.groundings.length ? an.groundings.length + ' kpl' : 'ei yhtään') + '</td></tr>' +
       '<tr><td>Törmäykset esteisiin</td><td class="n" id="dbCrashCount">' + (an.crashCount ? an.crashCount + ' kpl' : 'ei yhtään') + '</td></tr>' +
       '<tr><td>Kosketukset esteisiin</td><td class="n" id="dbTouchCount">' + (an.touchCount ? an.touchCount + ' kpl' : 'ei yhtään') + '</td></tr>' +
