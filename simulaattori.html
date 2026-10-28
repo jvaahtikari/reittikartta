@@ -11713,9 +11713,19 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
           });
         }
       }
-      if (!route.legBrg || !showNotes) return;
-      var M = 40, cands = [], placed = [];
+      if (!showNotes) return;
+      // Reittikartassa sijoitetut suuntanuotit piirretään omille paikoilleen. Jos niitä ei ole, nuotit sijoitetaan automaattisesti (Reittikartan legBrg-asetus).
+      // Reittikartassa sijoitettu nuotti korvaa automaattisen vain omalla legillään.
+      var own = {}, placed = [];
+      (route.notes || []).forEach(function (q) {
+        var Lq = legs[q.leg]; if (!Lq) return; own[q.leg] = true;
+        var sp = toScreen(q.p[0], q.p[1]); if (sp[0] < -40 || sp[1] < -40 || sp[0] > w + 40 || sp[1] > h + 40) return;
+        placed.push([sp[0], sp[1]]); drawLegBox(sp[0], sp[1], 0, 0, Lq, color);
+      });
+      if (!route.legBrg) return;
+      var M = 40, cands = [];
       for (i = 0; i < legs.length; i++) {
+        if (own[i]) continue;
         var L = legs[i], A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), plen = Math.hypot(B[0] - A[0], B[1] - A[1]);
         if (plen < 1) continue;
         var vis = clipSeg(A, B, M, M, w - M, h - M); if (!vis) continue;
@@ -11923,6 +11933,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var pp = function (q) { var o = worldToPlot(q.x, q.y); return [o[0], o[1]]; };
       route.passes = (ro.passes || []).map(function (p) { return { foot: pp(p.foot), tgt: pp(p.tgt), lab: pp(p.lab), dist: p.dist }; });
       route.rkTurns = (ro.rkTurns || []).map(function (t) { return { wp: pp(t.wp), tgt: pp(t.tgt), dist: t.dist }; });
+      route.notes = (ro.notes || []).map(function (q) { return { leg: q.leg, p: pp(q.at) }; });   // Reittikartassa sijoitetut suuntanuotit
       dirty = true;
     }
     function setNext(p) { if (!p) { nextPt = null; return; } var q = worldToPlot(p.x, p.y); nextPt = [q[0], q[1]]; }
@@ -12610,8 +12621,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     // Sivuutus- ja käännösetäisyydet (28.10.2026): plotteri piirtää ne Reittikartan tapaan. Legi- ja pisteindeksit viittaavat suodattamattomiin pisteisiin,
     // joten ne hylätään, jos pisteitä jouduttiin poistamaan.
     var en = function (q) { if (!q || !isFinite(Number(q.lat)) || !isFinite(Number(q.lng))) return null; var o = Paikka.lonlatToEN(Number(q.lng), Number(q.lat)); return { e: o.e, n: o.n }; };
-    var sameIdx = pts.length === r.points.length, passes = [], rkTurns = [];
+    var sameIdx = pts.length === r.points.length, passes = [], rkTurns = [], notes = [];
     if (sameIdx) {
+      (Array.isArray(r.notes) ? r.notes : []).forEach(function (q) {   // Reittikartassa sijoitetut suuntanuotit
+        var t = en(q); if (t && q.leg >= 0 && q.leg < route.length - 1) notes.push({ leg: q.leg, e: t.e, n: t.n });
+      });
       (Array.isArray(r.passes) ? r.passes : []).forEach(function (p) {
         var t = en(p && p.tgt), lab = en(p && p.lab) || t;
         if (t && p.leg >= 0 && p.leg < route.length - 1) passes.push({ leg: p.leg, tgt: t, lab: lab, nimi: p.tgt.aid && p.tgt.aid.name || '' });
@@ -12622,7 +12636,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       });
     }
     return {
-      id: 'rk:' + r.id, rkId: r.id, nimi: storedName(r), kuvaus: '', route: route, builtin: false, passes: passes, rkTurns: rkTurns,
+      id: 'rk:' + r.id, rkId: r.id, nimi: storedName(r), kuvaus: '', route: route, builtin: false, passes: passes, rkTurns: rkTurns, notes: notes,
       status: r.status === 'approved' ? 'approved' : 'draft', pisteita: route.length, lengthM: total,
       startKn: sp > 0 && isFinite(sp) ? sp : DEFAULT_START_KN, speedFromRoute: sp > 0 && isFinite(sp)
     };
@@ -12654,7 +12668,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var m = r.meta || {};
       var raw = { id: 'gpx-' + stamp + '-' + i, name: r.name || '', from: m.from || '', via: m.via || '', to: m.to || '', speed: m.speed, status: m.status === 'approved' ? 'approved' : 'draft', tuotu: true,
         points: (r.points || []).map(function (p) { return { lat: Number(p.lat), lng: Number(p.lng) }; }),
-        passes: Array.isArray(m.passes) ? m.passes : [], turns: Array.isArray(m.turns) ? m.turns : [] };
+        passes: Array.isArray(m.passes) ? m.passes : [], turns: Array.isArray(m.turns) ? m.turns : [], notes: Array.isArray(m.notes) ? m.notes : [] };
       if (!fromStored(raw)) return;
       // sama reitti uudelleen tuotuna korvaa vanhan (nimi ja pisteet samat)
       var key = JSON.stringify([storedName(raw), raw.points]);
@@ -12688,6 +12702,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var np = ex.route.length;   // legi k -> np-2-k ja piste i -> np-1-i
     c.passes = (ex.passes || []).map(function (p) { return { leg: np - 2 - p.leg, tgt: p.tgt, lab: p.lab, nimi: p.nimi }; });
     c.rkTurns = (ex.rkTurns || []).map(function (t) { return { wp: np - 1 - t.wp, tgt: t.tgt }; });
+    c.notes = (ex.notes || []).map(function (q) { return { leg: np - 2 - q.leg, e: q.e, n: q.n }; });
     c.reverse = true;
     return c;
   }
@@ -12726,7 +12741,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     }
     pts[0].cum = 0; pts[pts.length - 1].cum = cum;
     turns.forEach(function (t, k) { t.no = k + 1; });
-    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus || '', pts: pts, legs: legs, turns: turns, passes: ex.passes || [], rkTurns: ex.rkTurns || [], total: cum, startKn: ex.startKn || 0, builtin: !!ex.builtin, reverse: !!ex.reverse, status: ex.status || 'approved' };
+    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus || '', pts: pts, legs: legs, turns: turns, passes: ex.passes || [], rkTurns: ex.rkTurns || [], notes: ex.notes || [], total: cum, startKn: ex.startKn || 0, builtin: !!ex.builtin, reverse: !!ex.reverse, status: ex.status || 'approved' };
   }
 
   // Pisteen (e, n) projektio reitille. Palauttaa lähimmän jakson, matkan reitillä (cum), sivupoikkeaman (xte, positiivinen = reitin oikealla puolella) ja etäisyyden.
@@ -13550,7 +13565,8 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     var rkTurns = G.showRk.passes === false ? [] : (rt.rkTurns || []).filter(function (t) { return rt.pts[t.wp]; }).map(function (t) {
       var w = rt.pts[t.wp]; return { wp: P.enToWorld(w.e, w.n), tgt: P.enToWorld(t.tgt.e, t.tgt.n), dist: Math.hypot(t.tgt.e - w.e, t.tgt.n - w.n) };
     });
-    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft', passes: passes, rkTurns: rkTurns });
+    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft', passes: passes, rkTurns: rkTurns,
+      notes: (rt.notes || []).filter(function (q) { return rt.pts[q.leg + 1]; }).map(function (q) { return { leg: q.leg, at: P.enToWorld(q.e, q.n) }; }) });
   }
 
   // ---------- tutka ----------

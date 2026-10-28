@@ -569,9 +569,19 @@
           });
         }
       }
-      if (!route.legBrg || !showNotes) return;
-      var M = 40, cands = [], placed = [];
+      if (!showNotes) return;
+      // Reittikartassa sijoitetut suuntanuotit piirretään omille paikoilleen. Jos niitä ei ole, nuotit sijoitetaan automaattisesti (Reittikartan legBrg-asetus).
+      // Reittikartassa sijoitettu nuotti korvaa automaattisen vain omalla legillään.
+      var own = {}, placed = [];
+      (route.notes || []).forEach(function (q) {
+        var Lq = legs[q.leg]; if (!Lq) return; own[q.leg] = true;
+        var sp = toScreen(q.p[0], q.p[1]); if (sp[0] < -40 || sp[1] < -40 || sp[0] > w + 40 || sp[1] > h + 40) return;
+        placed.push([sp[0], sp[1]]); drawLegBox(sp[0], sp[1], 0, 0, Lq, color);
+      });
+      if (!route.legBrg) return;
+      var M = 40, cands = [];
       for (i = 0; i < legs.length; i++) {
+        if (own[i]) continue;
         var L = legs[i], A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), plen = Math.hypot(B[0] - A[0], B[1] - A[1]);
         if (plen < 1) continue;
         var vis = clipSeg(A, B, M, M, w - M, h - M); if (!vis) continue;
@@ -779,6 +789,7 @@
       var pp = function (q) { var o = worldToPlot(q.x, q.y); return [o[0], o[1]]; };
       route.passes = (ro.passes || []).map(function (p) { return { foot: pp(p.foot), tgt: pp(p.tgt), lab: pp(p.lab), dist: p.dist }; });
       route.rkTurns = (ro.rkTurns || []).map(function (t) { return { wp: pp(t.wp), tgt: pp(t.tgt), dist: t.dist }; });
+      route.notes = (ro.notes || []).map(function (q) { return { leg: q.leg, p: pp(q.at) }; });   // Reittikartassa sijoitetut suuntanuotit
       dirty = true;
     }
     function setNext(p) { if (!p) { nextPt = null; return; } var q = worldToPlot(p.x, p.y); nextPt = [q[0], q[1]]; }

@@ -77,8 +77,11 @@
     // Sivuutus- ja käännösetäisyydet (28.10.2026): plotteri piirtää ne Reittikartan tapaan. Legi- ja pisteindeksit viittaavat suodattamattomiin pisteisiin,
     // joten ne hylätään, jos pisteitä jouduttiin poistamaan.
     var en = function (q) { if (!q || !isFinite(Number(q.lat)) || !isFinite(Number(q.lng))) return null; var o = Paikka.lonlatToEN(Number(q.lng), Number(q.lat)); return { e: o.e, n: o.n }; };
-    var sameIdx = pts.length === r.points.length, passes = [], rkTurns = [];
+    var sameIdx = pts.length === r.points.length, passes = [], rkTurns = [], notes = [];
     if (sameIdx) {
+      (Array.isArray(r.notes) ? r.notes : []).forEach(function (q) {   // Reittikartassa sijoitetut suuntanuotit
+        var t = en(q); if (t && q.leg >= 0 && q.leg < route.length - 1) notes.push({ leg: q.leg, e: t.e, n: t.n });
+      });
       (Array.isArray(r.passes) ? r.passes : []).forEach(function (p) {
         var t = en(p && p.tgt), lab = en(p && p.lab) || t;
         if (t && p.leg >= 0 && p.leg < route.length - 1) passes.push({ leg: p.leg, tgt: t, lab: lab, nimi: p.tgt.aid && p.tgt.aid.name || '' });
@@ -89,7 +92,7 @@
       });
     }
     return {
-      id: 'rk:' + r.id, rkId: r.id, nimi: storedName(r), kuvaus: '', route: route, builtin: false, passes: passes, rkTurns: rkTurns,
+      id: 'rk:' + r.id, rkId: r.id, nimi: storedName(r), kuvaus: '', route: route, builtin: false, passes: passes, rkTurns: rkTurns, notes: notes,
       status: r.status === 'approved' ? 'approved' : 'draft', pisteita: route.length, lengthM: total,
       startKn: sp > 0 && isFinite(sp) ? sp : DEFAULT_START_KN, speedFromRoute: sp > 0 && isFinite(sp)
     };
@@ -121,7 +124,7 @@
       var m = r.meta || {};
       var raw = { id: 'gpx-' + stamp + '-' + i, name: r.name || '', from: m.from || '', via: m.via || '', to: m.to || '', speed: m.speed, status: m.status === 'approved' ? 'approved' : 'draft', tuotu: true,
         points: (r.points || []).map(function (p) { return { lat: Number(p.lat), lng: Number(p.lng) }; }),
-        passes: Array.isArray(m.passes) ? m.passes : [], turns: Array.isArray(m.turns) ? m.turns : [] };
+        passes: Array.isArray(m.passes) ? m.passes : [], turns: Array.isArray(m.turns) ? m.turns : [], notes: Array.isArray(m.notes) ? m.notes : [] };
       if (!fromStored(raw)) return;
       // sama reitti uudelleen tuotuna korvaa vanhan (nimi ja pisteet samat)
       var key = JSON.stringify([storedName(raw), raw.points]);
@@ -155,6 +158,7 @@
     var np = ex.route.length;   // legi k -> np-2-k ja piste i -> np-1-i
     c.passes = (ex.passes || []).map(function (p) { return { leg: np - 2 - p.leg, tgt: p.tgt, lab: p.lab, nimi: p.nimi }; });
     c.rkTurns = (ex.rkTurns || []).map(function (t) { return { wp: np - 1 - t.wp, tgt: t.tgt }; });
+    c.notes = (ex.notes || []).map(function (q) { return { leg: np - 2 - q.leg, e: q.e, n: q.n }; });
     c.reverse = true;
     return c;
   }
@@ -193,7 +197,7 @@
     }
     pts[0].cum = 0; pts[pts.length - 1].cum = cum;
     turns.forEach(function (t, k) { t.no = k + 1; });
-    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus || '', pts: pts, legs: legs, turns: turns, passes: ex.passes || [], rkTurns: ex.rkTurns || [], total: cum, startKn: ex.startKn || 0, builtin: !!ex.builtin, reverse: !!ex.reverse, status: ex.status || 'approved' };
+    return { id: ex.id, nimi: ex.nimi, kuvaus: ex.kuvaus || '', pts: pts, legs: legs, turns: turns, passes: ex.passes || [], rkTurns: ex.rkTurns || [], notes: ex.notes || [], total: cum, startKn: ex.startKn || 0, builtin: !!ex.builtin, reverse: !!ex.reverse, status: ex.status || 'approved' };
   }
 
   // Pisteen (e, n) projektio reitille. Palauttaa lähimmän jakson, matkan reitillä (cum), sivupoikkeaman (xte, positiivinen = reitin oikealla puolella) ja etäisyyden.

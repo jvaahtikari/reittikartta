@@ -583,7 +583,8 @@
     var rkTurns = G.showRk.passes === false ? [] : (rt.rkTurns || []).filter(function (t) { return rt.pts[t.wp]; }).map(function (t) {
       var w = rt.pts[t.wp]; return { wp: P.enToWorld(w.e, w.n), tgt: P.enToWorld(t.tgt.e, t.tgt.n), dist: Math.hypot(t.tgt.e - w.e, t.tgt.n - w.n) };
     });
-    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft', passes: passes, rkTurns: rkTurns });
+    pl.setRoute(wp, rt.turns.map(function (t) { return P.enToWorld(t.e, t.n); }), { legs: legs, legBrg: G.showRk.legBrg, turnTicks: G.showRk.turnTicks, approved: rt.status !== 'draft', passes: passes, rkTurns: rkTurns,
+      notes: (rt.notes || []).filter(function (q) { return rt.pts[q.leg + 1]; }).map(function (q) { return { leg: q.leg, at: P.enToWorld(q.e, q.n) }; }) });
   }
 
   // ---------- tutka ----------
