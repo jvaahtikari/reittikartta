@@ -1,0 +1,12 @@
+{
+  "name": "Näsijärven navigointisimulaattori",
+  "short_name": "Simulaattori",
+  "start_url": "simulaattori.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#0d1b27",
+  "theme_color": "#15324a",
+  "lang": "fi"
+}

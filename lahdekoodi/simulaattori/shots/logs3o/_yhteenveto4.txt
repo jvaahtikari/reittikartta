@@ -1,0 +1,5 @@
+== google3n_4osaa_vertailu
+google3n_4osaa_vertailu: OK    paluu Googleen ei luo karttaa uudelleen OK    ei konsolivirheitä [] YHTEENSÄ 30 tarkistusta, 2 virhettä exit 0 
+== google3n_4osaa_toisto
+google3n_4osaa_toisto: OK    paluu Googleen ei luo karttaa uudelleen OK    ei konsolivirheitä [] YHTEENSÄ 30 tarkistusta, 3 virhettä exit 0 
+ALL_DONE4

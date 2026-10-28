@@ -21,7 +21,7 @@ Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusse
 
 ## Ominaisuudet lyhyesti
 
-- **Paikkahaku:** paikannimet, turvalaitteet nimellä tai numerolla, väylät, sulut ja sillat, luotsipaikat, VTS-ilmoittautumispisteet, AIS-alukset, omat kohteet ja koordinaatit. Haku toimii samoin kaikilla karttapohjilla. Samannimiset paikat näytetään kartalla numeroituina, ja niille annetaan kunta sekä etäisyys meripeninkulmina ja suunta.
+- **Paikkahaku:** katuosoitteet ja kiinteistötunnukset (Näsijärven alue), paikannimet, turvalaitteet nimellä tai numerolla, väylät, sulut ja sillat, luotsipaikat, VTS-ilmoittautumispisteet, AIS-alukset, omat kohteet ja koordinaatit. Haku toimii samoin kaikilla karttapohjilla. Samannimiset paikat näytetään kartalla numeroituina, ja niille annetaan kunta sekä etäisyys meripeninkulmina ja suunta.
 - **Reititys väylää pitkin:** reitti lasketaan automaattisesti lähtöpisteestä määränpäähän Väyläviraston navigointilinjoja pitkin, ja vain annetun kulkusyvyyden täyttävät väylät kelpaavat. Tehtävälle on oma reititys omasta sijainnista, asemalta tai muusta paikasta. Reitti avautuu muokkaustilaan tarkistettavaksi, ja kulkusyvyyttä voi muuttaa tarkastelun aikana.
 - **Tehtäväpaikat ja asema:** tehtäväpaikka haetaan nimellä ja tarkistetaan kartalla ennen luomista. Aktiivisen tehtävän suuntima ja etäisyys näytetään asemalta.
 - **Kolme karttapohjaa:** Traficomin rasterimerikartta, ENC-kartta perinteisin tai ECDIS-symbolein sekä vektorikartta, joka on terävä tasolle 20 asti. Rasterista ja ENC:stä siirrytään vektorikarttaan itsestään, kun zoomataan tasoa 17 lähemmäs.
@@ -37,6 +37,7 @@ Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusse
 - **Oma sijainti:** laitteen sijainti, nopeus ja kulku. Puhelimessa sijainti käynnistyy sovelluksen avautuessa, kun käyttäjä sallii sen.
 - **Työkalut:** harppi, suuntima, omat merkit, yönäyttö ja karttareunuksen minuuttiasteikko.
 - **Laiturit ja aallonmurtajat** näkyvät vektorikartalla Maanmittauslaitoksen ja OpenStreetMapin aineistosta.
+- **Maasto-tasot (Näsijärvi):** rakennukset, osoitteet, kiinteistörajat, maastotyyppi, varjostus ja tiet erillisestä aineistopaketista. Kaikki ovat oletuksena pois päältä.
 - **AIS-alukset:** alusten sijainnit ja alustiedot Fintrafficin Digitraffic-rajapinnasta. Alukset näkyvät tyypin mukaan värjättyinä, pelastusalukset korostettuina, ja aluksen napautus avaa kortin, josta voi luoda tehtävän aluksen kohdalle. Alukset löytyvät myös hakukentästä nimellä, kutsutunnuksella tai MMSI-numerolla.
 - **GPX:** reittien tuonti SARNavista ja vienti SARNaviin.
 - **Puhelin ja tabletti:** kapeassa näytössä on oma asettelu ja kosketusohjaus.
@@ -56,7 +57,7 @@ Sovellus toimii myös yhtenä tiedostona ilman verkkopalvelinta. Repon juuren `i
 Sovellus tallentaa selaimen muistiin seuraavat tiedot:
 - reitit, omat merkit ja tehtävät, automaattisesti lasketun reitin osalta myös lähtöpaikan, määränpään ja kulkusyvyyden
 - alukset, hyväksyjien nimet, aseman ja turvasyvyydet
-- asetukset, kuten oletusnopeuden ja oman Maanmittauslaitoksen API-avaimen
+- asetukset, kuten oletusnopeuden, oman Maanmittauslaitoksen API-avaimen ja Maastoaineiston osoitteen
 - Näytä-valikon valinnat, karttapohjan ja viimeisimmän karttanäkymän
 - OpenStreetMapista haetut laiturialueet 30 päivän välimuistiin
 
@@ -67,7 +68,7 @@ Kun sivu avataan uudelleen samalla laitteella ja samalla selaimella, kaikki on t
 - **Yksityinen selaus:** yksityisessä ikkunassa tiedot katoavat, kun ikkuna suljetaan.
 - **Varmuuskopio:** reitit siirretään laitteelta toiselle ja varmistetaan varmuuskopiolla. Varmuuskopio tehdään valikosta Tiedosto → Tee varmuuskopio, ja sen voi palauttaa samasta valikosta myös toiselle laitteelle.
 
-Oma sijainti näytetään vain käyttäjän omalla näytöllä, eikä sitä tallenneta eikä lähetetä minnekään. Karttatiilet ja aineistot haetaan suoraan Traficomin, Väyläviraston, Fintrafficin (AIS-alukset), OpenStreetMapin ja kartat.kapsi.fi:n palveluista. Fintrafficille ei lähetetä käyttäjää koskevia tietoja, eikä AIS-tietoja tallenneta selaimeen. Maanmittauslaitoksen aineistot haetaan verkkoversiossa sovelluksen omalla välityspalvelulla Vercelissä ja tiedostona avatussa sovelluksessa suoraan Maanmittauslaitokselta. Palvelut näkevät tavanomaisesti, miltä alueelta karttaa pyydetään. Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla, joka ei käytä evästeitä eikä yksilöi käyttäjiä. Tiedostona avatussa sovelluksessa laskuria ei ladata.
+Oma sijainti näytetään vain käyttäjän omalla näytöllä, eikä sitä tallenneta eikä lähetetä minnekään. Karttatiilet ja aineistot haetaan suoraan Traficomin, Väyläviraston, Fintrafficin (AIS-alukset), OpenStreetMapin ja kartat.kapsi.fi:n palveluista. Fintrafficille ei lähetetä käyttäjää koskevia tietoja, eikä AIS-tietoja tallenneta selaimeen. Maasto-tasot sekä osoite- ja kiinteistötunnushaku hakevat Näsijärven aineistopaketin GitHub Pagesista (osoite on asetuksissa) vasta, kun jokin Maasto-taso kytketään päälle tai haetaan osoitetta tai tunnusta. Maanmittauslaitoksen aineistot haetaan verkkoversiossa sovelluksen omalla välityspalvelulla Vercelissä ja tiedostona avatussa sovelluksessa suoraan Maanmittauslaitokselta. Palvelut näkevät tavanomaisesti, miltä alueelta karttaa pyydetään. Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla, joka ei käytä evästeitä eikä yksilöi käyttäjiä. Tiedostona avatussa sovelluksessa laskuria ei ladata.
 
 ## Karttapohjat
 
@@ -119,6 +120,25 @@ Vektoripohjalle voi lisätä Maanmittauslaitoksen maastotietokannasta kivet, ves
 Vektorikartalla laiturit ja aallonmurtajat piirretään veden päälle, koska maapohjan laiturit jäisivät vektorikartan vesialueen alle. Ne näkyvät tasolta 14 alkaen. Laituriviivat ja aallonmurtajat tulevat Maanmittauslaitoksen maastotietokannasta. OpenStreetMapista lisätään alueina kartoitetut laiturit, aallonmurtajat ja pengerrykset, kun OpenStreetMapin Overpass-palvelu vastaa. Samaa laituria ei piirretä kahdesti.
 
 Overpass on usein ruuhkainen. Ensimmäinen haku uudelle alueelle voi kestää puolikin minuuttia, ja tilarivillä lukee silloin Ladataan laitureita. Haetut alueet tallennetaan selaimeen 30 päiväksi. Kelluvat laiturit voivat olla kausittaisia. Laiturit saa pois valikosta Näytä.
+
+## Maasto-tasot (Näsijärvi)
+
+Valikon Näytä ryhmä Maasto (Näsijärvi) sisältää kuusi valintaa, jotka ovat kaikki oletuksena pois päältä:
+
+| Valinta | Näkyy | Sisältö |
+|---|---|---|
+| Rakennukset | zoomista 15 | rakennuspolygonit, asuinrakennus harmaanruskeana ja muut harmaana. Napautus näyttää käyttötarkoituksen, kerrosluokan (1–2 tai 3 tai useampi), osoitteen ja maanpinnan korkeuden. |
+| Osoitteet | pisteenä zoomista 16, tekstinä zoomista 17 | rakennusten osoitteet |
+| Kiinteistörajat | zoomista 16 | rajat ohuina viivoina. Napautus näyttää lähimmän kiinteistötunnuksen, kun tunnuspiste on enintään 30 m päässä. |
+| Maastotyyppi | zoomista 10 | läpikuultavat värit: pelto keltainen, suo violetinharmaa, kallio vaaleanharmaa, taajama vaaleanpunainen, puisto vihreä |
+| Varjostus | zoomista 10 | vinovalovarjostus Terrain-RGB-korkeustiilistä, laskettu selaimessa. Tason 14 yli käytetään tason 14 tiiliä suurennettuna. Korkeuskäyriä ei piirretä. |
+| Tiet | zoomista 12, nimet zoomista 15 | tiet luokan mukaan, pääväylät paksummin |
+
+Tasot piirretään maapohjan ja merikartan päälle mutta karttamerkkien ja reittien alle. Piirtojärjestys alhaalta ylös on maastotyyppi, varjostus, kiinteistörajat, tiet, rakennukset ja osoitteet. Maastotyyppi ja varjostus ovat läpikuultavia, jotta maapohja näkyy läpi.
+
+Aineisto luetaan erillisestä paketista, jonka osoite on Tiedosto → Asetukset → Maastoaineiston osoite (oletus https://jvaahtikari.github.io/reittikartta-aineisto/). PMTiles-tiedostoja luetaan HTTP Range -pyynnöillä, joten selaimeen siirtyy vain näkyvän alueen tiilet, tyypillisesti alle megatavu näkymää kohden. Paketin kuvaus (`aineisto.json`) luetaan kerran, kun jokin taso kytketään päälle. Kun jokin taso on päällä ja kartta on Näsijärven aineiston alueen ulkopuolella, oikeaan yläkulmaan tulee huomautus Maastoaineisto kattaa vain Näsijärven, eikä paketin tiiliä pyydetä. Ilman verkkoyhteyttä tasot jäävät hiljaa tyhjiksi. Lähdemerkinnät luetaan paketin kuvauksesta, ja ne näkyvät kartan attribuutiossa tasojen ollessa päällä sekä kohdassa Ohje → Aineistot ja käyttöehdot.
+
+Kirjastot: pmtiles 4.5.0 ja protomaps-leaflet 5.1.0 (molemmat BSD-3-Clause). protomaps-leaflet piirtää vektoritiilet canvasille, ja se valittiin Leaflet.VectorGridin sijaan, koska se toimi paketin testisivulla ja täytti suorituskykyrajat puhelinprofiililla (ks. `RAPORTTI_vaihe2.md`).
 
 ## AIS-alukset
 
@@ -211,11 +231,14 @@ Yläpalkin hakukenttään voi kirjoittaa seuraavia:
 - turvalaitteen nimen tai numeron
 - väylän, sulun, kanavan tai avattavan sillan nimen
 - luotsipaikan tai VTS-ilmoittautumispisteen nimen
+- katuosoitteen (esimerkiksi Laiturikatu 8) tai kiinteistötunnuksen (esimerkiksi 837-123-4-56), Näsijärven alueella
 - AIS-aluksen nimen, kutsutunnuksen tai MMSI-numeron
 - oman merkin tai tehtävän nimen
 - koordinaatin
 
 Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä. Turvalaitteet, väylät, sulut ja sillat haetaan Väyläviraston aineistosta, ja luotsipaikat ja VTS-ilmoittautumispisteet Traficomin avoimesta aineistosta. Haku ei lue nimiä karttakuvasta, joten se toimii samoin rasteri-, ENC- ja vektoripohjalla. Väylän valinta korostaa koko väylän ja sovittaa sen näkymään. Sama haku on käytössä myös tehtävä- ja reititysdialogeissa.
+
+Katuosoite- ja kiinteistötunnushaku käyttää Näsijärven aineistopaketin hakemistoja (`osoitteet.json` ja `kiinteistot.json`), jotka ladataan selaimeen kerran, kun haetaan ensimmäistä kertaa osoitetta tai tunnusta. Haku toimii myös silloin, kun Maasto-tasot ovat pois päältä. Osoitteeksi tunnistetaan kirjaimia ja lopussa numero (esimerkiksi Kaupinojankatu 12, Laiturikatu 8 a tai Rantatie 3, Tampere). Kiinteistötunnus kirjoitetaan väliviivoin (837-123-4-56) tai 14 numerona ilman väliviivoja (kunta 3, kylä 3, tila 4 ja rekisterinumero 4 numeroa). Tuloksella on laji osoite tai kiinteistö, kunta ja etäisyys, ja se kelpaa tehtäväpaikaksi. Osoitteet ovat Digi- ja väestötietoviraston poiminta 3.2.2025, joten uudet osoitteet puuttuvat.
 
 Jos paikannimiä ei tule, hakutulosten alla kerrotaan syy. Tiedostona avatusta sovelluksesta voi puuttua API-avain, ja verkkoversiossa julkaisun palvelimelta voi puuttua avain (ks. Julkaisu Verceliin).
 
@@ -306,7 +329,11 @@ Reitti viedään GPX-tiedostoksi reitin valikosta tai reittikirjastosta, ja koko
 | Maanmittauslaitoksen taustakartta | Maanmittauslaitos, kartat.kapsi.fi | CC BY 4.0 |
 | Maapohja ja laiturialueet | OpenStreetMap-tekijät, tiilet ja Overpass-rajapinta | ODbL |
 | Kuntien nimet | Tilastokeskus, kuntaluokitus 2025 | CC BY 4.0 |
-| Karttakirjasto | Leaflet 1.9.4 | BSD-2 |
+| Maasto-tasot: rakennukset, maastotyyppi ja tiet | Maanmittauslaitos, maastotietokanta 04/2025 (Näsijärven aineistopaketti) | CC BY 4.0 |
+| Maasto-tasot: kiinteistörajat ja kiinteistötunnukset (haku ja napautus) | Maanmittauslaitos, kiinteistörajatiedot 05/2025 | CC BY 4.0 |
+| Maasto-tasot: varjostus | Maanmittauslaitos, korkeusmalli 2 m ja 10 m | CC BY 4.0 |
+| Maasto-tasot: osoitteet ja osoitehaku | Digi- ja väestötietovirasto, rakennusten osoitetiedot, poiminta 3.2.2025 | CC BY 4.0 |
+| Karttakirjastot | Leaflet 1.9.4, pmtiles 4.5.0, protomaps-leaflet 5.1.0 | BSD-2, BSD-3, BSD-3 |
 
 Lisenssiteksti ja lähdemerkinnät ovat sovelluksessa kohdassa Ohje → Aineistot ja käyttöehdot.
 
@@ -320,7 +347,7 @@ Required Notice: Copyright 2026 Jussi Vaahtikari
 
 Ei-kaupallinen rajaus vastaa sovelluksen käyttämän aineiston ehtoja. Traficomin syvyysaineiston lisenssi sallii aineiston hyödyntämisen vain ei-kaupallisesti ja muuhun kuin navigointiin, joten vapaampi koodilisenssi antaisi luvan, jota sovellus ei aineistonsa puolesta voi käyttää. Lisenssi ei ole OSI:n määritelmän mukainen avoimen lähdekoodin lisenssi, vaikka lähdekoodi on julkinen.
 
-Lisenssi koskee vain sovelluksen omaa koodia. Kartta-aineistot ovat omien lisenssiensä alaisia (taulukko edellä), ja mukana tuleva Leaflet on BSD-2-lisensoitu; sen tekijänoikeusilmoitus säilyy kirjaston alussa. SARNav on Meripelastusseuran ohjelma, ja nimeä käytetään tässä vain kuvailevasti.
+Lisenssi koskee vain sovelluksen omaa koodia. Kartta-aineistot ovat omien lisenssiensä alaisia (taulukko edellä), ja mukana tulevat Leaflet (BSD-2) sekä pmtiles ja protomaps-leaflet (BSD-3) on lisensoitu omilla ehdoillaan; tekijänoikeusilmoitukset säilyvät kirjastojen alussa ja lisenssitekstit ovat tiedostossa `lahdekoodi/lib/LISENSSIT.txt`. SARNav on Meripelastusseuran ohjelma, ja nimeä käytetään tässä vain kuvailevasti.
 
 ## Repon rakenne
 
@@ -341,13 +368,14 @@ Lisenssi koskee vain sovelluksen omaa koodia. Kartta-aineistot ovat omien lisens
 | `lahdekoodi/js/routing.js` | Automaattinen reititys väylää pitkin: verkko navigointilinjoista, kulkusyvyysrajoite, lyhimmän reitin haku ja dialogi |
 | `lahdekoodi/js/tools.js` | Harppi, suuntima, omat merkit, tehtäväpaikat ja asema |
 | `lahdekoodi/js/ais.js` | AIS-alukset: Digitraffic-haku ja ajastus, alusten merkit, nopeusvektorit ja nimet, aluksen kortti sekä alushaku |
-| `lahdekoodi/js/search.js` | Paikkahaku: paikannimet, turvalaitteet, väylät, sulut ja sillat, luotsipaikat, VTS-pisteet ja AIS-alukset |
+| `lahdekoodi/js/search.js` | Paikkahaku: paikannimet, turvalaitteet, väylät, sulut ja sillat, luotsipaikat, VTS-pisteet, AIS-alukset, osoitteet ja kiinteistötunnukset |
+| `lahdekoodi/js/terrain.js` | Maasto-tasot (Näsijärven aineistopaketti): tasot, napautus sekä osoite- ja kiinteistötunnushakemistot |
 | `lahdekoodi/js/library.js` | Reittikirjasto |
 | `lahdekoodi/js/gpx.js` | GPX-tuonti ja -vienti |
 | `lahdekoodi/js/geo.js` | Suunnat, matkat ja koordinaattien muotoilu |
 | `lahdekoodi/js/store.js` | Tila ja tallennus selaimeen |
 | `lahdekoodi/js/ui.js` | Valikot, dialogit, ilmoitukset ja lukemat |
-| `lahdekoodi/lib/` | Leaflet 1.9.4 (BSD-2) |
+| `lahdekoodi/lib/` | Leaflet 1.9.4 (BSD-2), pmtiles 4.5.0 ja protomaps-leaflet 5.1.0 (BSD-3), lisenssitekstit tiedostossa `LISENSSIT.txt` |
 | `lahdekoodi/build.py` | Kokoaa yhden tiedoston version |
 | `lahdekoodi/tests/` | Käyttöliittymätestit |
 
@@ -369,7 +397,7 @@ Käytännön huomio: Vercel ei julkaissut committeja, joiden tekijän sähköpos
 
 Lähdekoodia muokataan kansiossa `lahdekoodi`. Yhden tiedoston versio kootaan komennolla `python3 build.py`. Se kirjoittaa tiedoston `dist/Reittikartta.html`, joka kopioidaan repon juureen nimelle `index.html`. Kopioi myös `LUEMINUT.md` juureen nimelle `README.md`.
 
-Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä testiaineistolla (`tests/run_ui.py` ja `tests/mockdata.py`). Testi ajetaan komennolla `python3 tests/<testi>.py`. Testattava sivu annetaan ympäristömuuttujalla `TARGET`. Puhelintesteissä laiteprofiili valitaan muuttujalla `DEVICE`, esimerkiksi `DEVICE="iPhone 15"` (WebKit) tai `DEVICE="Pixel 7"` (Chromium).
+Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä testiaineistolla (`tests/run_ui.py` ja `tests/mockdata.py`). Testi ajetaan komennolla `python3 tests/<testi>.py`. Testattava sivu annetaan ympäristömuuttujalla `TARGET`. Maastotesti ajetaan komennolla `AINEISTO=<pakettihakemisto> python3 tests/terrain_test.py` (osat valitaan muuttujalla `OSA`, esimerkiksi `OSA=suorituskyky`). Puhelintesteissä laiteprofiili valitaan muuttujalla `DEVICE`, esimerkiksi `DEVICE="iPhone 15"` (WebKit) tai `DEVICE="Pixel 7"` (Chromium).
 
 | Testi | Kattaa |
 |---|---|
@@ -388,10 +416,12 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 | `task_gps_test.py` | Tehtäväpaikan haku, merimailit ja oma sijainti |
 | `pier_gps_test.py` | Laiturit sekä oma sijainti puhelimessa |
 | `proxy_test.py` | Maanmittauslaitoksen välityspalvelu |
+| `terrain_test.py` | Maasto-tasot ja osoitehaku: osoite- ja kiinteistötunnushaku, tunnus ja rakennus napautuksella, tasojen piirto, alueen ulkopuolinen käyttö, offline-tila, suorituskyky Pixel 7 -profiililla ja puhelinkierros (iPhone 14 ja Pixel 7). Tarvitsee aineistopaketin hakemistona (`AINEISTO`), jonka testi tarjoilee paikallisesti |
 | `mobile_test.py`, `iphone_test.py` | Puhelinasettelu ja kosketuskäyttö |
 
 ## Tunnetut rajoitukset
 
+- **Maasto-tasot:** aineisto kattaa vain Näsijärven (Tampereen Mustalahdesta Muroleen kanavan kautta Ruoveden suuntaan, rantoineen). Huomautuksen raja on paketin alueen suorakulmio, joten sen sisällä voi olla ruutuja, joille ei ole aineistoa. Osoitteet ovat poiminta 3.2.2025 eikä niitä päivitetä, koska DVV lopetti avoimen jakelun 14.3.2025. Maasto-tasot ja osoite- ja tunnushaku tarvitsevat verkkoyhteyden, ja Pages-osoitteen ollessa tavoittamattomissa ne jäävät hiljaa tyhjiksi. Kiinteistötunnus näkyy napautuksella vain, kun tunnuspiste on enintään 30 m päässä.
 - **Laitekohtaiset tiedot:** reitit ja merkit eivät ole jaettuja käyttäjien tai laitteiden kesken, vaan ne siirretään varmuuskopiolla.
 - **ENC:n kattavuus:** ENC-aineistoa ei ole kaikilla vesillä, esimerkiksi Näsijärvellä.
 - **Syvyysvälit:** vektorikartan ja syvän veden syvyysvälit ovat paikoin karkeita.

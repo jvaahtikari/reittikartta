@@ -1,0 +1,33 @@
+kosketus: {"frozen": false, "v": 0, "n": 6823804.24258183, "banner": false, "rec": 1, "log": ["kosketus:{\"kind\":\"laituri\",\"kn\":0.8}"], "orderSpeed": 0, "ground": null}
+OK    kosketus: ajoa ei pysäyttänyt pohjakosketus (None)
+OK    kosketus kirjattu lokiin: ['kosketus:{"kind":"laituri","kn":0.8}']
+OK    kosketus: ajo jatkuu, ei bannerin pysäytystä
+OK    kosketus: nopeus pysähtyi (0.000 kn)
+OK    kosketus: runko ei ole esteessä
+  kosketus: 0.8 kn, laji laituri kosketus
+OK    kosketus: laji laituri, nopeus 0.80 kn (alle 1,0)
+OK    kosketus: keula 0.03 m laiturin päästä
+OK    kosketuksen jälkeen peruutus irti toimii (-1.25 kn), jatkuva ajo
+OK    irtoaminen: ei uutta osumaa
+törmäys: {"frozen": true, "v": 0, "n": 6823805.797477172, "banner": true, "title": "T\u00f6rm\u00e4ys", "text": "T\u00f6rm\u00e4ys laituriin 6,0 kn. Alus on pys\u00e4ytetty.", "go": true, "rec": 2, "log": ["kosketus:{\"kind\":\"laituri\",\"kn\":0.8}", "speed:-2", "speed:0", "tormays:{\"kind\":\"laituri\",\"kn\":5.999999999999976}"], "ground": null}
+OK    törmäys: ajo pysähtyi törmäykseen (ei pohjakosketukseen)
+OK    törmäys: banneri "Törmäys": Törmäys laituriin 6,0 kn. Alus on pysäytetty.
+OK    törmäys: Jatka-nappi näkyy
+OK    törmäys: laji tormays laituri, nopeus 6.00 kn
+OK    törmäys: runko ei ole esteessä pysähdyksen jälkeen (tunkeuma 0 m, raja 1 m)
+OK    törmäys: keula 0.17 m laiturin päästä (raja: runko enintään 1 m läpi)
+OK    törmäys kirjattu lokiin: ['tormays:{"kind":"laituri","kn":5.999999999999976}']
+OK    Jatka: ajo jatkuu, banneri pois
+OK    toinen törmäys Jatkan jälkeen pysäytti ajon (6.0 kn)
+purku: Vapaa ajo Törmäys
+OK    purun tila: Törmäys
+törmäystaulukko: ['0:31 | Kosketus | Laituri | 0,8 kn', '0:59 | Törmäys | Laituri | 6,0 kn', '0:59 | Törmäys | Laituri | 6,0 kn']
+OK    purku listaa kosketuksen ja kaksi törmäystä aikoineen ja nopeuksineen
+OK    purun yhteenveto: törmäykset 2 kpl, kosketukset 1 kpl
+OK    komentolokissa kosketus ja törmäys nopeuksineen: ['Kosketus laituriin 0,8 kn', 'Törmäys laituriin 6,0 kn', 'Törmäys laituriin 6,0 kn']
+törmäystarkistus sovelluksessa: 590 askelta, keskiarvo 0.0698 ms, suurin 5.400 ms
+OK    törmäystarkistus sovelluksessa keskimäärin alle 1 ms askeleelta
+virheet []
+OK    ei konsolivirheitä
+Kaikki läpi
+exit 0

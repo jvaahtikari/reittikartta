@@ -1,0 +1,33 @@
+OK    Google 3D valittu ja oma kerros päällä
+OK    oma kangas pysyy näkyvissä Googlen päällä
+OK    ruudulla on kerrosluokka g3d-over
+OK    kartan z-index 0 on oman kankaan 1 alla
+OK    kartan tapahtumat (tarkistettu erikseen)
+OK    oman kankaan alareunasta jätetään 24 px Googlen lähdemerkinnälle: inset(0px 0px 24px)
+  vesimaski: {"tiles":25,"wanted":25,"ready":4,"empty":0,"stats":{"tiles":0,"loaded":4,"empty":0,"tris":2283,"verts":2287,"buildMs":35,"maxMs":18.199999999254942,"rings":32},"visible":true,"version":5}
+   {'fov': 5, 'own': 5, 'req': 5, 'mask': True, 'tilt': 90, 'sky': 0, 'pitch': 0}
+OK    kiikarin maski näkyy Google-tilassa
+OK    Googlen fov 5.00 vastaa pyydettyä 5.00 (alaraja 5)
+OK    kameran nousukulma ei ylitä vaakatasoa (0.00)
+OK    taivas läpinäkyvä kiikarissa (alfa 0)
+OK    kalibrointipaneeli näkyy Google-tilassa
+    nasinneula suunta 224.23 korkeus 11.42 väli 904 m kuva (1167, 104)
+    tampella suunta 139.57 korkeus 7.73 väli 753 m kuva (45, 133)
+    siilinkari suunta 38.98 korkeus 0.19 väli 1137 m kuva None
+    naistenlahti suunta 97.05 korkeus 4.37 väli 1190 m kuva None
+    aallonmurtaja1 suunta 107.28 korkeus -0.08 väli 1094 m kuva (-2884, 261)
+    aallonmurtaja2 suunta 95.67 korkeus -0.08 väli 1132 m kuva None
+OK    kalibrointikohteita 6
+   {'n': 2, 'fit': {'dh': 0.8000000000000017, 'dp': 0.3999999999999996, 'k': 1.03, 'rms': 0, 'res': [[0, 0], [0, 0]]}}
+OK    näkyvissä 2 kohdetta sovitukseen
+OK    sovitus löytää suunnan 0.800, nousun 0.400 ja kuvakulman kertoimen 1.0300 (oikeat 0,8, 0,4 ja 1,03)
+OK    jäännökset enintään 0.0000 astetta
+  Google-tila (oma kerros), kierros 1: 22 kuvaa, piirtoaika mediaani 502.1 ms
+  oma näkymä täysi, kierros 1: 18 kuvaa, piirtoaika mediaani 648.3 ms
+  Google-tila (oma kerros), kierros 2: 23 kuvaa, piirtoaika mediaani 501.5 ms
+  oma näkymä täysi, kierros 2: 16 kuvaa, piirtoaika mediaani 730.2 ms
+  piirtoaika Google-tilassa 502 ms, omassa näkymässä 648 ms, suhde 0.77
+OK    oman kerroksen piirtoaika (502 ms) on enintään oman täyden näkymän (648 ms) 77 %
+OK    ei konsolivirheitä []
+YHTEENSÄ 17 tarkistusta, 0 virhettä
+exit 0

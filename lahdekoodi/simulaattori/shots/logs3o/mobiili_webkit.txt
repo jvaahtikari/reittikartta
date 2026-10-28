@@ -1,0 +1,49 @@
+OK    aloitusnäyttö näkyy
+OK    aloitusnäytössä teksti "Ei navigointikäyttöön"
+OK    aloitusnäytön kosketuskohteet vähintään 44 px (pienet: [])
+OK    tavoitenopeus 10 kn valittavissa
+OK    kellon valinta avaa aikakentän
+lataus 63.2 s
+OK    pelinäkymän kosketuskohteet vähintään 44 px (pienet: [])
+OK    ei vaakasuuntaista vieritystä
+OK    Oikea: suuntakäsky +5 (50 -> 55)
+OK    Vasen kahdesti: -10 (45)
+OK    pitkä painallus: +10 (45 -> 55)
+OK    Loiva merkitään
+OK    nopeuspikanappi 12 kn
+OK    nopeus +2
+OK    nopeus -2 kahdesti
+OK    Peruutus hidas
+OK    Nopeus 0
+OK    aikakerroin 2×
+OK    aikakerroin kiertää takaisin 1×
+OK    tauko pysäyttää ajan
+OK    tauko jatkuu
+OK    päänäkymä aluksi plotteri
+OK    napautus vaihtaa päänäkymäksi kuljettajan näkymän
+OK    toinen napautus palauttaa plotterin
+OK    plotterin sammutus näyttää peitteen
+OK    plotterin sammutus kirjattu lokiin
+OK    plotteri takaisin päälle
+OK    zoom + (vaihe 3h): 1.000 -> 0.800 mpk
+OK    zoom − palauttaa mittakaavan
+OK    Keskitä-nappi napautettavissa (seuranta päällä)
+OK    Crash stop kirjautuu (tai alus seisoo)
+OK    valikko aukeaa
+OK    valikon kosketuskohteet vähintään 44 px ([])
+OK    purku näkyy
+OK    purussa kohta "Yhteenveto"
+OK    purussa kohta "1. Väylä"
+OK    purussa kohta "2. Suurin poikkeama"
+OK    purussa kohta "3. Käännökset"
+OK    purussa kohta "4. Sivuutetut viitat"
+OK    purussa kohta "Komentoloki"
+OK    purku renderöity
+OK    purun kosketuskohteet vähintään 44 px ([])
+OK    purussa ei vaakasuuntaista vieritystä
+OK    Aja uudelleen käynnistää uuden ajon
+konsolivirheet: []
+OK    ei konsolivirheitä
+
+webkit: 44 tarkistusta, 0 virhettä
+exit 0

@@ -1,0 +1,5 @@
+lataus 61.2
+{"ms": 502.2000000011176, "ruutuja": 147, "ketjuja": 44, "keskenJaaneita": 0, "paikkoja": 1168, "veneita": 738, "luokittain": {"soutu": 117, "pieni": 243, "keski": 235, "purje": 143}, "hylatty": {"maa": 98, "matala": 5, "tormays": 63, "aallonmurtaja": 0, "kapeaMaa": 42}, "esto": {"aallonmurtajajanoja": 0, "lohkoja": 16, "kapeitaKaistoja": 13, "kapeaaMaaSoluja": 3975, "ms": 192.1999999973923}, "ilmakuva": null}
+{"veneita": 738, "luokittain": {"soutu": 117, "pieni": 243, "keski": 235, "purje": 143}, "poijuja": 738, "piirtokutsut": 12, "kolmiot": 36620, "viimeinen": {"aika": 23.709961999999948, "ms": 0.7000000011175871, "ajoja": 141, "piirretty": 738, "lahi": 28, "kauko": 710, "kolmiot": 36620, "poijut": 27}}
+virheet []
+exit 0

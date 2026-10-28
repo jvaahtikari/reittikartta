@@ -1,0 +1,295 @@
+/* Simulaattori – aluksen liikemalli ja simulaation tila.
+ *
+ * Karkea ja tarkoituksella yksinkertainen malli Pv417 Repalle. Ei hydrodynamiikkaa mutta voimamalli:
+ * kiihtyvyys = (T - R) / m, jossa työntö T(vipu, v) = Tmax * vipu * (1 - 0,3 * v / 35 kn) ja vastus R(v) on käyrä,
+ * jossa on liukukynnys: uppoumavastus kasvaa neliöllisesti huippuun 16 kN noin 12 solmussa, laskee 12 kN:iin 17 solmussa
+ * (vene nousee liukuun) ja nousee sitten tasaisesti 21 kN:iin 35 solmussa. Siksi sama vivun asento pitää veneen joko
+ * liu'ussa tai sen alapuolella, kynnyksen ylitys vaatii hetkellisesti enemmän vipua, ja liu'un vaatimaa vähemmän vipua
+ * käytettäessä nopeus putoaa uppoumanopeuteen. Kaikki luvut ovat SETTINGS-oliossa ja ne kalibroidaan oikealla veneellä.
+ * Lähteet: Käsikirja 25.6.2014 (matkanopeus 28 kn, huippunopeus 35 kn, 2 x 375 kW, 2 x Rolls-Royce FF340,
+ * massa 15 500 kg, crash stop matkanopeudesta noin 40 m) ja tilaajan tarkennukset (työntö, vastus, ohjausviiveet).
+ *
+ * Ohjaus: navigoija antaa tosisuuntakäskyjä (5 asteen askelin, loiva käännös erikseen) ja nopeuskäskyjä (solmuina, 2 kn:n askelin),
+ * ja simuloitu ruorimies toteuttaa ne 0,8 s:n viiveellä: suunnalle P-säädin ruorikulmalle (tavallinen käännös noin 15 asteen
+ * ruorilla, loiva noin 7 asteen) ja nopeudelle yksi yhdistetty vipu (kierrosluku ja vipu yhdessä, -100 ... +100 %), jota hän
+ * nostaa, kunnes käsketty nopeus täyttyy, ja liukukynnyksen yli hän antaa hetkellisesti enemmän. Vipu on mallin sisäinen suure.
+ * Suora ohjaus (helmsman = false, ruori ja vipu asetetaan suoraan) on asetus myöhempää parityötä varten.
+ *
+ * Tila on erillään näkymistä: sijainti (x, y metriä maailmakoordinaatistossa, ks. paikka.js), suunta
+ * (ruutusuunta asteina), nopeus (m/s), vipu, ruori, trimmi, kallistus, aika ja komentoloki.
+ *
+ * Moduuli toimii selaimessa (window.Liike) ja Nodessa (module.exports). */
+(function (root) {
+  'use strict';
+  var KN = 1852 / 3600;        // yksi solmu m/s
+  var RAD = Math.PI / 180;
+
+  var SETTINGS = {
+    massKg: 15500,             // massa täydellä kuormalla (käsikirja)
+    tMaxN: 30000,              // enimmäistyöntö paikallaan täydellä vivulla (paaluveto noin 3 000 kg, crash stopin peruutustyöntö 25-29 kN)
+    thrustSpeedLoss: 0.3,      // työnnön väheneminen nopeuden mukana: T = Tmax * vipu * (1 - 0,3 * v / vRef)
+    thrustRefKn: 35,
+    rHumpN: 16000, humpKn: 12,            // vastuksen liukukynnyshuippu
+    rPlaneN: 12000, planeKn: 17,          // vastus liu'un alussa
+    rTopN: 21000, topKn: 35,              // vastus huippunopeudella
+    planeExp: 1.3,                        // vastuskäyrän kupera nousu 17 -> 35 kn (28 kn:n pitävä vipu noin 73 %)
+    rLowN: 1500,                          // pieni nopeuden lineaarinen vastus, jotta paikalleen pysähtyminen ei veny (kN-yksikössä 1,0 * v_kn * exp(-v_kn / 3))
+    reverseDragFactor: 2.5,               // peruutuksessa vastus kasvaa nopeammin (suihkut eivät tuota täyttä työntöä), peruutusnopeus noin 10 kn
+    crashLever: -1,                       // crash stop: täysi peruutusvipu heti
+    crashEndMs: 0.15,                     // crash stop päättyy, kun nopeus alle tämän (m/s)
+    helmsmanDelaySec: 0.8,                // simuloidun ruorimiehen viive käskylle (asetus)
+    headingStepDeg: 5, headingStepLongDeg: 10,   // suuntakäskyn askel (pitkä painallus tai Shift: 10)
+    speedStepKn: 2,                       // nopeuskäskyn askel
+    reverseSlowKn: -4,                    // "peruutus hidas" -nopeuskäsky (solmua, negatiivinen)
+    rudderMaxDeg: 35,                     // ruorikulma 100 %:n kohdalla (vesisuihkun suutin)
+    rudderNormalDeg: 15, rudderGentleDeg: 7,   // ruorimiehen tavallisen ja loivan käännöksen ruorikulma
+    hdgKp: 1.2, hdgKd: 1.0,               // suunnan P-säätö: ruorikulma = Kp * virhe - Kd * kääntymisnopeus (aste, aste/s)
+    hdgDeadDeg: 0.5,
+    leverKpPerKn: 0.04,                   // vivun lisäys nopeusvirhettä kohti (liukukynnyksen yli hän antaa enemmän)
+    leverKiPerKnSec: 0.006,               // vivun hidas korjaus nopeusvirheen integraalista (ruorimies hakee oikean asennon)
+    leverGuessPerKn: 1 / 35,              // ruorimiehen ensiarvaus vivun asennosta käsketyllä nopeudella (lineaarinen, 28 kn = 80 %)
+    leverGuessReverse: -0.25,             // ensiarvaus peruutuksessa
+    leverRatePerSec: 0.3,                 // vivun liikuttamisnopeus (osuutta koko liikkeestä sekunnissa)
+    speedSenseLagSec: 2.5,                // ruorimiehen nopeuden havainnon seuranta
+    radiusLowKn: 5, radiusLowM: 12,       // kääntösäde 5 kn:ssa (oletus)
+    radiusHighKn: 30, radiusHighM: 70,    // kääntösäde 30 kn:ssa (oletus)
+    turnStaticDegPerSec: 10,   // kääntyminen paikallaan täydellä ruorilla (oletus, tilaajan tarkennus, kalibroidaan oikealla veneellä)
+    draftM: 1.1,               // syväys pohjakosketuksessa (Pv417:n perehdytysmateriaali 1,1 m, käsikirjan 0,9 m on sarjan yleisarvo)
+    rudderLagSec: 0.35,        // ruorin seuranta, s
+    yawLagSec: 0.4,            // kääntymisnopeuden seuranta, s
+    heelMaxDeg: 8,             // kallistus käännöksessä sisäänpäin, enintään
+    heelRefAccel: 3.0,         // keskihakukiihtyvyys, jolla enimmäiskallistus saavutetaan, m/s2
+    heelLagSec: 0.6,
+    // Trimmi (keulan nousu) sidotaan vastuskäyrän liukukynnykseen: piste [kn kynnyksen 12 kn:n suhteessa, aste]
+    trimPoints: [[0, 0], [6, 0.4], [10, 4.6], [12, 5], [14, 5], [17, 4.2], [22, 3.2], [28, 2.5], [35, 2.5]],
+    trimLagSec: 1.0,
+    maxSubStep: 0.05           // integroinnin enimmäisaskel, s
+  };
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+  // Vastus N nopeudella v (m/s, voi olla negatiivinen)
+  function resistance(v) {
+    var S = SETTINGS, kn = Math.abs(v) / KN, r;
+    if (v < 0) {
+      r = S.reverseDragFactor * S.rHumpN * Math.pow(kn / S.humpKn, 2) + S.rLowN * kn * Math.exp(-kn / 3);
+      return -r;
+    }
+    if (kn <= S.humpKn) r = S.rHumpN * Math.pow(kn / S.humpKn, 2);
+    else if (kn <= S.planeKn) r = lerp(S.rHumpN, S.rPlaneN, (kn - S.humpKn) / (S.planeKn - S.humpKn));
+    else r = S.rPlaneN + (S.rTopN - S.rPlaneN) * Math.pow(Math.min(1.2, (kn - S.planeKn) / (S.topKn - S.planeKn)), S.planeExp);
+    return r + S.rLowN * kn * Math.exp(-kn / 3);
+  }
+  // Työntö N vivun asennolla (-1..1) ja nopeudella v (m/s)
+  function thrust(lever, v) {
+    var S = SETTINGS, f = Math.max(0, 1 - S.thrustSpeedLoss * Math.abs(v) / (S.thrustRefKn * KN));
+    return S.tMaxN * clamp(lever, -1, 1) * f;
+  }
+  // Crash stopin matka ja aika annetusta nopeudesta (testikäyttöön)
+  function crashStopDistance(fromKn) {
+    var s = create({ v: fromKn * KN, helmsman: false }); s.crashCmd = true; var d0 = s.dist, t = 0;
+    while (s.v > 0 && t < 120) { stepOnce(s, 0.005); t += 0.005; }
+    return { dist: s.dist - d0, time: t };
+  }
+
+  // Kääntösäde m nopeudella v (m/s): lineaarinen kahden pisteen välillä, alle alarajan vakio
+  function turnRadius(v) {
+    var kn = Math.abs(v) / KN, S = SETTINGS;
+    var r = S.radiusLowM + (kn - S.radiusLowKn) / (S.radiusHighKn - S.radiusLowKn) * (S.radiusHighM - S.radiusLowM);
+    return Math.max(S.radiusLowM, r);
+  }
+  // Suurin kääntymisnopeus rad/s täydellä ruorilla
+  function maxTurnRate(v) {
+    return Math.max(SETTINGS.turnStaticDegPerSec * RAD, Math.abs(v) / turnRadius(v));
+  }
+  function trimTarget(v) {
+    var S = SETTINGS, k = S.humpKn / 12, kn = Math.max(0, v) / KN / k, p = S.trimPoints;
+    if (kn <= p[0][0]) return p[0][1];
+    for (var i = 1; i < p.length; i++) {
+      if (kn <= p[i][0]) return lerp(p[i - 1][1], p[i][1], (kn - p[i - 1][0]) / (p[i][0] - p[i - 1][0]));
+    }
+    return p[p.length - 1][1];
+  }
+
+  function wrap180(d) { d = ((d + 180) % 360 + 360) % 360 - 180; return d; }
+  function norm360(d) { return ((d % 360) + 360) % 360; }
+  function trueHdg(s) { return norm360(s.hdg + s.conv); }
+
+  function create(init) {
+    init = init || {};
+    var conv = init.conv || 0, hdg = init.hdg || 0, ht = Math.round(norm360(hdg + conv));
+    return {
+      t: 0,                    // simulaatioaika s
+      clockMs: init.clockMs || Date.now(),   // kellonaika (ms, UTC)
+      x: init.x || 0, y: init.y || 0,        // m, maailmakoordinaatisto
+      hdg: hdg,                              // ruutusuunta, aste (tosisuunta = ruutusuunta + conv)
+      conv: conv,                            // meridiaanikonvergenssi (aste), sovellus päivittää sijainnin mukaan
+      v: init.v || 0,                        // m/s
+      // navigoijan käskyt
+      orderHdg: ht,                          // käsketty tosisuunta, aste
+      orderSpeedKn: init.speedKn || 0,       // käsketty nopeus, solmua (negatiivinen = peruutus)
+      gentleNext: false,                     // seuraava käännös merkitty loivaksi
+      // ruorimiehen toteuttamat käskyt (viiveen jälkeen)
+      hmHdg: ht, hmSpeedKn: init.speedKn || 0, hmGentle: false,
+      pending: [],                           // viiveessä olevat käskyt {at, kind, value, gentle}
+      helmsman: init.helmsman !== false,     // false: ruori ja vipu asetetaan suoraan (rudderCmd, leverCmd)
+      speedSense: init.v ? init.v / KN : 0,  // ruorimiehen havaitsema nopeus, kn
+      leverTrim: 0,                          // ruorimiehen vivun perusasento (integraattori)
+      leverCmd: init.lever || 0,             // vivun tavoite (ruorimiehen käsi)
+      rudderCmd: 0,                          // ruorin tavoite -1..1 (positiivinen oikealle)
+      crashCmd: false, crashActive: false,
+      rudder: 0,                             // toteutunut ruori -1..1
+      lever: init.lever || 0,                // toteutunut vipu -1..1
+      rate: 0,                               // kääntymisnopeus aste/s, positiivinen = oikealle
+      trim: 0, roll: 0,                      // aste
+      dist: 0,                               // kuljettu matka m
+      speedFactor: 1,                        // aikakerroin (vaikuttaa vain stepFrame-funktioon)
+      cmdLog: []                             // komentoloki: {t, clockMs, kind, value, gentle, x, y, hdg, v}
+    };
+  }
+
+  function logCmd(s, kind, value, extra) {
+    var e = { t: s.t, clockMs: s.clockMs, kind: kind, value: value, x: s.x, y: s.y, hdg: s.hdg, hdgTrue: trueHdg(s), v: s.v };
+    if (extra) for (var k in extra) e[k] = extra[k];
+    s.cmdLog.push(e);
+  }
+  function queue(s, kind, value, gentle) {
+    var d = SETTINGS.helmsmanDelaySec;
+    if (!s.helmsman || d <= 0) apply(s, { kind: kind, value: value, gentle: gentle });
+    else s.pending.push({ at: s.t + d, kind: kind, value: value, gentle: gentle });
+  }
+  function apply(s, o) {
+    if (o.kind === 'heading') { s.hmHdg = o.value; s.hmGentle = !!o.gentle; }
+    else if (o.kind === 'speed') { s.hmSpeedKn = o.value; s.leverTrim = o.value < 0 ? SETTINGS.leverGuessReverse : Math.max(0, o.value) * SETTINGS.leverGuessPerKn; }
+  }
+  // Suuntakäsky (tosisuunta, aste). Jos loiva on merkitty, käsky ja merkintä kirjataan yhdessä ja merkintä kuluu.
+  function orderHeading(s, trueDeg) {
+    var h = norm360(Math.round(trueDeg)), g = s.gentleNext;
+    s.orderHdg = h; s.gentleNext = false;
+    logCmd(s, 'heading', h, { gentle: g });
+    queue(s, 'heading', h, g);
+  }
+  function stepHeadingOrder(s, dir, long) {
+    var st = long ? SETTINGS.headingStepLongDeg : SETTINGS.headingStepDeg;
+    orderHeading(s, s.orderHdg + dir * st);
+  }
+  // Loiva käännös: merkitsee seuraavan suuntakäskyn loivaksi (kytkin)
+  function toggleGentle(s) {
+    s.gentleNext = !s.gentleNext;
+    logCmd(s, 'gentle', s.gentleNext ? 1 : 0);
+  }
+  function orderSpeed(s, kn) {
+    kn = clamp(Math.round(kn), -12, 35);
+    s.orderSpeedKn = kn; logCmd(s, 'speed', kn); queue(s, 'speed', kn, false);
+  }
+  function stepSpeedOrder(s, dir) {
+    var cur = s.orderSpeedKn < 0 ? 0 : s.orderSpeedKn, n = clamp(cur + dir * SETTINGS.speedStepKn, 0, 35);
+    if (dir < 0 && s.orderSpeedKn <= 0) n = 0;
+    orderSpeed(s, n);
+  }
+  function orderReverseSlow(s) { orderSpeed(s, SETTINGS.reverseSlowKn); }
+  // Crash stop: heti, ei viivettä. Täysi peruutusvipu, kunnes alus on pysähtynyt, ja nopeuskäsky nollataan.
+  function crashStop(s) {
+    if (s.v > SETTINGS.crashEndMs) {
+      s.crashCmd = true; s.pending = s.pending.filter(function (p) { return p.kind !== 'speed'; });
+      s.orderSpeedKn = 0; s.hmSpeedKn = 0; logCmd(s, 'crash', 1);
+    }
+  }
+
+  // Ruorimiehen suunnansäätö: ruorikulma -1..1
+  function helmRudder(s) {
+    var S = SETTINGS, e = wrap180(s.hmHdg - trueHdg(s)), lim = s.hmGentle ? S.rudderGentleDeg : S.rudderNormalDeg;
+    if (Math.abs(e) < S.hdgDeadDeg && Math.abs(s.rate) < 0.3) {
+      if (s.hmGentle) s.hmGentle = false;           // käännös valmis, loiva-merkintä kuluu
+      return 0;
+    }
+    if (Math.abs(e) < 1.0 && Math.abs(s.rate) < 0.6 && s.hmGentle) s.hmGentle = false;
+    var rd = clamp(S.hdgKp * e - S.hdgKd * s.rate, -lim, lim);
+    return clamp(rd / S.rudderMaxDeg, -1, 1);
+  }
+  // Ruorimiehen nopeussäätö: vivun tavoite -1..1. Pito-ohjaus (vipu, joka pitää käsketyn nopeuden) ja virhe lisää vipua.
+  function helmLever(s, dt) {
+    var S = SETTINGS, vt = s.hmSpeedKn;
+    s.speedSense += (s.v / KN - s.speedSense) * (1 - Math.exp(-dt / S.speedSenseLagSec));
+    if (vt === 0) { s.leverTrim = 0; return 0; }
+    var err = vt - s.speedSense;
+    s.leverTrim = clamp(s.leverTrim + S.leverKiPerKnSec * err * dt, -1, 1);
+    return clamp(s.leverTrim + S.leverKpPerKn * err, -1, 1);
+  }
+
+  // Yksi integrointiaskel dt (s)
+  function stepOnce(s, dt) {
+    var S = SETTINGS;
+    while (s.pending.length && s.pending[0].at <= s.t) apply(s, s.pending.shift());
+    if (s.helmsman) {
+      s.rudderCmd = helmRudder(s);
+      var lt = helmLever(s, dt), maxd = S.leverRatePerSec * dt;
+      s.leverCmd += clamp(lt - s.leverCmd, -maxd, maxd);
+    }
+    // ruori
+    s.rudder += (s.rudderCmd - s.rudder) * (1 - Math.exp(-dt / S.rudderLagSec));
+    // nopeus: kiihtyvyys = (T - R) / m
+    if (s.crashCmd && !s.crashActive) s.crashActive = true;
+    var lv = s.crashActive ? S.crashLever : s.leverCmd;
+    s.lever = lv;
+    var a = (thrust(lv, s.v) - resistance(s.v)) / S.massKg, v0 = s.v;
+    s.v += a * dt;
+    if (s.crashActive) {
+      if (s.v <= S.crashEndMs) {            // pysähtynyt: vipu neutraaliksi
+        s.v = 0; s.crashActive = false; s.crashCmd = false; s.leverCmd = 0; s.speedSense = 0;
+        logCmd(s, 'lever0', 0);
+      }
+    } else if (lv === 0 && Math.abs(s.v) < 0.02) s.v = 0;
+    else if (lv === 0 && v0 * s.v < 0) s.v = 0;
+    // suunta
+    var wTarget = s.rudder * maxTurnRate(s.v) * (s.v < -0.01 ? -1 : 1);   // rad/s
+    var w = s.rate * RAD;
+    w += (wTarget - w) * (1 - Math.exp(-dt / S.yawLagSec));
+    s.rate = w / RAD;
+    var h0 = s.hdg * RAD;
+    s.hdg = ((s.hdg + s.rate * dt) % 360 + 360) % 360;
+    var hm = h0 + 0.5 * w * dt;
+    var ds = s.v * dt;
+    s.x += Math.sin(hm) * ds;
+    s.y += Math.cos(hm) * ds;
+    s.dist += Math.abs(ds);
+    // trimmi ja kallistus
+    s.trim += (trimTarget(s.v) - s.trim) * (1 - Math.exp(-dt / S.trimLagSec));
+    var ac = s.v * w;                                    // keskihakukiihtyvyys, positiivinen oikealle
+    var rollT = clamp(ac / S.heelRefAccel, -1, 1) * S.heelMaxDeg;
+    s.roll += (rollT - s.roll) * (1 - Math.exp(-dt / S.heelLagSec));
+    s.t += dt;
+    s.clockMs += dt * 1000;
+  }
+
+  // Edistää simulaatiota dt sekuntia (jaetaan osa-askeliin)
+  function advance(s, dt) {
+    var n = Math.max(1, Math.ceil(dt / SETTINGS.maxSubStep)), h = dt / n;
+    for (var i = 0; i < n; i++) stepOnce(s, h);
+  }
+  // Kuvakohtainen askel: todellinen kulunut aika kerrottuna aikakertoimella, enintään 0,25 s todellista aikaa
+  function stepFrame(s, realDt) {
+    if (!(s.speedFactor > 0)) return 0;
+    var dt = Math.min(realDt, 0.25) * s.speedFactor;
+    advance(s, dt);
+    return dt;
+  }
+  // Vipu, jolla nopeus pysyy v:ssä, apu- ja testikäyttöön
+  function leverForSpeed(v) {
+    var f = Math.max(1e-6, 1 - SETTINGS.thrustSpeedLoss * Math.abs(v) / (SETTINGS.thrustRefKn * KN));
+    return resistance(v) / (SETTINGS.tMaxN * f);
+  }
+  // Tekstit käyttöliittymälle
+  function headingText(h) { var n = Math.round(norm360(h)); return 'Suunta ' + (n < 10 ? '00' : n < 100 ? '0' : '') + n; }
+  function speedText(kn) { return kn < 0 ? 'Peruutus hidas' : 'Nopeus ' + Math.round(kn) + ' kn'; }
+
+  var api = {
+    KN: KN, SETTINGS: SETTINGS, create: create, stepOnce: stepOnce, advance: advance, stepFrame: stepFrame,
+    orderHeading: orderHeading, stepHeadingOrder: stepHeadingOrder, toggleGentle: toggleGentle, orderSpeed: orderSpeed,
+    stepSpeedOrder: stepSpeedOrder, orderReverseSlow: orderReverseSlow, crashStop: crashStop, trueHdg: trueHdg, wrap180: wrap180,
+    resistance: resistance, thrust: thrust, leverForSpeed: leverForSpeed, crashStopDistance: crashStopDistance,
+    turnRadius: turnRadius, maxTurnRate: maxTurnRate, trimTarget: trimTarget, headingText: headingText, speedText: speedText
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Liike = api;
+})(typeof window !== 'undefined' ? window : globalThis);

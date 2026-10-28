@@ -1,0 +1,33 @@
+<!doctype html><html lang="fi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;height:100%;background:#234}#v{position:absolute;inset:0}</style></head><body>
+<div id="v"></div>
+<script src="../lib/three.min.js"></script><script src="../../lib/pmtiles.js"></script>
+<script src="../js/paikka.js"></script><script src="../js/mvt.js"></script><script src="../js/aineisto.js"></script><script src="../js/runko.js"></script><script src="../js/merkit.js"></script><script src="../../js/symbols.js"></script><script src="../../js/signs.js"></script><script src="../js/merimerkit3d.js"></script><script src="../js/merkit3d.js"></script><script src="../js/maamerkit3d.js"></script><script src="../js/laiturit3d.js"></script><script src="../js/maasto.js"></script><script src="../js/nakyma.js"></script>
+<script>
+const q=new URLSearchParams(location.search);
+Aineisto.setBase(q.get('aineisto')||'http://127.0.0.1:8140/');
+const E=parseFloat(q.get('e')||'327000'), N=parseFloat(q.get('n')||'6823500');
+Paikka.setOrigin(E,N);
+const view=Nakyma.create(document.getElementById('v'),{preserve:true});
+Aineisto.maamerkit().then(d=>{view.landmarks.build(d);view.terrain.setFlatten(view.landmarks.flatten());window.__lm=true;});
+const b0=Aineisto.stats.bytes;Merkit.load(0,0,3600).then(()=>{view.aids.sync(0,0,true);window.__aids=true;window.__aidBytes=Aineisto.stats.bytes-b0;});
+view.setPixelBudget(parseFloat(q.get('pb')||'0.55'));
+view.setSize(innerWidth,innerHeight);
+const t=q.get('t'); view.setSimTime(t?Date.parse(t):Date.parse('2026-10-25T10:00:00Z'));
+if(q.get('seat')==='1') view.setSeat(true);
+view.setGaze(parseFloat(q.get('gaze')||'0'));
+const st={x:0,y:0,hdg:parseFloat(q.get('h')||'0'),v:parseFloat(q.get('v')||'0')*0.514444,roll:parseFloat(q.get('roll')||'0'),trim:parseFloat(q.get('trim')||'0')};
+let n=0,last=performance.now();
+if(q.get('free')){ const f=q.get('free').split(',').map(Number); window.__free=f; }
+window.__state=st; window.__view=view;
+function loop(){
+  const now=performance.now(), dt=(now-last)/1000; last=now;
+  if(window.__lm&&window.__aids) view.terrain.tick(parseFloat(q.get('budget')||'8'));
+  if(window.__free){const f=window.__free; view.setFree([f[0],f[1],f[2]],[f[3],f[4],f[5]],f[6]||50);}
+  view.render(st,dt);
+  n++;
+  if(view.terrain.idle()&&n>3&&window.__lm&&window.__aids&&!window.__ready){ window.__ready=true; }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script></body></html>

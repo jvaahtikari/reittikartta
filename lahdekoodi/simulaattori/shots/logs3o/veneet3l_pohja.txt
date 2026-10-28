@@ -1,0 +1,29 @@
+valmis True
+vesitaso True {"tyyppi": "BufferGeometry", "par": null, "kolmiot": 6272}
+{"etaisyys": 15, "korkeus": 1.5, "fov": 17, "magenta_vedella": 7, "magenta_ilman_vetta": 37, "pikseleita": 548604}
+{"etaisyys": 15, "korkeus": 1.5, "fov": 45, "magenta_vedella": 0, "magenta_ilman_vetta": 16, "pikseleita": 548604}
+{"etaisyys": 15, "korkeus": 6, "fov": 17, "magenta_vedella": 0, "magenta_ilman_vetta": 0, "pikseleita": 548604}
+{"etaisyys": 15, "korkeus": 6, "fov": 45, "magenta_vedella": 1, "magenta_ilman_vetta": 30, "pikseleita": 548604}
+{"etaisyys": 15, "korkeus": 25, "fov": 17, "magenta_vedella": 0, "magenta_ilman_vetta": 0, "pikseleita": 548604}
+{"etaisyys": 15, "korkeus": 25, "fov": 45, "magenta_vedella": 0, "magenta_ilman_vetta": 0, "pikseleita": 548604}
+{"etaisyys": 40, "korkeus": 1.5, "fov": 17, "magenta_vedella": 0, "magenta_ilman_vetta": 51, "pikseleita": 548604}
+{"etaisyys": 40, "korkeus": 1.5, "fov": 45, "magenta_vedella": 0, "magenta_ilman_vetta": 18, "pikseleita": 548604}
+{"etaisyys": 40, "korkeus": 6, "fov": 17, "magenta_vedella": 7, "magenta_ilman_vetta": 379, "pikseleita": 548604}
+{"etaisyys": 40, "korkeus": 6, "fov": 45, "magenta_vedella": 2, "magenta_ilman_vetta": 52, "pikseleita": 548604}
+{"etaisyys": 40, "korkeus": 25, "fov": 17, "magenta_vedella": 0, "magenta_ilman_vetta": 0, "pikseleita": 548604}
+{"etaisyys": 40, "korkeus": 25, "fov": 45, "magenta_vedella": 2, "magenta_ilman_vetta": 117, "pikseleita": 548604}
+{"etaisyys": 100, "korkeus": 1.5, "fov": 17, "magenta_vedella": 0, "magenta_ilman_vetta": 19, "pikseleita": 548604}
+{"etaisyys": 100, "korkeus": 1.5, "fov": 45, "magenta_vedella": 0, "magenta_ilman_vetta": 7, "pikseleita": 548604}
+{"etaisyys": 100, "korkeus": 6, "fov": 17, "magenta_vedella": 16, "magenta_ilman_vetta": 431, "pikseleita": 548604}
+{"etaisyys": 100, "korkeus": 6, "fov": 45, "magenta_vedella": 2, "magenta_ilman_vetta": 77, "pikseleita": 548604}
+{"etaisyys": 100, "korkeus": 25, "fov": 17, "magenta_vedella": 19, "magenta_ilman_vetta": 485, "pikseleita": 548604}
+{"etaisyys": 100, "korkeus": 25, "fov": 45, "magenta_vedella": 13, "magenta_ilman_vetta": 224, "pikseleita": 548604}
+{"etaisyys": 250, "korkeus": 1.5, "fov": 17, "magenta_vedella": 1, "magenta_ilman_vetta": 14, "pikseleita": 548604}
+{"etaisyys": 250, "korkeus": 1.5, "fov": 45, "magenta_vedella": 0, "magenta_ilman_vetta": 0, "pikseleita": 548604}
+{"etaisyys": 250, "korkeus": 6, "fov": 17, "magenta_vedella": 23, "magenta_ilman_vetta": 543, "pikseleita": 548604}
+{"etaisyys": 250, "korkeus": 6, "fov": 45, "magenta_vedella": 9, "magenta_ilman_vetta": 85, "pikseleita": 548604}
+{"etaisyys": 250, "korkeus": 25, "fov": 17, "magenta_vedella": 33, "magenta_ilman_vetta": 1443, "pikseleita": 548604}
+{"etaisyys": 250, "korkeus": 25, "fov": 45, "magenta_vedella": 14, "magenta_ilman_vetta": 345, "pikseleita": 548604}
+yhteensä: vedellä 149, ilman vettä 4373
+virheet []
+exit 0

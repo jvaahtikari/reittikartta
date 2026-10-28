@@ -1,0 +1,49 @@
+OK    Google 3D valittu ja oma kerros päällä
+OK    oma kangas pysyy näkyvissä Googlen päällä
+OK    ruudulla on kerrosluokka g3d-over
+OK    kartan z-index 0 on oman kankaan 1 alla
+OK    kartan tapahtumat (tarkistettu erikseen)
+OK    oman kankaan alareunasta jätetään 24 px Googlen lähdemerkinnälle: inset(0px 0px 24px)
+  vesimaski: {"tiles":25,"wanted":25,"ready":8,"empty":0,"stats":{"tiles":0,"loaded":8,"empty":0,"tris":4487,"verts":4473,"buildMs":68.89999999850988,"maxMs":31.800000000745058,"rings":63},"visible":true,"version":9}
+  maapiste {'E': 328173.3917105045, 'N': 6824081.601170383, 'h': 5.885673202184989, 'r': 300, 'a': 33}
+OK    löytyi maapiste noin 300 m päästä
+   {'sky': [[216, 173, 0, 168], [504, 205, 0, 200], [720, 214, 0, 209], [936, 218, 0, 213]], 'horizonY': 255.55484652601046, 'land': [0, 0, 0, 0], 'landXY': [691.2742290338765, 255.04902950562604], 'water': [149, 177, 200, 255], 'waterXY': [697.0066473660158, 283.4350351531798], 'size': [1440, 511], 'roof': [64, 0, 0, 255]}
+OK    taivaan alfa 0 horisontin (rivi 255) yläpuolella neljässä sarakkeessa (rivit [173, 205, 214, 218])
+OK    ohjaamon katto piirtyy omassa kerroksessa (alfa 255), kuten oman näkymän ikkunakehys
+OK    veden alfa 255 (255) pisteessä [697, 283]
+OK    maan alfa 0 noin 300 m päässä (0) pisteessä [691, 255]
+  sarakkeet [{'x': 144, 't': 89, 'f': 422, 'order': 'F0F'}, {'x': 432, 't': 53, 'f': 458, 'order': 'F0F'}, {'x': 720, 't': 52, 'f': 459, 'order': 'F0F'}, {'x': 1008, 't': 36, 'f': 475, 'order': 'F0F0F0F'}, {'x': 1296, 't': 40, 'f': 471, 'order': 'F0F0F0F0F'}]
+OK    jokaisessa viidestä sarakkeesta on läpinäkyviä pikseleitä (taivas ja maa) ja peittäviä (katto, vesi, vene), ei puoliläpinäkyviä
+OK    veneen ja veden pikseleitä alaosassa 6240
+   {"ov":{"on":true,"fogKm":0,"cal":{"dHeadingDeg":0,"dPitchDeg":0,"tanScale":1},"fovMin":5,"fovMax":80,"lower":0.1,"domeDist":14000,"domeElevDeg":12,"hide":{"maamerkit":1,"laiturit":0,"sillat":1},"hidden":[],"mat":{"metadata":{"version":4.5,"type":"Material","generator":"Material.toJSON"},"uuid":"A782B308-B468-4BF2-814E-0EB6436DB820","type":"ShaderMaterial","blending":0,"depthFunc":3,"depthTest":true,"depthWrite":true,"colorWrite":false,"stencilWrite":false,"stencilWriteMask":255,"stencilFunc":519,"stencilRef":0,"stencilFuncMask":255,"stencilFail":7680,"stencilZFail":7680,"stencilZPass":7680,"toneMapped":false,"glslVersion":null,"uniforms":{"uFogColor":{"type":"c","value":14673640},"uInvVis":{"value":0},"uLower":{"value":0.1}},"vertexShader":"varying vec3 vW; uniform float uLower; void main(){ vec4 w0 = modelMatrix * vec4(position, 1.0); float dd = length(w0.xz - cameraPosition.xz); vec3 p = position; if (position.y < -1.0) p.y -= dd * dd * 8.0e-7; p.y -= uLower; vec4 w = modelMatrix * vec4(p, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }","fragmentShader":"uniform vec3 uFogColor; uniform float uInvVis; varying vec3 vW; void main(){ float d = length(cameraPosition - vW); float a = 1.0 - exp(-d * uInvVis); gl_FragColor = vec4(uFogColor * a, a); }"},"dome":{"metadata":{"version":4.5,"type":"Object","generator":"Object3D.toJSON"},"geometries":[{"uuid":"D2F90788-5561-4705-AF22-4167546A3385","type":"SphereGeometry","radius":1000,"widthSegments":24,"heightSegments":12,"phiStart":0,"phiLength":6.283185307179586,"thetaStart":0,"thetaLength":3.141592653589793}],"materials":[{"uuid":"866AC6D6-C7E4-4B63-88FA-8CC0BFABD1F8","type":"ShaderMaterial","side":1,"transparent":true,"depthFunc":3,"depthTest":true,"depthWrite":false,"colorWrite":true,"stencilWrite":false,"stencilWriteMask":255,"stencilFunc":519,"stencilRef":0,"stencilFuncMask":255,"stencilFail":7680,"stencilZFail":7680,"stencilZPass":7680,"toneMapped":false,"glslVersion":null,"uniforms":{"uFogColor":{"type":"c","value":14673640},"uFarA":{"value":0},"uElev":{"value":12}},"vertexShader":"varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }","fragmentShader":"uniform vec3 uFogColor; uniform float uFarA; uniform float uElev; varying vec3 vDir; void main(){ float el = degrees(asin(clamp(vDir.y, -1.0, 1.0))); float a = uFarA * (1.0 - smoothstep(0.0, uElev, el)); gl_FragColor = vec4(uFogColor, a); }"}],"object":{"uuid":"2CF40E45-FBBD-45EC-A672-26C1CAD1F6D5","type":"Mesh","visible":false,"frustumCulled":false,"renderOrder":90,"layers":1,"matrix":[1,0,0,0,0,1,0,0,0,0,1,0,826.0364402885283,2.7199999999999998,-278.3308539008366,1],"geometry":"D2F90788-5561-4705-AF22-4167546A3385","material":"866AC6D6-C7E4-4B63-88FA-8CC0BFABD1F8"}}},"calib":{"dHeadingDeg":0,"dPitchDeg":0,"tanScale":1},"fog":0}
+  oman maastoverkon korkeus Siilinkarin loiston kohdalla (m vedenpinnasta): -1.5
+  koetinehdokkaita: maan takana 1205, avovedessä 767
+OK    löytyi koetinpari (maan takana ja avovedessä samalla etäisyydellä)
+  maan takana: suunta 70.0, etäisyys 429 m, peitto 140 m, maanpinta 9.8 m. Avovesi: suunta 86.5, etäisyys 399 m
+   {'behindXY': [605.4713154436745, 244.16649228044506], 'besideXY': [781.5572095174674, 258.11797340803463], 'behindPx': [0, 0, 0, 0], 'besidePx': [37, 77, 125, 255], 'behindOff': [0, 0, 0, 0], 'besideOff': [37, 77, 126, 255], 'behindRed': False, 'besideRed': False, 'size': [1440, 511]}
+OK    maan takana oleva koetin on peitossa, pikselin alfa 0
+VIRHE avovedessä oleva koetin näkyy, pikseli [37, 77, 125, 255]
+OK    ilman koettimia pikselit eivät ole punaisia: maan takana alfa 0, avovedessä alfa 255 (koettimen keskikohta on vedenpinnan yläpuolella)
+  kaukomaa {'E': 329966.2952014676, 'N': 6824245.823381635, 'h': 11.470299101619858, 'r': 2000, 'a': 78}
+OK    löytyi maapiste noin 2 km päästä
+VIRHE ilman sumua kuvan yläosassa (taivas) ei ole yhtään peittävää pikseliä (52 / 17280)
+  sumu 2 km: koesäteitä 364 (alfa alle 255: 333), verkkoja 178
+OK    näkyvyys 2 km: alfa vastaa kaavaa 1 - exp(-d/näkyvyys): keskiero 0.40, 98. prosenttipiste 2.1, suurin 5.0 (alfa-asteikko 0 ... 255, reunapikselit jo pois), 333 pistettä välillä 155 ... 1014 m
+    lähin 2 km:n piste: etäisyys 1014 m, alfa 101 (39.6 %), kaava 101.4 (39.8 %)
+  sumu 1 km: koesäteitä 349 (alfa alle 255: 326), verkkoja 178
+OK    näkyvyys 1 km: alfa vastaa kaavaa 1 - exp(-d/näkyvyys): keskiero 0.58, 98. prosenttipiste 4.0, suurin 20.2 (alfa-asteikko 0 ... 255, reunapikselit jo pois), 326 pistettä välillä 155 ... 4946 m
+    lähin 1 km:n piste: etäisyys 1014 m, alfa 162 (63.5 %), kaava 162.5 (63.7 %)
+  sumu 5 km: koesäteitä 375 (alfa alle 255: 351), verkkoja 178
+OK    näkyvyys 5 km: alfa vastaa kaavaa 1 - exp(-d/näkyvyys): keskiero 0.32, 98. prosenttipiste 1.0, suurin 5.5 (alfa-asteikko 0 ... 255, reunapikselit jo pois), 351 pistettä välillä 155 ... 1014 m
+    lähin 5 km:n piste: etäisyys 1014 m, alfa 47 (18.4 %), kaava 46.8 (18.4 %)
+VIRHE kriteeri 3: ei löytynyt maapisteitä 1,5 ... 2,7 km:n päästä yhdestäkään suunnasta
+OK    sumun ollessa päällä taivaan yläreuna on yhä läpinäkyvä (alfa 0)
+   [1, 1, 1] [1, 1, 1, 'google', '{"updates":916,"calls":1198,"throttled":282,"last":{"lat":61.50993264498305,"lng":23.767023360020637,"altitude":98.22,"range":25,"heading":340,"tilt":90,"fov":45.847684698396144,"eye":{"lat":61.509721833401784,"lng":23.767183968211725,"altitude":98.22}},"loads":1,"shows":5}']
+OK    kartta luotu 1 kertaa ja ladattu 1 kertaa kahdeksan näkymänvaihdon jälkeen (tavoite 1)
+OK    sivulla yksi karttaelementti (1)
+OK    omassa näkymässä kartta on piilossa (display:none) mutta elossa
+OK    omassa näkymässä kerrostila on pois
+OK    paluu Googleen ei luo karttaa uudelleen
+OK    ei konsolivirheitä []
+YHTEENSÄ 30 tarkistusta, 3 virhettä
+exit 0

@@ -170,6 +170,7 @@
   global.Library.init(map, App);
   if (global.Ais) global.Ais.init(map, App);
   if (global.Search) global.Search.init(map);
+  if (global.Terrain) global.Terrain.init(map);
   UI.startClock();
   // Selaimen zoomaus alle 100 %: karttakuvaa joudutaan pienentämään, jolloin se pehmenee.
   var zoomHinted = false;
@@ -190,6 +191,7 @@
     if (what === 'settings' || what === 'all') {
       global.Tools.renderStation(); global.Tools.updateTaskReadout(); global.Routes.render();
       syncTop(); chart.refresh(); applySafety();
+      if (global.Terrain) global.Terrain.sync();
       if (global.Ais) global.Ais.sync();
     }
     global.Library.render();
@@ -407,6 +409,13 @@
           st.show.mml = st.show.mml === false; chart.refresh(); S.save(); } },
         { label: 'AIS-alukset (Digitraffic)', checked: st.show.ais !== false, keepOpen: true, action: function () {
           st.show.ais = st.show.ais === false; if (global.Ais) global.Ais.sync(); S.save(); } },
+        { head: 'Maasto (Näsijärvi)' },
+        item('Rakennukset', toggleShow('terrainBuildings', function (on) { global.Terrain.changed('terrainBuildings', on); })),
+        item('Osoitteet', toggleShow('terrainAddresses', function (on) { global.Terrain.changed('terrainAddresses', on); })),
+        item('Kiinteistörajat (tunnus napautuksella)', toggleShow('terrainParcels', function (on) { global.Terrain.changed('terrainParcels', on); })),
+        item('Maastotyyppi', toggleShow('terrainCover', function (on) { global.Terrain.changed('terrainCover', on); })),
+        item('Varjostus', toggleShow('terrainRelief', function (on) { global.Terrain.changed('terrainRelief', on); })),
+        item('Tiet', toggleShow('terrainRoads', function (on) { global.Terrain.changed('terrainRoads', on); })),
         { head: 'Reitit' },
         item('Reittinuotit', toggleShow('notes', function (on) { if (!on) st.show.passes = false; })),
         item('Sivuutus- ja käännösetäisyydet', toggleShow('passes', function (on) { if (on) st.show.notes = true; })),
@@ -663,6 +672,8 @@
       '<label for="sSpd">Oletusnopeus (kn)</label><input id="sSpd" type="number" min="1" max="60" value="' + st.speed + '">' +
       '<label for="sTurn">Käännösetäisyys (mpk)</label><input id="sTurn" type="number" min="0.1" max="10" step="0.1" value="' + st.turnWarnNM + '">' +
       '<div class="hint">Tätä pidempi käännösetäisyys näytetään punaisena.</div>' +
+      '<label for="sTerr">Maastoaineiston osoite</label><input id="sTerr" type="text" autocomplete="off" spellcheck="false" value="' + UI.esc(st.terrainUrl || '') + '">' +
+      '<div class="hint">Näsijärven maastoaineistopaketin (rakennukset, osoitteet, kiinteistörajat, tiet, maastotyyppi, varjostus ja osoite- ja tunnushaku) verkko-osoite. Oletus on ' + UI.esc(global.Terrain.DEFAULT_URL) + '. Tyhjä kenttä palauttaa oletuksen.</div>' +
       '<label for="sMml">MML API-avain</label><input id="sMml" type="text" autocomplete="off" spellcheck="false" value="' + UI.esc(st.mmlKey || '') + '">' +
       '<div class="hint">Maanmittauslaitoksen avoimen rajapinnan maksuton avain (kivet, karikot, matalikot ja nimistö vektoripohjalle). Avaimen saa Maanmittauslaitoksen verkkosivuilta.' + (/^https?:$/.test(location.protocol) ? ' Verkkoversiossa avain on valmiiksi palvelimella, joten kenttä voi jäädä tyhjäksi.' : '') + '</div>' +
       '</div>';
@@ -676,6 +687,7 @@
         st.approvers = lines('#sApp');
         st.speed = parseFloat(m.querySelector('#sSpd').value) || st.speed;
         st.turnWarnNM = parseFloat(m.querySelector('#sTurn').value) || st.turnWarnNM;
+        st.terrainUrl = m.querySelector('#sTerr').value.trim() || global.Terrain.DEFAULT_URL;
         st.mmlKey = m.querySelector('#sMml').value.trim();
         chart.setMmlKey(st.mmlKey);
         S.emit('settings');
@@ -740,6 +752,7 @@
         '<h3>Paikkahaku ja koordinaatit</h3><p>Yläpalkin hakukenttään voi kirjoittaa paikannimen, turvalaitteen nimen tai numeron, väylän, sulun tai avattavan sillan nimen, luotsipaikan tai VTS-ilmoittautumispisteen nimen, oman merkin tai tehtävän nimen, AIS-aluksen nimen, kutsutunnuksen tai MMSI-numeron tai koordinaatin. Turvalaitteet, väylät, sulut ja sillat haetaan Väyläviraston aineistosta ja luotsipaikat sekä VTS-pisteet Traficomin avoimesta aineistosta. Paikannimet haetaan Maanmittauslaitoksen nimistörekisteristä. Haku toimii samoin kaikilla karttapohjilla, ja väylän valinta korostaa koko väylän. Verkkoversiossa nimistö toimii ilman omaa avainta, ja tiedostona avattu versio tarvitsee Maanmittauslaitoksen API-avaimen (Tiedosto → Asetukset).</p>' +
         '<p>Hakusanaksi riittää nimen alku: <b>viitas</b> löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten <b>salmi</b> löytää esimerkiksi lähellä olevan Viitasalmen. Samannimisiä paikkoja on paljon, joten tulokset näytetään kartalla numeroituina ja listassa lähimmät ensin. Alle 27 meripeninkulman (50 km) päässä kartan keskeltä olevat ovat omana ryhmänään, ja jokaisella rivillä on etäisyys merimaileina ja suunta kartan keskeltä. Jos lähialueen tuloksia ei näy kartalla, kartta siirtyy niihin. <b>Näytä kartalla</b> (tai Enter) näyttää kaikki lähialueen tulokset. Nuolinäppäimet ja hiiren vienti listan riville korostavat tuloksen kartalla, ja tuloksen voi valita listasta tai klikkaamalla sen numeroa kartalla. Numerot jäävät kartalle vertailua varten, kunnes valitset paikan tai painat Esc.</p>' +
         '<p>Koordinaatissa asteen ja minuutin merkit voi korvata välilyönneillä. Heti perään kirjoitettu N tai E päättää luvun: <b>61 35,1N</b> = 61°35,1′N, <b>61 35 11N</b> = 61°35′11″N ja <b>61,5N</b> = 61°30′N. Leveys ja pituus erotetaan välilyönnillä tai pilkulla, esimerkiksi <b>61 35,1N 23 45,6E</b>. Tehtävän sijaintikentän alla näkyy heti, miten syöte tulkittiin.</p>' +
+        '<h3>Maasto-tasot ja osoitehaku</h3><p><b>Näytä → Maasto (Näsijärvi)</b> lisää kartalle rakennukset (zoomista 15), osoitteet (pisteenä zoomista 16 ja tekstinä zoomista 17), kiinteistörajat (zoomista 16), maastotyypin ja varjostuksen (zoomista 10) sekä tiet nimineen (zoomista 12, nimet zoomista 15). Kaikki ovat oletuksena pois päältä ja kattavat vain Näsijärven alueen. Muualla kartan oikeaan yläkulmaan tulee huomautus, eikä aineistoa ladata. Kun rakennukset tai kiinteistörajat ovat päällä, kartan napautus näyttää rakennuksen käyttötarkoituksen ja kerrosluokan tai lähimmän kiinteistötunnuksen (enintään 30 m päässä). Hakukenttä ja tehtäväpaikan haku löytävät myös katuosoitteen (esimerkiksi <b>Laiturikatu 8</b> tai <b>Rantatie 3, Tampere</b>) ja kiinteistötunnuksen (<b>837-123-4-56</b> tai 14 numeroa ilman väliviivoja), vaikka Maasto-tasot olisivat pois päältä. Osoitteet ovat Digi- ja väestötietoviraston poiminta 3.2.2025, joten uudet osoitteet puuttuvat. Aineisto ei ole navigointikäyttöön.</p>' +
         '<h3>Tehtäväpaikan haku</h3><p>Uutta tehtävää luotaessa paikan voi hakea lomakkeen kentästä Hae paikka samalla tavalla kuin yläpalkista. Kun osuma valitaan, lomake väistyy ja paikka näytetään kartalla magentalla renkaalla. Muut osumat näkyvät numeroituina, ja numeron napautus vaihtaa paikan. Paikkaa voi tarkentaa vetämällä rengasta tai napauttamalla karttaa. Vahvista paikka palaa lomakkeelle uusi paikka valittuna, ja tehtävä luodaan vasta painikkeesta Luo tehtävä. Takaisin palaa lomakkeelle muuttamatta paikkaa.</p>' +
         '<h3>Oma sijainti</h3><p>Työkalupalkin sijaintipainike näyttää laitteen oman sijainnin sinisenä pisteenä ja tarkkuuden vaaleana ympyränä. Liikkeessä pisteen edessä on kulkusuunnan nuoli, ja lukemissa näkyvät sijainti, nopeus solmuina, kulku ja tarkkuus. Puhelimessa sijainti käynnistyy, kun sovellus avataan, ja selain kysyy luvan ensimmäisellä kerralla. Tietokoneella sijainti käynnistetään painikkeesta. Sijaintia ei tallenneta eikä lähetetä minnekään. Jos lopetat seurannan tai kiellät luvan, sovellus muistaa valinnan eikä käynnistä sijaintia enää itsestään. iPhonessa sijainnin pitää olla sallittu myös kohdassa Asetukset → Tietosuoja ja suojaus → Sijaintipalvelut → Safarin verkkosivustot. Kun seuranta on päällä, painike keskittää kartan sijaintiin, jos se on näkymän ulkopuolella, ja muuten lopettaa seurannan. Sijainti toimii verkkoversiossa. Tiedostona avatussa sivussa selain ei välttämättä anna sijaintia.</p>' +
         '<h3>Puhelimessa ja tabletissa</h3><p>Kapealla näytöllä valikot ovat vasemman yläkulman valikkonapin takana, ja samasta valikosta valitaan alus ja näytettävät reitit. Puhelimessa valikko avautuu yläreunasta levynä, jossa on <b>Takaisin</b> ja <b>Sulje</b>, ja Näytä-valikko on jaettu osioihin. Jos valintoja on näkyvän osan alapuolella, levyn alareunassa lukee siitä. <b>Kirjasto</b> avautuu näytön alaosaan ja sulkeutuu itsestään, kun aloitat reitin tai muokkauksen. Kun kirjasto on auki, kartta keskitetään sen yläpuolelle jäävään osaan. Karttaa zoomataan nipistämällä, ja pitkä painallus vastaa hiiren oikeaa painiketta. Reittipisteitä lisättäessä ja harpilla mitattaessa ylhäällä ovat painikkeet <b>Poista viimeinen</b> ja <b>Valmis</b>, ja lukemat näyttävät juuri lisätyn välin suunnan ja pituuden.</p>' +
@@ -764,6 +777,7 @@
         '<h3>Kävijälaskuri</h3><p>Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla. Se ei käytä evästeitä eikä yksilöi käyttäjiä, ja tiedostona avatussa sovelluksessa sitä ei ladata. Reittejä, merkkejä tai sijaintia ei lähetetä.</p>' +
         '<h3>AIS-alukset</h3><p>Alusten AIS-sijainnit ja alustiedot tulevat Fintrafficin Digitraffic Marine -rajapinnasta (meri.digitraffic.fi). Aineiston lisenssi on CC BY 4.0, ja lähdemerkintä <b>AIS: Fintraffic / Digitraffic, CC BY 4.0</b> näkyy kartalla, kun kerros on päällä. Sovellus tunnistautuu Digitrafficille otsakkeella Digitraffic-User: Reittikartta. Tieto on viiveellistä, eikä se sovellu navigointiin tai törmäysten välttämiseen.</p>' +
         '<h3>Laiturit</h3><p>Laiturit, aallonmurtajat ja pengerrykset vektorikartalla: &copy; OpenStreetMap-tekijät, ODbL, haettu Overpass-rajapinnan kautta (overpass-api.de, varalla overpass.kumi.systems).</p>' +
+        global.Terrain.sourcesHtml() +
         '<h3>Väylätiedot</h3><p>Navigointilinjat, väylät, turvalaitteet, vesiliikennemerkit, sulut ja avattavat sillat: Väylävirasto, avoin rajapinta, CC BY 4.0. Luotsipaikat ja VTS-ilmoittautumispisteet (paikkahaku): Traficom, avoin INSPIRE-palvelu, CC BY 4.0. Väylien suunnat ovat navigointilinjojen virallisia tosisuuntia, kun ne ovat saatavilla, muuten ne on laskettu linjan geometriasta (loksodromi).</p>' +
         '<h3>Sijaintitarkkuus</h3><p>Rasterimerikartta on skannattu paperikartta, ja sen piirros poikkeaa ENC-kartasta. Pistokokeissa väylälinjan sijainti rasterikartalla poikkesi ENC:stä tyypillisesti noin 5 metriä ja suurimmillaan noin 16 metriä (Savonlinna, Kyrönsalmi), ja Näsijärvellä koko piirros oli siirtynyt noin 5–6 metriä luoteeseen. Väyläviraston navigointilinjat poikkesivat ENC:stä noin 1–2 metriä. Siksi reittipisteet kiinnitetään väyläaineistoon ja sivuutus- ja käännösetäisyyksien kohteet Väyläviraston turvalaiterekisterin sijainteihin. Turvalaitteiden sijainteja ei ole mitattu erikseen ENC:tä vasten. Vapaa piste tai kohde perii rasterikartan virheen.</p>' +
         '<h3>Käyttötarkoitus</h3><p>Traficomin määritelmän mukaan aluksen reitin suunnittelu on navigointikäyttöä, johon avoin aineisto ei ole tarkoitettu. Tämä sovellus soveltuu koulutukseen, havainnollistamiseen ja reittien luonnosteluun. Ajettavat reitit tarkistetaan ja hyväksytään SARNavissa virallista ENC-merikarttaa vasten.</p>' +

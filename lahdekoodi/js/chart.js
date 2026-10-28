@@ -1859,6 +1859,7 @@
       setUnderlay: function (on) { if (!vecOn()) setUnderlayLayer(!!on, 0.55); },
       setMmlKey: setMmlKey,
       searchNames: searchNames,
+      muniName: function (code) { return KUNTA[String(code || '').padStart(3, '0')] || ''; },
       namesNote: namesNote,
       get mmlInfo() { return { key: !!mmlKey, proxy: !mmlKey && mmlProxy && mmlProxyOk !== false, available: mmlAvailable(), cols: mmlCols, err: mmlColsErr, n: Object.keys(mmlStore.rock).length }; },
       get landKind() { return landKind; },

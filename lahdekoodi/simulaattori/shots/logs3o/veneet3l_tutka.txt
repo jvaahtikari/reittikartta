@@ -1,0 +1,8 @@
+altaan piste {"e": 328261.1036806398, "n": 6823780.655704595, "d": 20, "cl": 37.835235664097006}
+valmis True
+tutkan veneet haussa 657
+NL ero pikseleina: on/off 959, on/on 0, off/off 1
+Siilinkari valmis True
+SK veneitä haussa 629, ero pikseleinä: on/off 89, on/on 15, off/off 6
+virheet []
+exit 0

@@ -1,0 +1,23 @@
+# Määrittely, vaihe 3l: venemoduulin liittäminen simulaattoriin
+
+Päiväys 27.10.2026. Tekijä: Sonnet-agentti. Tilaaja: Fable. Työ tehdään hakemistossa `/home/claude/reittikartta-3l/` (kopio Reittikartan `maasto`-haarasta, commit 08a4fec, jossa vaiheet 3h–3k ja 3j ovat yhdistettyinä). Venemoduuli on valmiina hakemistossa `/home/claude/veneet/` (`veneet3d.js`, `VENEET.md` erityisesti luku 8 liittämisohje, `esikatselu.html`, `testit/testit.js`). Lue ensin `VENEET.md`, `lahdekoodi/simulaattori/TYOLOKI.md` (vaiheet 3f laiturit, 3h tutkan maski, 3j maasto, 3k törmäys) ja tiedostot `js/sim.js` (laiturien ja siltojen lataus- ja piirtokohdat), `js/laiturit3d.js`, `js/tormays.js`, `js/tutka.js` (turvalaitteiden pistekaiut, kohta `lisaaAidit` tai vastaava) ja `js/nakyma.js` (`addExtra`, `setQuality`).
+
+## 1. Tehtävät
+
+1. Kopioi `veneet3d.js` hakemistoon `lahdekoodi/simulaattori/js/` ja liitä se `sim.js`:ään samaan kohtaan kuin laiturit ja sillat: lataus `vesieste`-tiilistä aluksen ympäriltä (1 500 m), veneiden sijoitus laitureihin moduulin `asetaLaiturit`-kutsulla, piirto joka kuvalla ja keinunta `paivita`-kutsulla, ja latausnäytön valmis-ehtoon `idle()`. Vesitason syvyystarkkuusongelma (`VENEET.md` luku 7): tarkista, näkyykö veneiden pohja veden läpi simulaattorin vesitasolla, ja korjaa tarvittaessa (vesitason pilkkominen lähellä tai `polygonOffset`).
+2. Laatuasetus: täydellä laadulla veneet 1 500 m säteellä lähimalleina alle 300 m ja kaukomalleina kauempana, kevyellä laadulla 600 m säteellä ja vain kaukomallit. Täyttöaste 70 %, kausi kesä (talvella veneitä ei ole, mutta se tulee myöhemmin).
+3. Tutka: kiinnitetyt veneet pistekaikuina `tutka.js`:n turvalaitekaikujen tapaan: voimakkuus purjevene 0,6 (masto ja runko), moottorivene 0,45, soutuvene 0,25, enimmäisetäisyys 2 500 m, ei välkyntää, mutta varjo ja näkyvyys lasketaan kuten merkeille. Tiheässä satamassa kaiut sulautuvat laiturien kaikuun, mikä on oikein. Käytä moduulin `lahella`-rajapintaa, ei omaa sijoittelua. `tutka.js`:n muutos kopioidaan myös hakemistoon `/home/claude/tutka/` ja `TUTKA.md`:n kohtaan 4.6.
+4. Törmäys: `tormays.js` tarkistaa myös veneet (`lahella`-rajapinta, runkopolygoni veneen suorakulmiota vastaan): kosketus alle 1 kn pysäyttää, törmäys yli 1 kn kuten laituriin, lokiin ja purkuun "Törmäys veneeseen" tai "Kosketus veneeseen". Veneet eivät liiku törmäyksessä.
+5. Plotteri: ei muutoksia (kiinnitetyt veneet eivät näy SARNavissa).
+
+## 2. Hyväksymiskriteerit
+
+1. Kuvat `lahdekoodi/simulaattori/shots/` etuliitteellä `3l_`: Naistenlahden satama 150 m päästä deck-asettelussa 1440 × 900 (veneet laitureissa, keula laituriin, poijut), laiturin vierestä 20 m, Mustalahti, ja Pixel 7 kevyellä laadulla. Lokiin veneiden määrä luokittain kummassakin satamassa.
+2. Tutkakuva Naistenlahden satamasta 0,25 mpk alueella, jossa veneiden kaiut näkyvät laiturien välissä (kuva `3l_tutka_naistenlahti_veneet.png` rinnakkain plotterin kanssa), ja Siilinkarin kuva ennallaan (ei veneitä).
+3. Törmäystesti: ajo 4 kn kiinnitettyä venettä päin pysähtyy banneriin, lokissa "Törmäys veneeseen 4,0 kn", 0,8 kn on kosketus. Kuva `3l_tormays_vene.png`.
+4. Suorituskyky: kuvaväli samassa istunnossa ennen ja jälkeen pisteessä Naistenlahti (644 venettä) enintään 1,15-kertainen täydellä laadulla ja 1,05-kertainen kevyellä, piirtokutsut alle 300, kolmiot alle 450 000. Veneiden pohja ei näy veden läpi (kuva läheltä).
+5. Vanhat testit läpi: `mobiili_pw.py` (Chromium ja WebKit), `valkkyminen_pw.py`, `asettelu_3d_pw.py`, `tormays_pw.py`, `peruutus_pw.py`, `kayttoliittyma_3h_pw.py`, `tutka_viritys_pw.py`. `build.py` tuottaa `simulaattori.html`-tiedoston, `index.html` muuttumaton (md5 edff5aed...). `plotteri.js`, `liike.js`, `nakyma.js`, `maasto.js`, `runko.js` ja merkit eivät muutu.
+
+## 3. Työtapa
+
+Kuten aiemmin: paketti portissa 8144 (tarkista), lähdesivu omalla portilla (esimerkiksi 8172, tarkista vapaus) hakemistossa `lahdekoodi/`, `SIM` ja `PAKETTI` ympäristömuuttujat (`testit/pw.py`), Playwright asennettu (älä aja `playwright install`), SwiftShader-liput, WebKit `/opt/pw-browsers/webkit-2359`, yksi Playwright-ajo kerrallaan (toinen agentti ajaa rinnakkain), lyhyet ajot, prosessien lopetus PID:llä. Älä koske muihin hakemistoihin kuin `/home/claude/reittikartta-3l/` ja `/home/claude/tutka/` (vain `tutka.js` ja `TUTKA.md`). Työloki `TYOLOKI.md` (vaihe 3l), ei kysymyksiä tilaajalle, suomeksi ilman puolipisteitä, desimaalipilkku. Raportti `lahdekoodi/simulaattori/RAPORTTI_vaihe3l.md`, lyhyt ja numeroitu, ja lopuksi lyhyt yhteenveto tilaajalle: muuttuneet tiedostot (`sim.js` rivinumeroin), kriteerien 1–5 tulokset lukuina ja kuvien polut. Älä liitä koodia vastaukseen.

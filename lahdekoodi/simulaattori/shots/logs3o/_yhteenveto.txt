@@ -1,0 +1,27 @@
+== mobiili_chromium
+mobiili_chromium: OK    ei konsolivirheitä  chromium: 44 tarkistusta, 0 virhettä exit 0 
+== mobiili_webkit
+mobiili_webkit: OK    ei konsolivirheitä  webkit: 44 tarkistusta, 0 virhettä exit 0 
+== google3n_perus
+google3n_perus: VIRHE jokaisessa viidestä sarakkeesta on läpinäkyviä pikseleitä (taivas ja maa) ja peittäviä (katto, vesi, vene), ei puoliläpinäkyviä OK    veneen ja veden pikseleitä alaosassa 4576    {"ov":{"on":false,"fogKm":0,"cal":{"dHeadingDeg":0,"dPitchDeg":0,"tanScale":1},"fovMin":5,"fovMax":80,"l
+== google3d_chromium
+google3d_chromium: OK    purku renderöityy OK    ei konsolivirheitä ([]) YHTEENSÄ 44 tarkistusta, 0 virhettä exit 0 
+== veneet3l_smoke
+veneet3l_smoke: {"ms": 502.2000000011176, "ruutuja": 147, "ketjuja": 44, "keskenJaaneita": 0, "paikkoja": 1168, "veneita": 738, "luokittain": {"soutu": 117, "pieni": 243, "keski": 235, "purje": 143}, "hylatty": {"maa": 98, "matala": 5, "tormays": 63, "aallonmurtaja": 0, "kapeaMaa": 42}, "esto": {"aallonmurtajajanoj
+== veneet3l_tormays
+veneet3l_tormays: virheet [] OK    ei konsolivirheitä Kaikki läpi exit 0 
+== veneet3l_tutka
+veneet3l_tutka: Siilinkari valmis True SK veneitä haussa 629, ero pikseleinä: on/off 89, on/on 15, off/off 6 virheet [] exit 0 
+== veneet3l_pohja
+veneet3l_pohja: {"etaisyys": 250, "korkeus": 25, "fov": 45, "magenta_vedella": 14, "magenta_ilman_vetta": 345, "pikseleita": 548604} yhteensä: vedellä 149, ilman vettä 4373 virheet [] exit 0 
+== veneet3l_kuvat_deck
+veneet3l_kuvat_deck: lahikuva vene {'e': 328320.27120889013, 'n': 6823895.87678198, 's': 88.16368644382442, 'l': 6.27524394961074, 'id': 'L9c3vu.0o.4'} ML valmis True virheet [] exit 0 
+== tormays
+tormays: virheet [] OK    ei konsolivirheitä Kaikki läpi exit 0 
+== valkkyminen_chromium
+valkkyminen_chromium: {"laite": "chromium", "panzoom": false, "seuranta_lopussa": true, "mpk_lopussa": 1, "tyhjia": 0, "ruutuja": 20, "suurin_osuus": 0.5201937019291388, "pienin_varimaara": 827, "puuttuvia_ruutuja_piirrossa": 0, "piirtoja": 980, "valim": {"tiles": 36, "ready": 36, "max": 57, "B": 512}, "nopeus": [27.6, 3
+== google3n_loput
+google3n_loput: OK    oman kerroksen piirtoaika (502 ms) on enintään oman täyden näkymän (648 ms) 77 % OK    ei konsolivirheitä [] YHTEENSÄ 17 tarkistusta, 0 virhettä exit 0 
+== google3d_webkit
+google3d_webkit: OK    purku renderöityy OK    ei konsolivirheitä ([]) YHTEENSÄ 44 tarkistusta, 0 virhettä exit 0 
+ALL_DONE

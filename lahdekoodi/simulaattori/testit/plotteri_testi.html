@@ -1,0 +1,24 @@
+<!doctype html><html lang="fi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../css/sim.css">
+<style>html,body{margin:0;height:100%}#plot{position:absolute;inset:0}</style></head><body>
+<div id="plot" class="plot-view">
+<svg class="plot-own" viewBox="-12 -16 24 32" width="26" height="34"><path d="M0 -14L9 12L0 7L-9 12Z" fill="#1f4e9c" stroke="#fff" stroke-width="2"/></svg>
+<div class="plot-info"><button type="button" id="evBtn" class="hud pbtn ro-tgl" aria-pressed="true">EBL/VRM</button><div class="hud ro ro-ebl"></div><div class="hud ro ro-vrm"></div><button type="button" id="vecBtn" class="hud pbtn ro-vec"></button></div></div>
+<script src="../../lib/pmtiles.js"></script>
+<script src="../../js/symbols.js"></script>
+<script src="../js/paikka.js"></script><script src="../js/mvt.js"></script><script src="../js/aineisto.js"></script><script src="../js/merkit.js"></script><script src="../js/plotteri.js"></script>
+<script>
+const q=new URLSearchParams(location.search);
+Aineisto.setBase(q.get('aineisto')||'http://127.0.0.1:8140/');
+Paikka.setOrigin(327184,6823553);
+const ROUTE=[[327184,6823553],[327771,6823999],[327808,6824119],[328045,6824881],[328450,6824962],[329629,6825198],[330815,6825436],[331997,6825673],[332200,6825714],[333181,6825964],[333273,6825987],[333726,6825700],[334132,6826148],[334352,6826391],[334375,6826449],[334417,6826553],[334459,6826731],[334475,6826862],[334499,6826941],[334551,6826982],[334658,6827037],[334769,6827049]].map(p=>Paikka.enToWorld(p[0],p[1]));
+const pl=Plotteri.create(document.getElementById('plot'),{headUp:q.get('n')!=='1',raster:q.get('r')==='1'});
+window.pl=pl; if(q.get('r')==='1')pl.setRasterVisible(true);
+if(q.get('route')!=='0')pl.setRoute(ROUTE,ROUTE);
+pl.setRangeNm(parseFloat(q.get('mpk')||'1'));
+const x=parseFloat(q.get('x')||'0'), y=parseFloat(q.get('y')||'0'), h=parseFloat(q.get('h')||'53');
+pl.resize();
+Merkit.load(x,y,2500).then(()=>{pl.syncAids(x,y,true);window.__aidsReady=true;});
+pl.update(x,y,h,h,parseFloat(q.get('sog')||'0'));
+window.__ready=true;
+</script></body></html>
