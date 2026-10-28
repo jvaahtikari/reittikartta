@@ -534,7 +534,7 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
     <button type="button" class="big" id="mPort">Satamat (Google 3D): omat veneet</button>
     <button type="button" class="big" id="mHelp">Näppäimet</button>
     <button type="button" class="big" id="mClose">Sulje</button>
-    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus loitontaa ja miinus lähentää kuten SARNavissa (alue suuremmaksi tai pienemmäksi, 0,1 ... 12 mpk), samoin hiiren rulla ja kahden sormen nipistys. Kartan voi vetää keskityksen aikana hetkeksi sivuun, ja se palaa alukseen noin 2 sekunnissa. M: harppi (napautukset lisäävät pisteitä, Del poistaa edellisen, Esc lopettaa). Kun EBL/VRM on päällä, napautus tai klikkaus asettaa EBL:n ja VRM:n napautettuun pisteeseen, pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
+    <div id="helpText" class="hint" hidden>Nuolet vasen ja oikea: suunta 5° (Shift 10°), peruutuksessa perä vasen ja perä oikea. Ylös ja alas: nopeus 2 kn (alle nollan peruutus 2 ja 4 kn). L: loiva, peruutuksessa Suoraan. Välilyönti: crash stop. Q ja E: katse sivulle (pitkä painallus kääntää, lyhyt palauttaa eteen). Hiiren veto tai yhden sormen veto 3D-näkymässä kääntää katsetta, reunanapit kääntävät 60° ja napautus palauttaa eteen. B tai Kiikari-nappi: 7x50-kiikari (kuvakulma 7°, veto kääntää katsetta ja nostaa tai laskee sitä, napautus keskelle tai B poistaa kiikarin ja palauttaa entisen katseen). Tab: näkymän vaihto. Plotteri: veto siirtää karttaa (seuranta katkeaa) ja Keskitä-nappi tai C palauttaa aluksen paikalleen. Plus loitontaa ja miinus lähentää kuten SARNavissa (alue suuremmaksi tai pienemmäksi, 0,1 ... 12 mpk), samoin hiiren rulla ja kahden sormen nipistys. Kartan voi vetää keskityksen aikana hetkeksi sivuun, ja se palaa alukseen noin 2 sekunnissa. M: harppi (napautukset lisäävät pisteitä, Del poistaa edellisen, Esc lopettaa). Kun EBL/VRM eli suuntima on päällä, suuntimaviiva seuraa hiirtä, ja napautus tai klikkaus lukitsee EBL:n ja VRM:n napautettuun pisteeseen (Esc vapauttaa), pilkku ja piste säätävät EBL:ää (Shift 10°) ja hakasulut VRM:ää. V vaihtaa vektorin ajan. R: plotteri, tutka ja molemmat. P: tauko. 1, 2, 5 ja 0: aikakerroin 1×, 2×, 5×, 10×. Tutka: napautus tai veto asettaa EBL:n ja VRM:n, hiiren rulla ja hakasulut säätävät VRM:ää, O vaihtaa offsetin.</div>
   </div>
 </div>
 
@@ -11591,6 +11591,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     // ---- SARNav-tyylinen tietopalsta oikeassa reunassa (28.10.2026, vain ulkoasu): HDG, SOG ja COG isoina, sijainti, kursorin sijainti keltaisena ja kello.
     // Kartta-alue kapenee palstan verran (--pw). Pikkukuvassa ja purun kartassa palstaa ei ole.
     var panel = null, panelT = 0, clockTxt = '', curLL = null, curPx = null;
+    var evLock = false;   // suuntima lukittu (28.10.2026): klikkaus jättää EBL:n ja VRM:n paikalleen, Esc tai suuntimapainikkeen uusi kytkentä palauttaa hiiren seurannan
     function pad3(v) { var t = String(Math.round(v) % 360); while (t.length < 3) t = '0' + t; return t; }
     function ddm(v, lat) {
       var a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60; if (m >= 59.9995) { d++; m = 0; }
@@ -11602,7 +11603,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       // Yläosa: mittaristo (HDG valkoisena, SOG ja COG harmaina, POS). Alaosa: työkalun tietokenttä (suuntima, etäisyys ja kursori keltaisina) ja kello.
       panel.innerHTML = '<div class="sn-big sn-hdg"><b data-k="hdg">---</b><i>HDG</i></div><div class="sn-big sn-g"><b data-k="sog">-</b><i>SOG</i></div><div class="sn-big sn-g"><b data-k="cog">---</b><i>COG</i></div>' +
         '<div class="sn-pos"><span data-k="lat"></span><span data-k="lon"></span><i>POS</i></div>' +
-        '<div class="sn-tool" hidden><div class="sn-big sn-y"><b data-k="brg"></b><i>Suuntima</i></div><div class="sn-mid sn-y"><b data-k="dst"></b><i>Etäisyys</i></div>' +
+        '<div class="sn-tool" hidden><div class="sn-big sn-y"><b data-k="brg"></b><i data-k="brgLbl">Suuntima</i></div><div class="sn-mid sn-y"><b data-k="dst"></b><i>Etäisyys</i></div>' +
         '<div class="sn-mid sn-y sn-tot"><b data-k="tot"></b><i>Reitti</i></div>' +
         '<div class="sn-pos sn-y"><span data-k="clat"></span><span data-k="clon"></span><i>Kursori</i></div></div>' +
         '<div class="sn-clock"><b data-k="clock"></b><i>Kello</i></div>';
@@ -11630,13 +11631,14 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var tl = panel.querySelector('.sn-tool'), tb = null, td = 0, tp = null, hs = harp.on ? harpStats() : null;
       panel.classList.toggle('harp', !!hs);
       if (hs) { if (hs.brg != null) { tb = hs.brg; td = hs.d; } else { tb = 0; td = 0; } tp = hs.pos; setPanelText('tot', hs.tot.toFixed(2)); }
-      else if (curLL) {
+      else if (curLL && !(evOn && evLock)) {
         var mlat = 1852 * 60, dN = (curLL.lat - ll.lat) * mlat, dE = (curLL.lon - ll.lon) * mlat * Math.cos(ll.lat * RAD);
         tb = Math.atan2(dE, dN) / RAD; td = Math.hypot(dE, dN) / 1852; tp = curLL;
       } else if (evOn) {
         tb = ebl; td = vrm; tp = { lat: ll.lat + vrm * Math.cos(ebl * RAD) / 60, lon: ll.lon + vrm * Math.sin(ebl * RAD) / (60 * Math.cos(ll.lat * RAD)) };
       }
       tl.hidden = tb == null;
+      setPanelText('brgLbl', evOn && evLock && !hs ? 'Suuntima · lukittu' : 'Suuntima');
       if (tb != null) { setPanelText('brg', pad3(((tb % 360) + 360) % 360)); setPanelText('dst', td.toFixed(2)); setPanelText('clat', ddm(tp.lat, true)); setPanelText('clon', ddm(tp.lon, false)); }
       setPanelText('clock', clockTxt);
     }
@@ -11998,13 +12000,14 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     function drawEV() {
       if (!evOn || harp.on) return;
       var sx = view.sx, sy = view.sy, cx, cy;
-      if (curPx) { cx = curPx[0]; cy = curPx[1]; }
+      var live = curPx && !evLock;
+      if (live) { cx = curPx[0]; cy = curPx[1]; }
       else { var eb = (ebl - (headUp ? S.hdgTrue : 0)) * RAD, r = Math.min(vrm * NM / view.mpp, 20000); cx = sx + Math.sin(eb) * r; cy = sy - Math.cos(eb) * r; }
       var dl = Math.hypot(cx - sx, cy - sy) || 1, far = (w + h) * 1.5;
       ctx.lineCap = 'round';
       ctx.setLineDash([7, 6]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + (cx - sx) / dl * far, cy + (cy - sy) / dl * far); ctx.strokeStyle = 'rgba(200,40,120,.75)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx, cy); ctx.strokeStyle = '#d81e1e'; ctx.lineWidth = 2.5; ctx.stroke();
-      var rv = curPx ? Math.hypot(cx - sx, cy - sy) : vrm * NM / view.mpp;   // VRM vihreänä renkaana: hiirellä kursorin etäisyydellä (kuten tietopalstan Etäisyys), muuten asetetulla etäisyydellä
+      var rv = live ? Math.hypot(cx - sx, cy - sy) : vrm * NM / view.mpp;   // VRM vihreänä renkaana: hiirellä kursorin etäisyydellä (kuten tietopalstan Etäisyys), muuten asetetulla etäisyydellä
       if (rv > 3 && rv < 20000) { ctx.beginPath(); ctx.arc(sx, sy, rv, 0, 2 * Math.PI); ctx.strokeStyle = '#1e7a32'; ctx.lineWidth = 1.5; ctx.stroke(); }
     }
     // ---- harppi (SARNav): punainen monipisteviiva, pisteissä renkaat, viimeisestä pisteestä kursoriin katkoviiva ja lukema "309°(T) 0.56 mpk / Reitti: 1.70 mpk" ----
@@ -12170,7 +12173,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     function setVRM(nm, silent) { vrm = Math.max(0.01, Math.min(6, Number(nm))); if (!silent) logLater('vrm'); updateReadouts(); if (S.has) draw(); }
     function stepEBL(d) { setEBL(ebl + d); }
     function scaleVRM(f) { setVRM(vrm * f); }
-    function setEV(on, silent) { on = !!on; if (on === evOn) return; evOn = on; updateReadouts(); if (S.has) draw(); if (!silent && opts.onToggle) opts.onToggle('eblvrm', on); }
+    function setEV(on, silent) { on = !!on; if (on === evOn) return; evOn = on; evLock = false; updateReadouts(); if (S.has) draw(); if (!silent && opts.onToggle) opts.onToggle('eblvrm', on); }
     function setVecIdx(i) { vecIdx = ((i % VEC_SEC.length) + VEC_SEC.length) % VEC_SEC.length; updateReadouts(); if (S.has) draw(); }
     function cycleVec() { setVecIdx(vecIdx + 1); return VEC_SEC[vecIdx]; }
 
@@ -12225,7 +12228,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
         if (ptrs.size === 0) {
           if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && harp.on) { var hl = local(ev); harp.pts.push(harpPoint(hl[0], hl[1])); updateReadouts(); if (S.has) draw(); }
-          else if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && evOn) { setPoint(ev); endPoint(); }
+          else if (gest && gest.mode === 'tap' && ev.type === 'pointerup' && evOn) { evLock = true; setPoint(ev); endPoint(); }
           // kurkistus: keskityksen aikana vedetty kartta palaa alukseen noin 2 s kuluttua
           if (gest && gest.mode === 'pan' && gest.wasFollow) { clearTimeout(peekTimer); peekTimer = setTimeout(function () { if (!ptrs.size) recenter(); }, 2000); }
           gest = null;
@@ -12267,7 +12270,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       setRasterVisible: setRasterVisible, isRaster: function () { return rasterMode; }, redraw: redraw, rebase: rebase, ready: ready,
       setHeadUp: setHeadUp, isHeadUp: function () { return headUp; },
       heading: function () { return S.hdgTrue; },
-      setClock: setClock, mirrorState: mirrorState, applyMirror: applyMirror, setHarp: setHarp, harpUndo: harpUndo, isHarp: function () { return harp.on; }, setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
+      setClock: setClock, isEVLocked: function () { return evOn && evLock; }, unlockEV: function () { evLock = false; updateReadouts(); if (S.has) draw(); }, mirrorState: mirrorState, applyMirror: applyMirror, setHarp: setHarp, harpUndo: harpUndo, isHarp: function () { return harp.on; }, setEBL: setEBL, setVRM: setVRM, stepEBL: stepEBL, scaleVRM: scaleVRM, setEV: setEV, getEV: function () { return { on: evOn, ebl: ebl, vrm: vrm }; },
       setVectorIdx: setVecIdx, getVecIdx: function () { return vecIdx; }, cycleVector: cycleVec, vectorSec: function () { return VEC_SEC[vecIdx]; },
       toScreen: function (x, y) { var p = worldToPlot(x, y); return toScreen(p[0], p[1]); },
       canvas: canvas, destroy: destroy, view: function () { return { z: view.z, mpp: view.mpp, sx: view.sx, sy: view.sy, ax: view.ax, ay: view.ay, w: w, h: h, follow: follow, rangeNm: rangeNm }; },
@@ -14002,6 +14005,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       else if (k === '-' || k === '_') G.pl.zoomBy(G.pl.limits.step);
       else if ((k === 'm' || k === 'M') && G.pl.setHarp) G.pl.setHarp(!G.pl.isHarp());   // harppi (SARNav: M)
       else if (k === 'Escape' && G.pl.isHarp && G.pl.isHarp()) G.pl.setHarp(false);
+      else if (k === 'Escape' && G.pl.isEVLocked && G.pl.isEVLocked()) G.pl.unlockEV();   // suuntima seuraa taas hiirtä
       else if ((k === 'Delete' || k === 'Backspace') && G.pl.isHarp && G.pl.isHarp()) G.pl.harpUndo();
       else if (k === 'c' || k === 'C') G.pl.recenter();
       else if (k === 'v' || k === 'V') { G.pl.cycleVector(); G.vecIdx = G.pl.getVecIdx(); savePrefs(); }
