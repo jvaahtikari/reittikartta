@@ -86,19 +86,10 @@
     <div class="field" role="group" aria-labelledby="lblScene">
       <div class="lbl" id="lblScene">Maisema</div>
       <div class="seg" id="segScene">
-        <button type="button" data-v="google" class="on">Google 3D<small>verkossa, avain tarvitaan</small></button>
+        <button type="button" data-v="google" class="on">Google 3D<small>verkossa</small></button>
         <button type="button" data-v="own">Oma<small>toimii aina</small></button>
       </div>
       <div class="hint" id="sceneHint"></div>
-    </div>
-
-    <div class="field" role="group" aria-labelledby="lblGk">
-      <div class="lbl" id="lblGk">Google Maps -avain (testi)</div>
-      <input type="password" id="googleKey" class="keyin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Valinnainen, Google 3D -testinäkymää varten" aria-label="Google Maps -avain">
-      <div class="hint" id="googleKeyHint"></div>
-      <details class="src"><summary>Näin saat avaimen</summary>
-        <p id="gkHelp"></p>
-      </details>
     </div>
 
     <button type="button" id="startBtn" class="big primary">Aloita</button>
@@ -158,7 +149,7 @@
       <button type="button" class="hud gz gz-r" id="gazeR" aria-label="Katse oikealle 60 astetta">60° &#9654;</button>
       <button type="button" class="hud hud-gaze" id="gazeBtn" hidden>Katse suoraan</button>
       <button type="button" class="hud bino" id="binoBtn" aria-pressed="false" aria-label="Kiikari (näppäin B)">Kiikari</button>
-      <div class="hud g3d-badge" id="g3dBadge" hidden><span id="g3dStatus">Google 3D (testi)</span><button type="button" id="g3dBack">Oma näkymä</button></div>
+      <div class="hud g3d-badge" id="g3dBadge" hidden><span id="g3dStatus">Google 3D (testi)</span><button type="button" id="g3dBack">Oma näkymä</button><button type="button" id="g3dGo" hidden>Google 3D</button></div>
     </div>
     <!-- tutka -->
     <div id="paneR" class="pane" hidden>
@@ -232,10 +223,8 @@
 <!-- Google 3D -ohje (testi) -->
 <div id="g3dInfo" class="sheet" hidden>
   <div class="sheet-box" role="dialog" aria-label="Google 3D (testi)">
-    <b id="g3dInfoTitle">Google 3D (testi) tarvitsee avaimen</b>
+    <b id="g3dInfoTitle">Google 3D</b>
     <p class="hint" id="g3dInfoText"></p>
-    <input type="password" id="g3dKeyIn" class="keyin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Google Maps -avain" aria-label="Google Maps -avain">
-    <button type="button" class="big primary" id="g3dKeyGo">Tallenna ja avaa</button>
     <button type="button" class="big" id="g3dInfoClose">Sulje</button>
   </div>
 </div>

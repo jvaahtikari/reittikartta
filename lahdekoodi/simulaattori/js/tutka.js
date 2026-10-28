@@ -1341,6 +1341,8 @@
       // Napit ovat kulmissa lukemien vieressä (≡ oikeassa yläkulmassa, RANGE + ja − vasemmassa ja EBL/VRM ja OFFSET oikeassa alakulmassa), joten lukemat jäävät niiden sisäpuolelle.
       ctx.font = '600 ' + fs + 'px ui-monospace,Menlo,Consolas,monospace'; ctx.textBaseline = 'alphabetic';
       geom.luk = [];
+      // pikkukuva (puhelimen pieni vaihtoikkuna, 28.10.2026): vain alue, koska kulmalukemat menivät päällekkäin. Pikkukuvaa ei säädetä, napautus vaihtaa näkymän.
+      if (geom.w < 260 || geom.h < 180) { tekstiHalolla(nmTxt(mpk).replace(',', '.') + ' NM', 4, geom.h - 5, 'left'); piirtoTilasto(t0); return; }
       var sh = siirrot(), lh = fs + 3, lx = 6, rx = geom.w - UI_BW - 6, ty = fs + 5, ryy = sh.tr + fs + 3, by = geom.by, ebx = sh.eblX;
       var pt = function (x) { return nmTxt(x).replace(',', '.'); };
       tekstiHalolla('RANGE ' + pt(mpk) + ' NM', lx, ty, 'left');
@@ -1358,6 +1360,9 @@
         tekstiHalolla('VRM ' + pt(C.vrm) + ' NM', rx, by, 'right');
       }
       if (S.onTila && (jono.length || rakennetaan || aidsPending)) tekstiHalolla('LOADING…', geom.cx, geom.cy + r * 0.45, 'center');
+      piirtoTilasto(t0);
+    }
+    function piirtoTilasto(t0) {
       var t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       tilasto.piirtoMs = t1 - t0; tilasto.piirrot++;
       if (t1 - t0 > tilasto.piirtoMax) tilasto.piirtoMax = t1 - t0;

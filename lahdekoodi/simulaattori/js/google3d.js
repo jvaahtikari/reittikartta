@@ -1,9 +1,8 @@
 /* Simulaattori – Google 3D -näkymä (testi, vaihe 3m, kerrostus vaihe 3n).
  *
  * Valinnainen ulkonäkymä, joka korvaa oman three.js-näkymän Googlen Maps JavaScript API:n 3D-kartalla (Map3DElement, fotorealistiset 3D-tiilet).
- * Oma näkymä piilotetaan eikä tuhota, joten paluu on heti. Kirjasto ladataan vasta, kun käyttäjä on antanut oman API-avaimen,
- * eikä sitä upoteta tiedostoon. Avain tallennetaan vain selaimen localStorage-muistiin (sim.googleKey), eikä sitä koskaan kirjoiteta
- * repoon, lokiin tai palvelimelle.
+ * Oma näkymä piilotetaan eikä tuhota, joten paluu on heti. Avain luetaan vain Vercelin ympäristömuuttujasta (GOOGLE_API, reitti /api/google),
+ * eikä sitä upoteta tiedostoon tai kysytä käyttäjältä (28.10.2026). Paikallisella testipalvelimella testit voivat antaa avaimen selaimen muistissa (sim.googleKey).
  *
  * Rakenne on tehty itse. Vertailukohta oli avoimen lähdekoodin maritime-ship-simulator (MPL-2.0, ui/web/forward_view/google_maps_3d.js), josta otettiin
  * vain periaatteet: kirjaston lataus script-elementillä (libraries=maps3d), Map3DElementin kamera (center, range, heading, tilt, fov) ja virheiden käsittely.
@@ -103,8 +102,7 @@
     if (serverKeyAsked) { if (cb) cb(serverKey); return; }
     serverKeyAsked = true;
     // Paikallisella testipalvelimella (localhost, 127.0.0.1, file) ei ole reittiä, joten ei turhaa 404-kutsua
-    var hn = String(location.hostname || '');
-    if (location.protocol === 'file:' || hn === 'localhost' || hn === '127.0.0.1' || hn === '') { if (cb) cb(''); return; }
+    if (localHost()) { if (cb) cb(''); return; }
     try {
       fetch('/api/google', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
         serverKey = (j && j.key) ? String(j.key).trim() : '';
@@ -112,7 +110,14 @@
       }).catch(function () { if (cb) cb(''); });
     } catch (e) { if (cb) cb(''); }
   }
-  function getKey() { try { return String(localStorage.getItem(SETTINGS.keyStore) || '').trim() || serverKey; } catch (e) { return serverKey; } }
+  // Avain tulee palvelimelta. Selaimen muistin avain kelpaa vain paikallisella testipalvelimella, muualla vanha käsin syötetty avain poistetaan,
+  // jottei se ohita Vercelin avainta (28.10.2026: vanha avain jätti Google 3D:n tilaan "ladataan kuvaa").
+  function localHost() { try { var hn = String(location.hostname || ''); return location.protocol === 'file:' || hn === 'localhost' || hn === '127.0.0.1' || hn === ''; } catch (e) { return true; } }
+  function getKey() {
+    if (serverKey) return serverKey;
+    if (typeof location !== 'undefined' && !localHost()) { try { localStorage.removeItem(SETTINGS.keyStore); } catch (e) {} return ''; }
+    try { return String(localStorage.getItem(SETTINGS.keyStore) || '').trim(); } catch (e) { return ''; }
+  }
   function hasServerKey() { return !!serverKey; }
   function setKey(k) {
     k = String(k || '').trim();
@@ -235,12 +240,12 @@
     return x;
   }
 
-  // Ohjeteksti avaimen luontiin (kolme riviä), käytetään aloitusnäytössä ja ohjeruudussa
+  // Ohjeteksti, kun avainta ei saatu palvelimelta
   var HELP_LINES = [
-    '1. Google Cloud -konsolissa (console.cloud.google.com) luo projekti, ota laskutus käyttöön ja ota käyttöön Maps JavaScript API.',
-    '2. Luo API-avain (APIs & Services, Credentials) ja rajaa se HTTP-viittaajaan *.vercel.app/*.',
-    '3. Liitä avain Google Maps -avain -kenttään. Avain tallentuu vain tämän selaimen muistiin.'
+    'Avain luetaan Vercelin ympäristömuuttujasta GOOGLE_API. Tarkista, että muuttuja on asetettu ja sivu on avattu Vercelin osoitteesta (ei tiedostona).',
+    'Google Cloudissa avaimella pitää olla Maps JavaScript API käytössä, laskutus päällä ja viittaajarajaus, joka sallii tämän osoitteen.'
   ];
+  var authFailCb = null;   // aktiivisen ohjaimen virhekäsittelijä: Google voi hylätä avaimen vasta kirjaston latauksen jälkeen
 
   // ---------- kirjaston lataus ----------
   var libPromise = null;
@@ -252,6 +257,7 @@
       root[cb] = function () { try { delete root[cb]; } catch (e) { root[cb] = undefined; } resolve(); };
       root.gm_authFailure = function () {
         libPromise = null;
+        if (authFailCb) authFailCb();
         reject(new Error('Google hylkäsi avaimen (gm_authFailure). Tarkista, että Maps JavaScript API on käytössä, laskutus on päällä ja avaimen viittaajarajaus sallii tämän osoitteen.'));
       };
       s.async = true;
@@ -272,6 +278,7 @@
 
     function status(t) { if (opts.onStatus) opts.onStatus(t); }
     function fail(msg) { var wasActive = active; active = false; destroy(); status(''); if (wasActive && opts.onFail) opts.onFail(msg); }
+    authFailCb = function () { if (map || building) fail('Google hylkäsi avaimen (gm_authFailure). Tarkista Vercelin GOOGLE_API-avain, Maps JavaScript API, laskutus ja viittaajarajaus.'); };
 
     function enable() {
       var key = getKey();
@@ -280,12 +287,12 @@
       active = true; stats.shows++;
       if (map && box) {            // kartta on jo luotu: näytetään vain uudelleen (ei uutta karttalatausta)
         box.style.display = '';
-        status(ready ? 'Google 3D (testi)' : 'Google 3D: ladataan kuvaa');
+        status(ready ? 'Google 3D (testi)' : 'Ladataan kuvaa…');
         return { ok: true, reused: true };
       }
-      if (building) { status('Google 3D: ladataan'); return { ok: true }; }
+      if (building) { if (box) box.style.display = ''; status('Ladataan…'); return { ok: true }; }   // 28.10.2026: paluu kesken latauksen jätti kartan piiloon pysyvästi
       building = true; ready = false; var my = ++seq;
-      status('Google 3D: ladataan');
+      status('Ladataan…');
       box = document.createElement('div'); box.className = 'g3d-box'; box.setAttribute('aria-label', 'Google 3D -näkymä (testi)');
       host.insertBefore(box, host.firstChild);
       loadLibrary(key).then(function () { return root.google.maps.importLibrary('maps3d'); }).then(function (L) {
@@ -300,8 +307,8 @@
         map.addEventListener('gmp-steadychange', function (ev) { if (my === seq && ev && ev.isSteady) { ready = true; clearTimeout(steadyTimer); if (active) status('Google 3D (testi)'); } });
         box.appendChild(map);
         if (!active) box.style.display = 'none';
-        else status('Google 3D: ladataan kuvaa');
-        steadyTimer = setTimeout(function () { if (my === seq && active && !ready) status('Google 3D: ei vielä valmis 25 s kuluttua. Tarkista avain ja laskutus tai palaa omaan näkymään.'); }, SETTINGS.steadyTimeoutMs);
+        else status('Ladataan kuvaa…');
+        steadyTimer = setTimeout(function () { if (my === seq && active && !ready) status('Google ei vastaa (25 s)'); }, SETTINGS.steadyTimeoutMs);
       }).catch(function (e) {
         building = false;
         if (my === seq) fail((e && e.message) ? e.message : 'Google 3D -näkymän lataus epäonnistui.');

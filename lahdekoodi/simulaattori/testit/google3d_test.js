@@ -101,7 +101,7 @@ for (const [e, n, brg] of [[327895, 6824881, 100], [328010, 6823830, 112], [3273
 {
   ehto('getKey ilman muistia palauttaa tyhjän', G.getKey() === '');
   ehto('setKey ilman muistia ei kaadu', G.setKey('  ') === '');
-  ehto('ohjeessa kolme riviä', G.HELP_LINES.length === 3);
+  ehto('ohje kertoo, että avain tulee Vercelistä', G.HELP_LINES.length === 2 && /GOOGLE_API/.test(G.HELP_LINES[0]));
 }
 console.log(fails ? ('\n' + fails + ' testiä epäonnistui') : '\nKaikki Google 3D -laskennan testit läpi');
 process.exit(fails ? 1 : 0);

@@ -38,7 +38,7 @@ input[type=time]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 @keyframes sp{to{transform:rotate(360deg)}}
 .bar{height:6px;border-radius:3px;background:#243f55;margin-top:12px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:#7cc4e8;transition:width .3s}
 
-#game{position:fixed;inset:0;display:flex;flex-direction:column;background:#0b141c}
+#game{position:fixed;inset:0;display:flex;flex-direction:column;background:#0b141c;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}   /* iPhonen vaaka-asento: lovi ei peitä tutkan ja komentojen nappeja (28.10.2026) */
 #bar{flex:none;height:48px;display:flex;align-items:center;gap:4px;padding:0 6px;padding-top:env(safe-area-inset-top);background:var(--top-bg);height:calc(48px + env(safe-area-inset-top))}
 .ib{flex:none;min-width:44px;height:44px;border:0;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
 .ib:active{background:var(--panel2)}
@@ -190,9 +190,10 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .v3.g3d-over .view3d-veil{z-index:2}
 .g3d-box > *{pointer-events:none}
 .keyin{margin-top:8px;width:100%;box-sizing:border-box;min-height:48px;font-size:16px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:#fff}
-.g3d-badge{right:8px;top:36px;display:flex;align-items:center;gap:8px;padding:4px 4px 4px 10px;font-size:13px;max-width:70%}
+.g3d-badge{right:6px;bottom:6px;display:flex;align-items:center;gap:6px;padding:2px;font-size:11px;line-height:1.2;max-width:calc(100% - 140px);white-space:nowrap}   /* 28.10.2026: oikea alakulma, ettei puhelimen pikkukuva peitä nappia */
+.g3d-badge span{padding-left:6px;min-width:0;overflow:hidden;text-overflow:ellipsis}.g3d-badge span[hidden],.g3d-badge button[hidden]{display:none}
 .g3d-badge[hidden]{display:none}
-.g3d-badge button{min-height:44px;padding:4px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(14,28,40,.9);color:#fff;font-weight:600;font-size:13px}
+.g3d-badge button{flex:none;min-height:40px;padding:2px 10px;border:1px solid var(--line);border-radius:9px;background:rgba(14,28,40,.9);color:#fff;font-weight:600;font-size:12px;white-space:nowrap}
 .pane.small .g3d-badge{display:none}
 #g3dInfo .sheet-box{display:flex;flex-direction:column;gap:8px}
 #g3dInfo .hint{white-space:pre-line}

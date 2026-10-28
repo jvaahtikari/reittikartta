@@ -157,23 +157,15 @@
       el.textContent = (after ? 'Valittu aika on auringonlaskun jälkeen. ' : 'Valittu aika on ennen auringonnousua. ') + 'Yönäkymä tulee myöhemmässä vaiheessa, ja näkymä on tumma.';
     } else el.textContent = 'Päivänäkymä. Auringon korkeus ' + Math.round(sun.elevDeg) + '°.';
   }
-  // Google Maps -avain (testi, vaihe 3m): tallennetaan vain selaimen muistiin (sim.googleKey), ei koskaan lokiin, osoitteeseen tai palvelimelle
-  function updateKeyHint() {
-    var has = !!root.Google3D.getKey(), srv = root.Google3D.hasServerKey();
-    $('googleKeyHint').textContent = srv && !String($('googleKey').value || '').trim() ? 'Avain tulee palvelimelta (Vercel GOOGLE_API). Google 3D (testi) valitaan ajon valikosta kohdasta Ulkonäkymä.' : has ? 'Avain on tallennettu tähän selaimeen. Google 3D (testi) valitaan ajon valikosta kohdasta Ulkonäkymä.' : 'Ilman avainta Google 3D -testinäkymä ei aukea. Oma näkymä toimii aina ilman avainta.';
-  }
+  // Google Maps -avain: luetaan vain Vercelin ympäristömuuttujasta (GOOGLE_API, reitti /api/google), aloitusnäytössä ei ole avainkenttää (28.10.2026)
   function updateSceneHint() {
     var el = $('sceneHint'); if (!el) return;
     var has = !!(root.Google3D && root.Google3D.getKey());
-    el.textContent = G.scene === 'google' ? (has ? 'Googlen fotorealistinen maisema, oma vesi, vene ja merkit sen päällä. Vaihto ajon valikosta kohdasta Ulkonäkymä.' : 'Avainta ei löytynyt, joten ajo alkaa omalla maisemalla.') : 'Oma maisema avoimesta aineistosta. Toimii myös ilman verkkoa.';
+    el.textContent = G.scene === 'google' ? (has ? 'Googlen fotorealistinen maisema, oma vesi, vene ja merkit sen päällä. Ajon aikana vaihto oikean yläkulman napista (Oma näkymä / Google 3D).' : 'Google 3D -avainta ei saatu palvelimelta, joten ajo alkaa omalla maisemalla.') : 'Oma maisema avoimesta aineistosta. Toimii myös ilman verkkoa.';
   }
   function initGoogleKey() {
-    var inp = $('googleKey'); try { inp.value = localStorage.getItem('sim.googleKey') || ''; } catch (e) {}
-    root.Google3D.fetchServerKey(function () { updateKeyHint(); updateSceneHint(); });
-    $('gkHelp').innerHTML = root.Google3D.HELP_LINES.map(esc).join('<br>');
-    inp.addEventListener('change', function () { root.Google3D.setKey(inp.value); updateKeyHint(); });
-    inp.addEventListener('input', function () { root.Google3D.setKey(inp.value); updateKeyHint(); updateSceneHint(); });
-    updateKeyHint(); updateSceneHint();
+    root.Google3D.fetchServerKey(function () { updateSceneHint(); });
+    updateSceneHint();
   }
   function initStart() {
     segInit('segEx', function (v) { G.ex = v; updateBudgetHint(); });
@@ -433,6 +425,7 @@
     updateInstrButtons();
     updateRadarReserve();
     $('gazeBtn').hidden = !(wide || !instrMain) || Math.abs(G.view ? G.view.getGaze() : 0) < 1;
+    syncG3Small();
     if (G.view && G.view.isBino() && !(wide || !instrMain)) setBino(false);   // kiikari vain, kun 3D on päänäkymä
   }
   // pieni 3D-ikkuna peittää osan tutkan kuvasta: tutka siirtää peittyvät lukemat ikkunan viereen
@@ -743,11 +736,10 @@
       G.satama = G.satama === 'google' ? 'oma' : 'google'; applyBoatMode(); updateMenuLabels(); savePrefs();
       if (G.S && G.mode === 'run') logCustom('googlesatama', G.satama === 'google' ? 1 : 0);
     });
-    $('g3dBack').addEventListener('click', function () { setExtView(false); });
+    $('g3dBack').addEventListener('click', function () { setExtView(false); G.scene = 'own'; try { localStorage.setItem('sim.maisema', 'own'); } catch (e) {} });
     $('g3dInfoClose').addEventListener('click', function () { $('g3dInfo').hidden = true; });
-    $('g3dKeyGo').addEventListener('click', function () {
-      var k = root.Google3D.setKey($('g3dKeyIn').value); updateKeyHint();
-      if (!k) return; $('g3dInfo').hidden = true; setExtView(true);
+    $('g3dGo').addEventListener('click', function () {
+      if (setExtView(true)) { G.scene = 'google'; try { localStorage.setItem('sim.maisema', 'google'); } catch (e) {} }
     });
     // Koko näyttö (27.10.2026): Fullscreen API, kun selain tukee sitä (tietokone, Android, iPad). iPhonessa ohje kotivalikkoon lisäämisestä.
     (function () {
@@ -935,38 +927,61 @@
     var S = G.S, v = G.view, ll = P.worldToLonLat(S.x, S.y), st = v.settings;
     return { lat: ll.lat, lon: ll.lon, hdgTrue: L.trueHdg(S), lookDeg: v.getGazeNow(), vfovDeg: v.vfovRequested(), seated: v.isSeated(), eyeFwdM: st.eyeX - st.pivotX, eyeStbdM: st.eyeY, eyeAboveWaterM: v.eyeAboveWaterM() };
   }
+  // Vaihtonappi 3D-näkymän oikeassa yläkulmassa (28.10.2026): Google-tilassa tila ja "Oma näkymä", omassa tilassa "Google 3D", jotta paluu Googleen on yhtä helppo
   function g3Status(t) {
-    var b = $('g3dBadge'), on = G.ext === 'google' && !!t; b.hidden = !on; if (on) setText($('g3dStatus'), t);
+    if (G.ext === 'google') { if (t) G.g3Text = t === 'Google 3D (testi)' ? '' : t; } else G.g3Text = '';   // valmiina vain pieni vaihtonappi, teksti vain latauksen ja virheen aikana
+    updateG3Badge();
   }
-  function g3Info(title, text, withKey) {
+  function updateG3Badge() {
+    var g = G.ext === 'google', on = G.mode === 'run' && (g || !!(root.Google3D && root.Google3D.getKey()));
+    $('g3dBadge').hidden = !on; if (!on) return;
+    var st = $('g3dStatus'); st.hidden = !g || !G.g3Text; if (!st.hidden) setText(st, G.g3Text);
+    $('g3dBack').hidden = !g; $('g3dGo').hidden = g;
+  }
+  function g3Info(title, text) {
     $('g3dInfoTitle').textContent = title; $('g3dInfoText').textContent = text;
-    $('g3dKeyIn').hidden = !withKey; $('g3dKeyGo').hidden = !withKey; $('g3dKeyIn').value = '';
     $('g3dInfo').hidden = false;
   }
   // Epäonnistuminen: palataan omaan näkymään ja kerrotaan syy
   function g3Fail(msg) {
     setExtView(false);
-    g3Info('Google 3D ei auennut', msg + '\n\nOma näkymä on käytössä.', true);
+    g3Info('Google 3D ei auennut', msg + '\n\nOma näkymä on käytössä. Voit yrittää uudelleen oikean yläkulman Google 3D -napista.');
     if (G.S && G.mode === 'run') logCustom('google3d', 0);
   }
-  function setExtView(google) {
-    var canvas = G.view ? G.view.canvas : null;
-    if (google) {
-      if (G.mode !== 'run') return false;
-      G.ext = 'google';
-      var r = G.g3.enable();
-      if (!r.ok) { G.ext = 'own'; g3Info('Google 3D (testi) tarvitsee avaimen', 'Google 3D -näkymä näyttää Googlen fotorealistisen 3D-kartan oman näkymän tilalla. Se tarvitsee oman Google Maps -avaimen.\n\n' + root.Google3D.HELP_LINES.join('\n'), true); return false; }
+  // Googlen kerros näkyviin tai pois (vain kuvan kerrostus, G.ext ei muutu)
+  function g3Layer(on) {
+    var canvas = G.view ? G.view.canvas : null; if (!canvas) return;
+    if (on) {
       // vaihe 3n: oma kangas pysyy näkyvissä Googlen kartan päällä (läpinäkyvä tausta), ja Googlen lisenssimerkinnän kohta alareunassa jää vapaaksi
       G.view.setCalib(root.Google3D.getCalib()); G.view.setFogKm(G.fogKm); G.view.setOverlay(true); applyBoatMode();
       $('v3').classList.add('g3d-over'); var gS = root.Google3D.SETTINGS; canvas.style.clipPath = 'polygon(0 0, 100% 0, 100% 100%, ' + gS.attribClipW + 'px 100%, ' + gS.attribClipW + 'px calc(100% - ' + gS.attribClipPx + 'px), 0 calc(100% - ' + gS.attribClipPx + 'px))'; $('pane3d').classList.add('g3d');
+    } else {
+      canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = '';
+      G.view.setOverlay(false); applyBoatMode();
+      $('v3').classList.remove('g3d-over'); $('pane3d').classList.remove('g3d');
+    }
+  }
+  // Puhelimen pikkukuvassa (3D pienenä ikkunana) näytetään oma näkymä, jottei Googlen lähdemerkintä peitä pientä kuvaa (28.10.2026).
+  // Kartta pysyy elossa piilotettuna, joten paluu isoon kuvaan ei tee uutta karttalatausta.
+  function g3Small() { return !G.layout.wide && $('pane3d').classList.contains('small'); }
+  function syncG3Small() {
+    if (G.ext !== 'google' || !G.g3 || !G.view) return;
+    var sm = g3Small();
+    if (sm && G.g3.isActive()) { G.g3.disable(); g3Layer(false); }
+    else if (!sm && !G.g3.isActive()) { if (G.g3.enable().ok) g3Layer(true); else setExtView(false); }
+  }
+  function setExtView(google) {
+    if (google) {
+      if (G.mode !== 'run') return false;
+      if (!root.Google3D.getKey() && !G.g3.hasMap()) { updateG3Badge(); g3Info('Google 3D -avainta ei saatu', 'Google 3D -näkymä tarvitsee palvelimen Google Maps -avaimen, eikä sitä nyt saatu.\n\n' + root.Google3D.HELP_LINES.join('\n')); return false; }
+      G.ext = 'google';
+      if (!g3Small() && G.g3.enable().ok) g3Layer(true);
       if (G.S) logCustom('google3d', 1);
     } else {
       if (G.g3) G.g3.disable();
-      G.ext = 'own'; if (canvas) { canvas.style.visibility = ''; canvas.style.clipPath = ''; G.view.veil.style.visibility = ''; }
-      if (G.view) { G.view.setOverlay(false); applyBoatMode(); }
-      $('v3').classList.remove('g3d-over'); $('pane3d').classList.remove('g3d');
-      $('g3dBadge').hidden = true;
+      G.ext = 'own'; if (G.view) g3Layer(false);
     }
+    updateG3Badge();
     updateMenuLabels();
     return true;
   }
@@ -1078,7 +1093,7 @@
         if (G.route) toast('Anna nopeus ja suunta. Aikabudjetti ' + H.mmss(G.route.total / (G.budgetKn * KN)), 2600);
         if (G.rec) G.rec.sample(S, inFairwayNow(S), root.Pohja.near(S.x, S.y));
         applyPanes(); sizeViews();
-        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true);
+        if (G.scene === 'google' && root.Google3D && root.Google3D.getKey() && qs.get('maisema') !== 'oma') setExtView(true); else updateG3Badge();
         loadAids(v.aids.settings.loadRadius);   // loistojen ja linjataulujen näkyvyysrajat ovat kilometrejä, joten kauempana olevat laitteet luetaan taustalla
       }
       return;
