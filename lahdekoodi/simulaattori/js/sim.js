@@ -42,11 +42,12 @@
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
       if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
       if (o.googleSumu != null && root.Google3D.SETTINGS.fogLevelsKm.indexOf(Number(o.googleSumu)) >= 0) G.fogKm = Number(o.googleSumu);
-      if (o.googleSatama === 'oma' || o.googleSatama === 'google') G.satama = o.googleSatama;
+      // Satamatila (28.10.2026 oletus 'google'): tallennettu arvo luetaan vain, jos käyttäjä on valinnut sen itse valikosta. Aiemmin arvo tallentui aina, joten vanha 'oma' ohittaisi uuden oletuksen.
+      if (o.googleSatamaValittu && (o.googleSatama === 'oma' || o.googleSatama === 'google')) { G.satama = o.googleSatama; G.satamaValittu = true; }
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm, googleSatama: G.satama })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, googleSumu: G.fogKm, googleSatama: G.satama, googleSatamaValittu: !!G.satamaValittu })); } catch (e) {}
   }
   G.satama = root.Google3D.SETTINGS.googleSatama === 'google' ? 'google' : 'oma';
   loadPrefs();
@@ -766,7 +767,7 @@
       if (G.S && G.mode === 'run') logCustom('nakyvyys', G.fogKm);
     });
     $('mPort').addEventListener('click', function () {
-      G.satama = G.satama === 'google' ? 'oma' : 'google'; applyBoatMode(); updateMenuLabels(); savePrefs();
+      G.satama = G.satama === 'google' ? 'oma' : 'google'; G.satamaValittu = true; applyBoatMode(); updateMenuLabels(); savePrefs();
       if (G.S && G.mode === 'run') logCustom('googlesatama', G.satama === 'google' ? 1 : 0);
     });
     $('g3dBack').addEventListener('click', function () { setExtView(false); G.scene = 'own'; try { localStorage.setItem('sim.maisema', 'own'); } catch (e) {} });
