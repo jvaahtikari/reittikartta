@@ -202,6 +202,7 @@
       fragmentShader: GLSL_SKY + [
         'uniform vec3 uDeep; uniform vec3 uFogColor; uniform float uFogDensity; uniform float uDay;',
         'uniform sampler2D uWaveTex; uniform vec2 uWindDir; uniform float uWaveAmp;',
+        'uniform vec3 uSpotPos; uniform vec3 uSpotDir; uniform float uSpotCos; uniform float uSpotI;',
         'varying vec3 vW; varying float vDepth;',
         'void main(){',
         '  vec2 p = vW.xz; float t = uTime; float dist = length(cameraPosition - vW);',
@@ -239,6 +240,15 @@
         '    glit = n650 * 2.2 + n90 * 0.18;',
         '  }',
         '  c += uSunColor * glit * uSunGlow * smoothstep(0.0, 0.08, uSunDir.y) * (0.35 + 0.65 * smoothstep(0.0, 0.5, fr * 4.0)) * (1.0 - smoothstep(2000.0, 6000.0, dist));',
+        '  if (uSpotI > 0.0) {',   // valonheittimen valaisema vesi: keilan sisällä lämmin valo, joka himmenee etäisyyden mukaan, aallot välkehtivät
+        '    vec3 sl = vW - uSpotPos; float sd = length(sl); float sc = dot(sl / max(sd, 0.001), uSpotDir);',
+        '    if (sc > uSpotCos) {',
+        '      float edge = smoothstep(uSpotCos, uSpotCos + (1.0 - uSpotCos) * 0.45, sc);',
+        '      float att = 1.0 / (1.0 + sd * sd * 0.00012);',
+        '      vec3 sv = normalize(uSpotPos - vW); vec3 sh = normalize(sv + v); float sp = pow(max(dot(n, sh), 0.0), 60.0);',
+        '      c += vec3(1.0, 0.94, 0.82) * uSpotI * edge * att * (0.10 + 1.6 * sp);',
+        '    }',
+        '  }',
         '  float f = 1.0 - exp(-vDepth * uFogDensity);',
         '  c = mix(c, uFogColor, clamp(f, 0.0, 1.0));',
         '  gl_FragColor = vec4(c, 1.0);',
@@ -287,7 +297,9 @@
       uHorizon: { value: new THREE.Color('#cfe0ee') }, uZenith: { value: new THREE.Color('#4a86c7') },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color('#fff2d8') }, uSunGlow: { value: 1 },
       uTime: { value: 0 }, uDeep: { value: new THREE.Color('#1c4c66') }, uFogColor: { value: new THREE.Color('#cfe0ee') }, uFogDensity: { value: S.fogDensity }, uDay: { value: 1 },
-      uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') }
+      uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') },
+      // valonheitin (vaihe 4, valot3d.js): paikka ja suunta maailmassa, keilan kosini ja päällä (1) tai pois (0)
+      uSpotPos: { value: new THREE.Vector3() }, uSpotDir: { value: new THREE.Vector3(1, 0, 0) }, uSpotCos: { value: 0.995 }, uSpotI: { value: 0 }
     };
     var sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), skyMaterial(U));
     sky.renderOrder = 100; sky.frustumCulled = false; scene.add(sky);
