@@ -594,16 +594,20 @@
         }
       });
     }
-    // Suuntanuotti SARNavin tapaan (28.10.2026): tummanvihreä kaksoisnuoli legin suuntaisesti, toisella puoliskolla kulkusuunta ja toisella vastasuunta
+    // Suuntanuotti SARNavin tapaan (28.10.2026): kaksoisnuoli legin suuntaisesti, kulkusuunnan puolisko vihreä ja vastasuunnan punainen
     // (asteet ilman merkkiä), valkoinen teksti. Kuvio käännetään niin, että teksti on aina oikein päin.
     function drawLegBox(cx, cy, bw, bh, L, color) {
       var A = toScreen(L.ax, L.ay), B = toScreen(L.bx, L.by), ang = Math.atan2(B[1] - A[1], B[0] - A[0]), flip = Math.cos(ang) < 0;
       var dPlus = flip ? L.brg + 180 : L.brg, dMinus = dPlus + 180, len = 50, hh = 12, tip = 9;
       var n3 = function (b) { var t = String(Math.round(((b % 360) + 360) % 360) % 360); while (t.length < 3) t = '0' + t; return t; };
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(flip ? ang + Math.PI : ang);
+      // kulkusuunnan puolisko vihreä ja paluusuunnan punainen (SARNav). Yläpuoliskon nuoli osoittaa +x:ään, joka on kulkusuunta, kun kuviota ei käännetty.
+      var GREEN = '#2f7d3c', RED = '#c62828';
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(-len / 2, -hh); ctx.lineTo(len / 2 - tip, -hh); ctx.lineTo(len / 2 + 3, 0); ctx.lineTo(-len / 2, 0); ctx.closePath();   // yläpuolisko: nuoli +x
-      ctx.moveTo(len / 2, 0); ctx.lineTo(len / 2, hh); ctx.lineTo(-len / 2 + tip, hh); ctx.lineTo(-len / 2 - 3, 0); ctx.closePath();                    // alapuolisko: nuoli -x
-      ctx.fillStyle = '#2f6b3c'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = flip ? RED : GREEN; ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(len / 2, 0); ctx.lineTo(len / 2, hh); ctx.lineTo(-len / 2 + tip, hh); ctx.lineTo(-len / 2 - 3, 0); ctx.closePath();   // alapuolisko: nuoli -x
+      ctx.fillStyle = flip ? GREEN : RED; ctx.fill(); ctx.stroke();
       ctx.font = '700 11px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
       ctx.fillText(n3(dPlus), -3, -hh / 2 + 0.5); ctx.fillText(n3(dMinus), 3, hh / 2 + 0.5);
       ctx.restore();
