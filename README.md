@@ -21,7 +21,7 @@ Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusse
 
 ## Ominaisuudet lyhyesti
 
-- **Paikkahaku:** katuosoitteet ja kiinteistötunnukset (Näsijärven alue), paikannimet, turvalaitteet nimellä tai numerolla, väylät, sulut ja sillat, luotsipaikat, VTS-ilmoittautumispisteet, omat kohteet ja koordinaatit. Haku toimii samoin kaikilla karttapohjilla. Samannimiset paikat näytetään kartalla numeroituina, ja niille annetaan kunta sekä etäisyys meripeninkulmina ja suunta.
+- **Paikkahaku:** katuosoitteet ja kiinteistötunnukset (Näsijärven alue), paikannimet, turvalaitteet nimellä tai numerolla, väylät, sulut ja sillat, luotsipaikat, VTS-ilmoittautumispisteet, AIS-alukset, omat kohteet ja koordinaatit. Haku toimii samoin kaikilla karttapohjilla. Samannimiset paikat näytetään kartalla numeroituina, ja niille annetaan kunta sekä etäisyys meripeninkulmina ja suunta.
 - **Reititys väylää pitkin:** reitti lasketaan automaattisesti lähtöpisteestä määränpäähän Väyläviraston navigointilinjoja pitkin, ja vain annetun kulkusyvyyden täyttävät väylät kelpaavat. Tehtävälle on oma reititys omasta sijainnista, asemalta tai muusta paikasta. Reitti avautuu muokkaustilaan tarkistettavaksi, ja kulkusyvyyttä voi muuttaa tarkastelun aikana.
 - **Tehtäväpaikat ja asema:** tehtäväpaikka haetaan nimellä ja tarkistetaan kartalla ennen luomista. Aktiivisen tehtävän suuntima ja etäisyys näytetään asemalta.
 - **Kolme karttapohjaa:** Traficomin rasterimerikartta, ENC-kartta perinteisin tai ECDIS-symbolein sekä vektorikartta, joka on terävä tasolle 20 asti. Rasterista ja ENC:stä siirrytään vektorikarttaan itsestään, kun zoomataan tasoa 17 lähemmäs.
@@ -38,6 +38,7 @@ Sovellus ei sisällä SARNavin koodia eikä grafiikkaa. Se ei ole Meripelastusse
 - **Työkalut:** harppi, suuntima, omat merkit, yönäyttö ja karttareunuksen minuuttiasteikko.
 - **Laiturit ja aallonmurtajat** näkyvät vektorikartalla Maanmittauslaitoksen ja OpenStreetMapin aineistosta.
 - **Maasto-tasot (Näsijärvi):** rakennukset, osoitteet, kiinteistörajat, maastotyyppi, varjostus ja tiet erillisestä aineistopaketista. Kaikki ovat oletuksena pois päältä.
+- **AIS-alukset:** alusten sijainnit ja alustiedot Fintrafficin Digitraffic-rajapinnasta. Alukset näkyvät tyypin mukaan värjättyinä, pelastusalukset korostettuina, ja aluksen napautus avaa kortin, josta voi luoda tehtävän aluksen kohdalle. Alukset löytyvät myös hakukentästä nimellä, kutsutunnuksella tai MMSI-numerolla.
 - **GPX:** reittien tuonti SARNavista ja vienti SARNaviin.
 - **Puhelin ja tabletti:** kapeassa näytössä on oma asettelu ja kosketusohjaus.
 
@@ -67,7 +68,7 @@ Kun sivu avataan uudelleen samalla laitteella ja samalla selaimella, kaikki on t
 - **Yksityinen selaus:** yksityisessä ikkunassa tiedot katoavat, kun ikkuna suljetaan.
 - **Varmuuskopio:** reitit siirretään laitteelta toiselle ja varmistetaan varmuuskopiolla. Varmuuskopio tehdään valikosta Tiedosto → Tee varmuuskopio, ja sen voi palauttaa samasta valikosta myös toiselle laitteelle.
 
-Oma sijainti näytetään vain käyttäjän omalla näytöllä, eikä sitä tallenneta eikä lähetetä minnekään. Karttatiilet ja aineistot haetaan suoraan Traficomin, Väyläviraston, OpenStreetMapin ja kartat.kapsi.fi:n palveluista. Maasto-tasot sekä osoite- ja kiinteistötunnushaku hakevat Näsijärven aineistopaketin GitHub Pagesista (osoite on asetuksissa) vasta, kun jokin Maasto-taso kytketään päälle tai haetaan osoitetta tai tunnusta. Maanmittauslaitoksen aineistot haetaan verkkoversiossa sovelluksen omalla välityspalvelulla Vercelissä ja tiedostona avatussa sovelluksessa suoraan Maanmittauslaitokselta. Palvelut näkevät tavanomaisesti, miltä alueelta karttaa pyydetään. Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla, joka ei käytä evästeitä eikä yksilöi käyttäjiä. Tiedostona avatussa sovelluksessa laskuria ei ladata.
+Oma sijainti näytetään vain käyttäjän omalla näytöllä, eikä sitä tallenneta eikä lähetetä minnekään. Karttatiilet ja aineistot haetaan suoraan Traficomin, Väyläviraston, Fintrafficin (AIS-alukset), OpenStreetMapin ja kartat.kapsi.fi:n palveluista. Fintrafficille ei lähetetä käyttäjää koskevia tietoja, eikä AIS-tietoja tallenneta selaimeen. Maasto-tasot sekä osoite- ja kiinteistötunnushaku hakevat Näsijärven aineistopaketin GitHub Pagesista (osoite on asetuksissa) vasta, kun jokin Maasto-taso kytketään päälle tai haetaan osoitetta tai tunnusta. Maanmittauslaitoksen aineistot haetaan verkkoversiossa sovelluksen omalla välityspalvelulla Vercelissä ja tiedostona avatussa sovelluksessa suoraan Maanmittauslaitokselta. Palvelut näkevät tavanomaisesti, miltä alueelta karttaa pyydetään. Verkkoversio laskee kävijämäärät ja sivulataukset Vercelin anonyymillä Web Analytics -laskurilla, joka ei käytä evästeitä eikä yksilöi käyttäjiä. Tiedostona avatussa sovelluksessa laskuria ei ladata.
 
 ## Karttapohjat
 
@@ -139,6 +140,41 @@ Aineisto luetaan erillisestä paketista, jonka osoite on Tiedosto → Asetukset 
 
 Kirjastot: pmtiles 4.5.0 ja protomaps-leaflet 5.1.0 (molemmat BSD-3-Clause). protomaps-leaflet piirtää vektoritiilet canvasille, ja se valittiin Leaflet.VectorGridin sijaan, koska se toimi paketin testisivulla ja täytti suorituskykyrajat puhelinprofiililla (ks. `RAPORTTI_vaihe2.md`).
 
+## AIS-alukset
+
+Kartalla näkyvät alukset, jotka lähettävät AIS-sijaintia. Sijainnit ja alustiedot tulevat Fintrafficin Digitraffic Marine -rajapinnasta (meri.digitraffic.fi), jonka aineisto on lisensoitu ehdoilla CC BY 4.0. Kerros on oletuksena päällä, ja sen saa pois valikosta Näytä → Väylät, merkit ja valot → AIS-alukset (Digitraffic). Kun kerros on päällä, kartan lähdemerkinnässä lukee AIS: Fintraffic / Digitraffic, CC BY 4.0.
+
+**Merkit.** Alukset piirretään tasolta 8 alkaen, ja vain näkymässä olevat alukset (enintään 400 kerrallaan) piirretään. Jos aluksia on enemmän, etusijalla ovat pelastusalukset ja liikkuvat alukset.
+- Liikkuva alus, jonka nopeus on vähintään 0,5 solmua, on nuolenkärki keulan suuntaan. Jos keulasuuntaa ei ole, käytetään kulkusuuntaa.
+- Paikallaan oleva, ankkurissa oleva tai kiinnitetty alus on ympyrä.
+- Tarkemmilla tasoilla alus piirretään AIS-ilmoituksen mittojen mukaisena runkona todellisessa mittakaavassa, sekä liikkuva että paikallaan oleva. Runko tulee näkyviin, kun sen pituus näytöllä on vähintään noin 18 pikseliä, joten 100 metrin alus on runko tasolta 14 alkaen ja 20 metrin hinaaja tasolta 17 alkaen. Runko on suora ja sen keula kapenee kärkeen. AIS-sijainti on antennin kohdalla, eikä se ole rungon keskellä, ja nopeusvektori lähtee siitä. Rungon napautus avaa saman kortin kuin merkin, ja nimi näkyy rungon vieressä.
+- Runko käännetään aluksen keulasuuntaan. Liikkuvalle alukselle käytetään keulasuunnan puuttuessa kulkusuuntaa, mutta paikallaan olevalle vain keulasuuntaa, koska levossa olevan aluksen kulkusuunta on kohinaa.
+- Jos mittoja tai keulasuuntaa ei ole, alus piirretään merkkinä. Suunnattoman aluksen ympyrä kasvaa tarkemmilla tasoilla aluksen pituuden mukaiseksi, enintään 40 pikselin kokoon, jotta laiturissa oleva alus erottuu.
+- Väri kertoo aluksen tyypin.
+- Liikkuvalle alukselle piirretään ohut kuuden minuutin nopeusvektori, jonka pituus on matka, jonka alus kulkee kuudessa minuutissa nykyisellä nopeudellaan.
+- Etsintä- ja pelastusalus (tyyppi 51) on kirkkaan oranssi ja paksureunainen, ja merkkinä se on hieman tavallista suurempi. Sen nimi näkyy jo tasolta 10. Muiden alusten nimet näkyvät tasolta 12. Runkojen nimi siirtyy ahtaassa paikassa rungon ylä- tai alapuolelle, ja päällekkäin menevä nimi jätetään pois.
+- Yli kymmenen minuuttia vanha sijainti piirretään himmeänä, rungotkin, eikä yli tunnin vanhaa sijaintia piirretä lainkaan.
+- Yönäyttö ei muuta AIS-merkkien värejä.
+
+| Tyyppi | Väri |
+|---|---|
+| Rahtialus (70–79) | vihreä |
+| Säiliöalus (80–89) | punainen |
+| Matkustaja-alus (60–69) | sininen |
+| Pika-alus (40–49) | keltainen |
+| Kalastusalus (30) | ruskea |
+| Purje- ja huvialus (36–37) | violetti |
+| Hinaaja, luotsialus ja viranomaisalus (31–34, 50, 52–59) | turkoosi |
+| Sotilasalus (35) | harmaa |
+| Muut ja tuntemattomat | vaaleanharmaa |
+| Etsintä- ja pelastusalus (51) | oranssi, korostettu |
+
+**Kortti.** Aluksen napautus tai klikkaus avaa kortin, jossa ovat nimi, aluksen tyyppi, MMSI, IMO, kutsutunnus, kulkutila, nopeus, kulku, keula, määränpää, ETA, syväys, pituus ja leveys, sijainti ja sijainnin ikä. Tiedot, joita alus ei ole lähettänyt, jätetään pois. Kortin painike Uusi tehtävä aluksen kohdalle avaa tehtävälomakkeen aluksen sijainnilla. Painikkeet ja sulkupainike ovat puhelimessakin vähintään 40 pikseliä korkeita.
+
+**Päivittyminen.** Sijainnit päivittyvät noin puolen minuutin välein, kun kerros on päällä ja sivu on näkyvissä. Jos tietoa ei saada, kartalla näkyy huomautus, ja aiemmin haetut alukset pysyvät näkyvissä, kunnes ne vanhenevat.
+
+**Rajoitukset.** AIS-tieto on viiveellistä, ja sijainti voi olla minuutteja vanha. Kaikki alukset eivät lähetä AIS-sijaintia, joten esimerkiksi pienveneitä voi puuttua. Tietoa ei saa käyttää törmäysten välttämiseen eikä navigointiin.
+
 ## Reittisuunnittelu
 
 Uusi reitti aloitetaan työkalupalkin reittipainikkeella, kirjaston painikkeella Uusi reitti tai näppäimillä Ctrl+R. Reittipisteet klikataan tai napautetaan kartalle. Lukemat näyttävät suunnan, legin pituuden ja kokonaismatkan. Del poistaa viimeisen pisteen, ja Esc lopettaa.
@@ -196,6 +232,7 @@ Yläpalkin hakukenttään voi kirjoittaa seuraavia:
 - väylän, sulun, kanavan tai avattavan sillan nimen
 - luotsipaikan tai VTS-ilmoittautumispisteen nimen
 - katuosoitteen (esimerkiksi Laiturikatu 8) tai kiinteistötunnuksen (esimerkiksi 837-123-4-56), Näsijärven alueella
+- AIS-aluksen nimen, kutsutunnuksen tai MMSI-numeron
 - oman merkin tai tehtävän nimen
 - koordinaatin
 
@@ -206,6 +243,8 @@ Katuosoite- ja kiinteistötunnushaku käyttää Näsijärven aineistopaketin hak
 Jos paikannimiä ei tule, hakutulosten alla kerrotaan syy. Tiedostona avatusta sovelluksesta voi puuttua API-avain, ja verkkoversiossa julkaisun palvelimelta voi puuttua avain (ks. Julkaisu Verceliin).
 
 Hakusanaksi riittää nimen alku: viitas löytää sekä Viitasaaret että Viitasalmet. Lähialueelta haetaan myös nimen keskeltä, joten salmi löytää esimerkiksi lähellä olevan Viitasalmen.
+
+AIS-alukset löytyvät nimen osalla, kutsutunnuksen alulla tai MMSI-numeron alulla, kun numeroita on vähintään kolme. Haku alkaa jo kahdesta merkistä, ja siitä näytetään kymmenen lähintä alusta omassa ryhmässään. Aluksen valinta keskittää kartan alukseen ja avaa sen kortin (ks. AIS-alukset). Haku löytää alukset myös silloin, kun AIS-kerros on pois päältä, ja tuloksen valinta kytkee kerroksen silloin päälle.
 
 Samannimisiä paikkoja on paljon, joten tulokset näytetään kartalla numeroituina ja listassa lähimmät ensin.
 - Jokaisella rivillä on paikan kunta tai tuloksen laji (esimerkiksi turvalaite, väylä tai sulku) sekä etäisyys meripeninkulmina ja suunta kartan keskeltä.
@@ -285,6 +324,7 @@ Reitti viedään GPX-tiedostoksi reitin valikosta tai reittikirjastosta, ja koko
 | Navigointilinjat, väylät, turvalaitteet, loistot, valosektorit, linjataulujen linjat, vesiliikennemerkit, nopeusrajoitukset, sulut ja avattavat sillat | Väylävirasto, avoin rajapinta | CC BY 4.0 |
 | Siltojen alikulkukorkeudet | Väylävirasto, taitorakennerekisteri (avoin rajapinta) | CC BY 4.0 |
 | Luotsipaikat ja VTS-ilmoittautumispisteet (haku) | Traficom, avoin INSPIRE-palvelu | CC BY 4.0 |
+| AIS-sijainnit ja alustiedot | Fintraffic, Digitraffic Marine (meri.digitraffic.fi) | CC BY 4.0, ei navigointikäyttöön |
 | Kivet, karikot, laiturit, aallonmurtajat ja paikannimet | Maanmittauslaitos, maastotietokanta ja nimistörekisteri (OGC API Features) | CC BY 4.0 |
 | Maanmittauslaitoksen taustakartta | Maanmittauslaitos, kartat.kapsi.fi | CC BY 4.0 |
 | Maapohja ja laiturialueet | OpenStreetMap-tekijät, tiilet ja Overpass-rajapinta | ODbL |
@@ -327,7 +367,8 @@ Lisenssi koskee vain sovelluksen omaa koodia. Kartta-aineistot ovat omien lisens
 | `lahdekoodi/js/routes.js` | Reittisuunnittelu ja hyväksyntä |
 | `lahdekoodi/js/routing.js` | Automaattinen reititys väylää pitkin: verkko navigointilinjoista, kulkusyvyysrajoite, lyhimmän reitin haku ja dialogi |
 | `lahdekoodi/js/tools.js` | Harppi, suuntima, omat merkit, tehtäväpaikat ja asema |
-| `lahdekoodi/js/search.js` | Paikkahaku: paikannimet, turvalaitteet, väylät, sulut ja sillat, luotsipaikat, VTS-pisteet, osoitteet ja kiinteistötunnukset |
+| `lahdekoodi/js/ais.js` | AIS-alukset: Digitraffic-haku ja ajastus, alusten merkit, nopeusvektorit ja nimet, aluksen kortti sekä alushaku |
+| `lahdekoodi/js/search.js` | Paikkahaku: paikannimet, turvalaitteet, väylät, sulut ja sillat, luotsipaikat, VTS-pisteet, AIS-alukset, osoitteet ja kiinteistötunnukset |
 | `lahdekoodi/js/terrain.js` | Maasto-tasot (Näsijärven aineistopaketti): tasot, napautus sekä osoite- ja kiinteistötunnushakemistot |
 | `lahdekoodi/js/library.js` | Reittikirjasto |
 | `lahdekoodi/js/gpx.js` | GPX-tuonti ja -vienti |
@@ -371,6 +412,7 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 | `route_test.py` | Reititys väylää pitkin: kulkusyvyysrajoite, lähin kelvollinen väyläpiste, linjat ilman kulkusyvyyttä, risteykset ja dialogi (`DEVICE` valitsee puhelinprofiilin) |
 | `aid_test.py` | Sivuutus- ja käännösetäisyyksien kiinnitys turvalaitteisiin |
 | `search_test.py` | Paikkahaku |
+| `ais_test.py` | AIS-alukset: merkit, värit, pelastusalukset, nopeusvektori, nimet, kortti ja tehtäväpainike, haku, päivitysajastus, piilotettu sivu, kerroksen poisto ja yönäyttö (Digitraffic korvataan testiaineistolla) |
 | `task_gps_test.py` | Tehtäväpaikan haku, merimailit ja oma sijainti |
 | `pier_gps_test.py` | Laiturit sekä oma sijainti puhelimessa |
 | `proxy_test.py` | Maanmittauslaitoksen välityspalvelu |
@@ -388,4 +430,5 @@ Testit ajetaan Playwrightilla (Python), ja verkkopalvelut korvataan niissä test
 - **Sillat:** alikulkukorkeus on taitorakennerekisterissä vain noin 280 sillalle. Muiden siltojen alikulkukorkeus näkyy vain vesiliikennemerkeissä ja karttapohjassa. Rekisterin korkeuden vertaustaso ei käy aineistosta ilmi.
 - **OpenStreetMapin maapohja:** jos OpenStreetMapin tiilet näkyvät Access blocked -ruutuina, maapohjaksi voi valita Maanmittauslaitoksen taustakartan valikosta Näytä.
 - **Overpass:** OpenStreetMapin Overpass-palvelu on usein ruuhkainen, jolloin OpenStreetMapin laiturialueet tulevat viiveellä tai jäävät tulematta. Maanmittauslaitoksen laituriviivat näkyvät silti.
+- **AIS-alukset:** sijainnit ovat viiveellisiä, eikä kaikilla aluksilla ole AIS-lähetintä. Sijaintien ikä lasketaan laitteen kellosta, joten väärin käyvällä kellolla sijainnit näyttävät joko vanhoilta tai tuoreilta. Jos selain ei pääse Digitraffic-rajapintaan, esimerkiksi verkon rajausten vuoksi, kartalla näkyy huomautus eikä aluksia näytetä. Aineisto ei sovellu navigointiin eikä törmäysten välttämiseen.
 - **Paikannimihaku:** nimistörekisterin paikan lajia ei vielä näytetä tuloksissa sanallisesti, vaan rivillä on kunta. Väylät, sulut ja sillat haetaan vain Väyläviraston aineistosta ja luotsipaikat Traficomin aineistosta, joten muiden toimijoiden kohteet voivat puuttua.

@@ -1,7 +1,8 @@
 /* Reittikartta – paikkahaku: koordinaatit, omat kohteet, Väyläviraston turvalaitteet nimellä ja
  * numerolla, väylät, sulut ja avattavat sillat, Traficomin luotsipaikat ja VTS-ilmoittautumispisteet
  * sekä (API-avaimella tai välityspalvelulla) Maanmittauslaitoksen nimistörekisteri. Lisäksi katuosoitteet
- * ja kiinteistötunnukset Näsijärven aineistopaketin hakemistoista (terrain.js), myös kun Maasto-tasot ovat pois päältä.
+ * ja kiinteistötunnukset Näsijärven aineistopaketin hakemistoista (terrain.js), myös kun Maasto-tasot ovat pois päältä, ja
+ * AIS-alukset nimen osalla, kutsutunnuksella ja MMSI-numeron alulla (ais.js).
  * Haku ei lue nimiä karttakuvasta, joten se toimii samoin kaikilla karttapohjilla.
  *
  * Suomessa on paljon samannimisiä paikkoja (esim. kymmeniä Viitasaaria), joten tulokset
@@ -150,7 +151,12 @@
       return place(res[5].concat(res[4], res[0], res[1], res[2], res[3]), at);
     });
   }
-  // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, turvalaitteet ja paikannimet
+  // AIS-alukset nimen osalla, kutsutunnuksella tai MMSI-numerolla. Lupaus ei hylkäydy: virhe antaa tyhjän listan.
+  function ships(q, at) {
+    if (!global.Ais) return Promise.resolve([]);
+    return global.Ais.search(q, at || ref).then(function (list) { return list; }, function () { return []; });
+  }
+  // Haku muille toiminnoille (tehtäväpaikka): koordinaatti, omat kohteet, AIS-alukset, turvalaitteet ja paikannimet
   // yhtenä listana lähimmästä kauimpaan. Palauttaa lupauksen.
   function find(q, at) {
     q = String(q || '').trim();
@@ -158,9 +164,9 @@
     var p = G.parsePos(q);
     if (p) return Promise.resolve(place([{ name: G.fmtPos(p), info: 'koordinaatti', lat: p.lat, lng: p.lng, coord: true }], at));
     var mine = local(q);
-    if (q.length < 3) return Promise.resolve(place(mine, at));
-    return remote(q, at).then(function (rem) {
-      var all = place(mine.concat(rem), at);
+    if (q.length < 3) return ships(q, at).then(function (sh) { return place(mine.concat(sh), at); });
+    return Promise.all([remote(q, at), ships(q, at)]).then(function (res) {
+      var all = place(mine.concat(res[1], res[0]), at);
       var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
       var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
       return near.concat(far);
@@ -176,7 +182,7 @@
       if (it.coord) return;
       var m = L.marker([it.lat, it.lng], {
         icon: L.divIcon({ className: 'sres-ico', html: '<span class="sres' + (i === sel ? ' on' : '') + '">' + it.no + '</span>', iconSize: [0, 0] }),
-        keyboard: false, zIndexOffset: i === sel ? 1000 : 0, pane: 'aidPane'
+        keyboard: false, zIndexOffset: i === sel ? 1000 : 0, pane: it.ais ? 'markerPane' : 'aidPane'
       });
       m.on('click', function (e) { L.DomEvent.stop(e); pick(i); });
       m.bindTooltip(UI.esc(it.name) + (it.info ? ' – ' + UI.esc(it.info) : '') + '<br>' + fmtKm(it.km) + ' · ' + G.fmtBrg(it.brg, 0), { direction: 'top', offset: [0, -12] });
@@ -192,7 +198,7 @@
     global.App.fitTo(b.pad(0.25), { maxZoom: 13 });
   }
 
-  function render(groups, pending) {
+  function render(groups, pending, notes) {
     results = []; sel = -1;
     var h = '', no = 0;
     groups.forEach(function (gr) {
@@ -213,6 +219,7 @@
       if (n > 1) h = '<div class="sr-top"><span>' + n + ' tulosta kartalla numeroituina, lähimmät ensin (etäisyys ja suunta kartan keskeltä)</span><button type="button" class="sr-fit">Näytä kartalla</button></div>' + h;
       if (pending) h += '<div class="sn">Haetaan lisää…</div>';
     }
+    (notes || []).forEach(function (t) { if (t) h += '<div class="sn">' + UI.esc(t) + '</div>'; });
     box.innerHTML = h;
     box.hidden = false;
     drawMarkers();
@@ -223,27 +230,48 @@
     var my = ++seq;
     if (q.length < 2) { box.hidden = true; clearMarkers(); return; }
     if (!ref) { var c = map.getCenter(); ref = { lat: c.lat, lng: c.lng }; }
-    var groups = [];
+    // Tulosryhmät kootaan sitä mukaa kuin tieto saapuu: omat kohteet heti, alukset ja muu aineisto kun haku valmistuu.
+    var cur = { coord: null, mine: [], ais: null, near: null, far: null, notes: [] };
     var p = G.parsePos(q);
-    if (p) groups.push({ title: 'Koordinaatti', items: [{ name: G.fmtPos(p), info: 'siirry', lat: p.lat, lng: p.lng, coord: true }] });
-    var mine = place(local(q)).slice(0, 8);
-    groups.push({ title: 'Omat kohteet', items: mine });
-    var more = q.length >= 3 && !p;
-    render(groups, more);
-    if (!more) return;
-    remote(q, ref).then(function (all) {
-      if (my !== seq) return;
-      var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
-      var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
-      groups.push({ title: 'Alle 27 mpk (50 km)', items: near });
-      groups.push({ title: 'Kauempana', items: far });
-      render(groups, false);
-      var note = namesNote();
-      if (note) box.insertAdjacentHTML('beforeend', '<div class="sn">' + UI.esc(note) + '</div>');
-      // jos lähialueen tuloksia ei näy kartalla, siirretään kartta niihin kerran tätä hakua kohden
-      var vis = global.App.visibleBounds(), nearPts = near.filter(function (it) { return vis.contains([it.lat, it.lng]); });
-      if (near.length && !nearPts.length && fittedFor !== q) { fittedFor = q; fitResults(); }
-    });
+    if (p) cur.coord = { name: G.fmtPos(p), info: 'siirry', lat: p.lat, lng: p.lng, coord: true };
+    cur.mine = place(local(q)).slice(0, 8);
+    var waiting = 0;
+    function groups() {
+      var g = [];
+      if (cur.coord) g.push({ title: 'Koordinaatti', items: [cur.coord] });
+      g.push({ title: 'Omat kohteet', items: cur.mine });
+      if (cur.ais) g.push({ title: 'AIS-alukset', items: cur.ais });
+      if (cur.near) { g.push({ title: 'Alle 27 mpk (50 km)', items: cur.near }); g.push({ title: 'Kauempana', items: cur.far }); }
+      return g;
+    }
+    function show() { render(groups(), waiting > 0, cur.notes); }
+    var wantRemote = q.length >= 3 && !p, wantShips = !p && !!global.Ais;
+    if (wantRemote) waiting++;
+    if (wantShips) waiting++;
+    show();
+    if (wantShips) {
+      ships(q, ref).then(function (list) {
+        if (my !== seq) return;
+        cur.ais = place(list).slice(0, 10);
+        var note = global.Ais.searchNote();
+        if (note && !list.length) cur.notes.push(note);
+        waiting--; show();
+      });
+    }
+    if (wantRemote) {
+      remote(q, ref).then(function (all) {
+        if (my !== seq) return;
+        var near = all.filter(function (it) { return it.km <= NEAR_KM; }).slice(0, 25);
+        var far = all.filter(function (it) { return it.km > NEAR_KM; }).slice(0, 15);
+        cur.near = near; cur.far = far;
+        var note = namesNote();
+        if (note) cur.notes.unshift(note);
+        waiting--; show();
+        // jos lähialueen tuloksia ei näy kartalla, siirretään kartta niihin kerran tätä hakua kohden
+        var vis = global.App.visibleBounds(), nearPts = near.filter(function (it) { return vis.contains([it.lat, it.lng]); });
+        if (near.length && !nearPts.length && fittedFor !== q) { fittedFor = q; fitResults(); }
+      });
+    }
   }
 
   function pick(i) {
@@ -253,6 +281,12 @@
     input.blur();
     clearMarkers();
     ref = null; fittedFor = null;
+    if (it.ais && global.Ais) {
+      // alus keskitetään ja sen kortti avataan, jolloin AIS-kerros kytketään tarvittaessa päälle
+      global.App.centerOn([it.lat, it.lng], Math.max(map.getZoom(), 13));
+      global.Ais.open(it.mmsi);
+      return;
+    }
     global.App.centerOn([it.lat, it.lng], Math.max(map.getZoom(), it.zoom || (it.route ? 13 : 14)));
     if (it.route && global.Routes) global.Routes.setHighlight(it.route, true);
     if (hlLayer) map.removeLayer(hlLayer);

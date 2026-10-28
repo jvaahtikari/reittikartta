@@ -28,10 +28,48 @@ mml_pier_log = []
 overpass_log = []
 overpass_fail_main = []
 
+# Digitraffic (AIS): kutsuloki sekä testin säädettävät asetukset (lisäalukset, virhevastaus, poisjätettävät alukset)
+ais_log = []
+ais_pre = []
+ais_state = {'extra': 0, 'fail': False, 'drop': set(), 'maxes': []}
+
+
+def ais_route(route, request):
+    """Digitraffic Marine -mock: /locations (tukee from- ja mmsi-parametria), /vessels?from= ja /vessels/{mmsi}.
+    Vastaa CORS-otsakkeilla, myös esikyselyyn (OPTIONS), kuten oikea palvelu."""
+    import time
+    u = urllib.parse.urlparse(request.url)
+    q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+    cors = {'Access-Control-Allow-Origin': '*'}
+    if request.method == 'OPTIONS':
+        ais_pre.append(request.headers.get('access-control-request-headers', ''))
+        return route.fulfill(status=204, headers={**cors, 'Access-Control-Allow-Headers': 'digitraffic-user', 'Access-Control-Allow-Methods': 'GET, OPTIONS'})
+    now = int(time.time() * 1000)
+    path = u.path.replace('/api/ais/v1', '')
+    ais_log.append({'path': path, 'query': q, 'user': request.headers.get('digitraffic-user'), 'at': now})
+    if ais_state['fail']:
+        return route.fulfill(status=503, headers=cors, content_type='application/json', body='{"error":"unavailable"}')
+    if path == '/locations':
+        body, mx = mockdata.ais_locations(now, int(q['from']) if 'from' in q else None, int(q['mmsi']) if 'mmsi' in q else None,
+                                          ais_state['extra'], ais_state['drop'])
+        ais_state['maxes'].append(mx)
+        return route.fulfill(status=200, headers=cors, content_type='application/json', body=body)
+    if path == '/vessels':
+        return route.fulfill(status=200, headers=cors, content_type='application/json',
+                             body=mockdata.ais_vessels(now, int(q.get('from', '0')), ais_state['extra']))
+    if path.startswith('/vessels/'):
+        one = mockdata.ais_vessel_one(int(path.split('/')[-1]), now)
+        if one is None:
+            return route.fulfill(status=404, headers=cors, content_type='application/json', body='{"error":"not found"}')
+        return route.fulfill(status=200, headers=cors, content_type='application/json', body=one)
+    return route.fulfill(status=404, headers=cors, body='')
+
 
 def handle(route, request):
     url = request.url
     cors = {'Access-Control-Allow-Origin': '*'}
+    if 'meri.digitraffic.fi' in url:
+        return ais_route(route, request)
     if 'rasteripalvelu/wmts' in url:
         q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
         layer = q.get('LAYER', [''])[0]
