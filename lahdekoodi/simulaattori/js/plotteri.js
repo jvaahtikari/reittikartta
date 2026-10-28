@@ -515,10 +515,15 @@
       (route.passes || []).forEach(function (p) {
         var F = toScreen(p.foot[0], p.foot[1]), T = toScreen(p.tgt[0], p.tgt[1]), Lb = toScreen(p.lab[0], p.lab[1]);
         if (!vis(F, T) && !vis(Lb, Lb)) return;
-        var col = '#0b4f7a', dx = T[0] - F[0], dy = T[1] - F[1], l = Math.hypot(dx, dy) || 1;
-        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(F[0], F[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
+        var col = '#0b4f7a', dx = T[0] - F[0], dy = T[1] - F[1], l = Math.hypot(dx, dy) || 1, txt = kblText(p.dist);
+        // Katkoviiva legiltä sivuutettavaan kohteeseen pysyy aina näkyvissä: jos lukema osuisi viivan päälle, lukema siirretään kohteen taakse viivan jatkeelle
+        ctx.font = '700 12px ' + FONT; var hw2 = (ctx.measureText(txt).width + 10) / 2, hh2 = 9, hit = false;
+        for (var k = 0; k <= 12 && !hit; k++) { var qx = F[0] + dx * k / 12, qy = F[1] + dy * k / 12; hit = Math.abs(qx - Lb[0]) < hw2 + 2 && Math.abs(qy - Lb[1]) < hh2 + 2; }
+        if (hit) { var ux = dx / l, uy = dy / l, ext = Math.abs(ux) * hw2 + Math.abs(uy) * hh2 + 10; Lb = [T[0] + ux * ext, T[1] + uy * ext]; }
+        ctx.strokeStyle = col; ctx.lineWidth = 2.2; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.moveTo(F[0], F[1]); ctx.lineTo(T[0], T[1]); ctx.stroke(); ctx.setLineDash([]);
         ctx.beginPath(); ctx.moveTo(T[0] - dy / l * 7, T[1] + dx / l * 7); ctx.lineTo(T[0] + dy / l * 7, T[1] - dx / l * 7); ctx.stroke();
-        labelBox(kblText(p.dist), Lb[0], Lb[1], col);
+        ctx.beginPath(); ctx.arc(T[0], T[1], 3.5, 0, 2 * Math.PI); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1.8; ctx.stroke();
+        labelBox(txt, Lb[0], Lb[1], col);
       });
       // Käännösetäisyyksiä ei piirretä (käyttäjä 28.10.2026: ei SARNavissa)
       if (false) (route.rkTurns || []).forEach(function (t) {
