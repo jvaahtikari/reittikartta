@@ -1687,7 +1687,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   // Pysäytys esteeseen osuttaessa (laituri, kivi, silta): nopeus, kierto ja vipu nollataan, nopeuskäsky nollataan eikä ruorimies yritä ajaa uudelleen esteeseen
   // (käskyä ei kirjata komentolokiin, esteeseen osuminen kirjataan erikseen). Suunta pidetään siinä, mihin alus jäi, ja perän käsky päättyy.
   function halt(s) {
-    s.v = 0; s.vs = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
+    s.v = 0; s.vs = 0; s.waveFx = 0; s.waveYaw = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
     s.crashCmd = false; s.crashActive = false;
     s.pending = s.pending.filter(function (p) { return p.kind === 'gentle'; });
     s.orderSpeedKn = 0; s.hmSpeedKn = 0; s.sternTurn = null; s.hmStern = null; s.gentleNext = false; s.hmGentle = false;
@@ -1756,7 +1756,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     var lv = s.crashActive ? S.crashLever : s.leverCmd;
     s.lever = lv;
     var windOn = s.windSpeed > 0 || s.vs !== 0, wf = windOn ? windForces(s) : null;
-    var a = (thrust(lv, s.v) - resistance(s.v) + (wf ? wf.fx : 0)) / S.massKg, v0 = s.v;
+    var a = (thrust(lv, s.v) - resistance(s.v) + (wf ? wf.fx : 0) + (s.waveFx || 0)) / S.massKg, v0 = s.v;   // waveFx: aallokon lisävastus ja rinteen työntö (aallot.js)
     s.v += a * dt;
     if (wf) {   // sorto: sivuvoima vastaan veden sivuvastus ja nostovoima
       var dl = 0.5 * S.waterRho * S.latDragCd * S.latAreaM2 * s.vs * Math.abs(s.vs) + S.latLiftNs2 * Math.abs(s.v) * s.vs;
@@ -1769,10 +1769,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         s.v = 0; s.crashActive = false; s.crashCmd = false; s.leverCmd = 0; s.speedSense = 0;
         logCmd(s, 'lever0', 0);
       }
-    } else if (lv === 0 && Math.abs(s.v) < 0.02 && !(s.windSpeed > 0)) s.v = 0;
+    } else if (lv === 0 && Math.abs(s.v) < 0.02 && !(s.windSpeed > 0) && !s.waveFx) s.v = 0;
     else if (lv === 0 && v0 * s.v < 0) s.v = 0;
     // suunta
     var wTarget = s.rudder * maxTurnRate(s.v) * steerSign(s);   // rad/s
+    if (s.waveYaw) wTarget += s.waveYaw;   // myötä- ja viistoaallokon kääntävä vaikutus (aallot.js)
     if (wf) { var kn0 = Math.abs(s.v) / KN; wTarget += S.windYawRadPerN * wf.fy / (1 + Math.pow(kn0 / S.windYawFadeKn, 2)); }   // keula kääntyy tuulesta poispäin (sivuvoiman suuntaan)
     var w = s.rate * RAD;
     w += (wTarget - w) * (1 - Math.exp(-dt / S.yawLagSec));
@@ -10771,14 +10772,11 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var bobP = Math.sin(bobT * 2.3) * S.bobPitchDeg * sp + Math.sin(bobT * 5.1) * S.bobPitchDeg * 0.4 * sp;
       var bobR = Math.sin(bobT * 1.7 + 1) * S.bobRollDeg * Math.min(1, 0.25 + sp);
       var heave = Math.sin(bobT * 2.0) * S.bobHeaveM * (0.3 + sp);
-      // aallokon keinunta: jyrkkyys (Hs / aallonpituus), tulosuunta keulaan nähden ja kohtaamistaajuus. Lyhyet aallot (alle rungon pituuden) keinuttavat vähemmän.
-      if (sea && sea.hs > 0.02 && sea.tp > 0.3) {
-        var lam = 9.81 * sea.tp * sea.tp / (2 * Math.PI), resp = Math.min(1, Math.max(0.15, lam / 12)), slope = Math.atan(Math.PI * sea.hs / lam) / RAD * 0.5 * resp;
-        var beta = (sea.toGrid - st.hdg) * RAD, om = 2 * Math.PI / sea.tp, ome = Math.max(0.35, Math.abs(om - om * om / 9.81 * st.v * Math.cos(beta)));
-        seaT += dt * ome;
-        bobP += slope * Math.abs(Math.cos(beta)) * (1 + 1.2 * sp) * Math.sin(seaT);
-        bobR += slope * 1.4 * Math.abs(Math.sin(beta)) * Math.sin(seaT * 0.85 + 1.1);
-        heave += sea.hs * 0.5 * resp * Math.sin(seaT + 0.6);
+      // merenkäynti (aallot.js createMeri): nousu, nyökkäys ja kallistus epäsäännöllisestä aallokosta liukuvarungon vasteella, isku tärähdyksenä
+      var wv = st.wave;
+      if (wv) {
+        bobP = bobP * (1 - Math.min(1, wv.hs * 3)) + wv.pitch; bobR += wv.roll; heave += wv.z;
+        if (wv.slam > 0) { seaT += dt * 47; bobP += wv.slam * 0.9 * Math.sin(seaT); heave += wv.slam * 0.02 * Math.sin(seaT * 1.3); }
       }
       rig.position.set(st.x, heave, -st.y);
       var yaw = Math.PI / 2 - st.hdg * RAD;
@@ -11246,8 +11244,20 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
  * 2,4 x 2,4 km:n alue tallennetaan tekstuuriksi, josta veden varjostin lukee aaltojen voimakkuuden paikan mukaan. Laskenta jaetaan
  * useaan kuvaan ja tehdään uudelleen, kun alus liikkuu 300 m tai tuuli muuttuu.
  *
- * Aluksen keinunta: nyökkäys ja kallistus aaltojen jyrkkyydestä (Hs / aallonpituus) ja aaltojen tulosuunnasta keulaan nähden, kohtaamistaajuus
- * aluksen nopeuden mukaan. Alle rungon mittaiset aallot keinuttavat vähemmän (vastekerroin aallonpituus / 12 m).
+ * Merenkäynti ja aluksen vaste (createMeri, 29.10.2026): aallokko ei ole yksi säännöllinen aalto vaan JONSWAP-spektristä poimittu 16 aallon summa
+ * (eri pituudet, suunnat tuulen suunnan ympärillä ja satunnaiset vaiheet, siemen kiinteä, joten miehistötilan molemmat laitteet näkevät saman meren).
+ * Aaltojen summa tuottaa ryhmiä: välillä tulee useampi isompi aalto peräkkäin ja välillä on tyynempää. Pinnan korkeus lasketaan rungon alla
+ * keulassa, keskellä, perässä ja kyljillä aluksen mukana liikkuvissa pisteissä, joten kohtaamistaajuus ja rungon pituuden suodatus syntyvät itsestään.
+ * Liukuvarunkoinen Pv417 (12,25 x 3,6 m):
+ *   - hitaasti (uppouma, alle noin 10 kn) koko runko on vedessä: alus myötäilee pitkiä aaltoja nousten ja nyökäten, lyhyet aallot keskiarvoistuvat
+ *     rungon pituudella, sivuaallokossa kallistus on suuri ja heikosti vaimeneva (ominaisjakso noin 2,6 s), ja myötäaallokko työntää ja kääntää
+ *     perää (surffaus, kun aaltojen nopeus on lähellä aluksen nopeutta, ja sorto sivulle)
+ *   - liukukynnyksellä (10-17 kn) keula on pystyssä ja nyökkäys on suurimmillaan
+ *   - liu'ussa (yli noin 17 kn) runko kantaa perän lyhyellä märällä pinnalla: lyhyt aallokko jää alle ja tuntuu tärinänä, mutta isompi aalto
+ *     heittää rungon ilmaan, kun aallon pinta laskee nopeammin kuin painovoima ehtii (pystykiihtyvyys rajattu -g:hen), ja alus iskeytyy
+ *     seuraavaan aaltoon (isku = pystykiihtyvyyden piikki). Vasta-aallokossa iskut tihenevät nopeuden mukana ja hidastavat (lisävastus).
+ * Vaste on toisen kertaluvun jousi-vaimennin (nousu, nyökkäys, kallistus), jonka jäykkyys ja vaimennus vaihtuvat uppoumasta liukuun.
+ * Liikemallille annetaan pitkittäisvoima (lisävastus ja aallon rinteen työntö) ja kääntymisen häiriö (S.waveFx, S.waveYaw).
  *
  * Moduuli toimii selaimessa (window.Aallot) ja Nodessa (module.exports: kaavat testattavissa). */
 (function (root) {
@@ -11330,10 +11340,93 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       }
     }
     function rebase() { last.x = 1e9; job = null; }
-    return { paivita: paivita, rebase: rebase, tila: function () { return { hs: local.hs, tp: local.tp, fetch: local.fetch, aallonpituus: local.tp ? waveLength(local.tp) : 0, laskenta: job ? job.row + '/' + N : 'valmis' }; }, settings: SET };
+    return { paivita: paivita, rebase: rebase, sea: function () { return local; }, tila: function () { return { hs: local.hs, tp: local.tp, fetch: local.fetch, aallonpituus: local.tp ? waveLength(local.tp) : 0, laskenta: job ? job.row + '/' + N : 'valmis' }; }, settings: SET };
   }
 
-  var api = { waveHs: waveHs, waveTp: waveTp, waveLength: waveLength, create: create, SETTINGS: SET };
+  // ---------- merenkäynti ja aluksen vaste ----------
+  var HULL = {
+    L: 12.25, B: 3.6, wetSlow: 10, wetPlane: 4.5, planeAft: -3.0,   // märkä pituus (m) uppoumassa ja liu'ussa, liu'ussa märkä pinta perässä
+    heaveW: [3.4, 5.5], heaveZ: [0.32, 0.6],     // nousun ominaiskulmataajuus (rad/s) ja vaimennussuhde: uppouma, liuku
+    pitchW: [3.0, 5.0], pitchZ: [0.30, 0.42],
+    rollW: [2.4, 3.0], rollZ: [0.25, 0.35],       // kallistus: ominaisjakso noin 2,6 s, uppoumassa heikommin vaimeneva
+    rollGain: [0.85, 0.3], airPitch: -0.6,         // kallistuksen herkkyys aallon kaltevuudelle (liu'ussa dynaaminen nostovoima vakauttaa), ilmassa keula painuu (rad/s²)
+    surge: [0.55, 0.15],                           // aallon rinteen työntö (osuus m g x rinne)
+    addRes: [1.0, 2.5],                            // lisävastuksen kerroin vasta-aallokossa
+    yaw: [0.35, 0.05],                             // myötä- ja viistoaallokon kääntävä vaikutus (rad/s rinne-eroa kohti)
+    planeKn: [10, 18], humpKn: [9, 16]
+  };
+  function sm(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  // JONSWAP-spektri (gamma 3,3) Hs = 1 ja huippujakso tp: 16 komponenttia, amplitudit skaalataan Hs:llä myöhemmin
+  function spectrum(tp, seed) {
+    var r = rng(seed), wp = 2 * Math.PI / tp, n = 16, w0 = 0.72 * wp, w1 = 2.6 * wp, dw = (w1 - w0) / n, comp = [], m0 = 0;
+    for (var i = 0; i < n; i++) {
+      var w = w0 + (i + r()) * dw, sg = w <= wp ? 0.07 : 0.09, g = Math.pow(3.3, Math.exp(-Math.pow(w - wp, 2) / (2 * sg * sg * wp * wp)));
+      var Sw = Math.pow(w, -5) * Math.exp(-1.25 * Math.pow(wp / w, 4)) * g, a2 = 2 * Sw * dw;
+      // suuntahajonta tuulen suunnan ympärillä (normaalijakauma, keskihajonta 25°, lyhyet aallot hajoavat enemmän)
+      var u1 = Math.max(1e-9, r()), u2 = r(), nd = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      comp.push({ w: w, k: w * w / G, a2: a2, dir: nd * (20 + 15 * (w / wp - 1)) * RAD, ph: r() * 2 * Math.PI });
+      m0 += a2 / 2;
+    }
+    comp.forEach(function (c) { c.a = Math.sqrt(c.a2) / (4 * Math.sqrt(m0)); });   // Hs = 4 sqrt(m0) = 1
+    return comp;
+  }
+  function createMeri(seed) {
+    var st = { comp: null, tp: 0, hs: 0, hsT: 0, to: 0, z: 0, zv: 0, p: 0, pv: 0, r: 0, rv: 0, zs0: null, ps0: null, air: 0, slam: 0, slamT: 0, az: 0 };
+    // pinnan korkeus pisteessä (x, y ruutukoordinaatit) hetkellä t
+    function eta(x, y, t) {
+      var c = st.comp, h = 0; if (!c || st.hs <= 0) return 0;
+      for (var i = 0; i < c.length; i++) { var q = c[i], d = st.to + q.dir; h += q.a * Math.cos(q.k * (x * Math.sin(d) + y * Math.cos(d)) - q.w * t + q.ph); }
+      return h * st.hs;
+    }
+    // S: aluksen tila (x, y, hdg ruutusuunta, v m/s, t), sea: { hs, tp, toGrid } aluksen kohdalta, dt sekuntia
+    function step(S, sea, dt) {
+      if (!sea || !(sea.tp > 0.3)) { st.hs += (0 - st.hs) * Math.min(1, dt); if (st.hs < 0.005) { S.waveFx = 0; S.waveYaw = 0; S.wave = null; return null; } }
+      else {
+        if (!st.comp || Math.abs(sea.tp - st.tp) / st.tp > 0.12) { st.comp = spectrum(sea.tp, 4177); st.tp = sea.tp; }
+        st.hs += (sea.hs - st.hs) * Math.min(1, dt / 4); st.to = sea.toGrid * RAD;
+      }
+      var n = Math.max(1, Math.ceil(dt / 0.01)), h = dt / n, out = null;
+      for (var i = 0; i < n; i++) out = sub(S, h, S.t - dt + (i + 1) * h);
+      return out;
+    }
+    function sub(S, h, t) {
+      var kn = Math.abs(S.v) / 0.514444, pl = sm(HULL.planeKn[0], HULL.planeKn[1], kn), hump = sm(HULL.humpKn[0], 12, kn) * (1 - sm(14, HULL.humpKn[1], kn));
+      var hd = S.hdg * RAD, fx = Math.sin(hd), fy = Math.cos(hd), rx = Math.cos(hd), ry = -Math.sin(hd);
+      // aluksen paikka tällä alihetkellä (S.x, S.y on askeleen lopussa, ero on pieni)
+      var Lw = HULL.wetSlow + (HULL.wetPlane - HULL.wetSlow) * pl, c0 = HULL.planeAft * pl, B2 = HULL.B / 2;
+      function at(a, b) { return eta(S.x + fx * a + rx * b, S.y + fy * a + ry * b, t); }
+      var eb = at(c0 + Lw / 2, 0), em = at(c0, 0), es = at(c0 - Lw / 2, 0), ep = at(c0, -B2), esb = at(c0, B2);
+      var ebp = at(c0 + Lw / 2, -B2), ebs = at(c0 + Lw / 2, B2), esp = at(c0 - Lw / 2, -B2), ess = at(c0 - Lw / 2, B2);
+      var zs = (eb + 2 * em + es + ep + esb) / 6, ps = Math.atan2(eb - es, Lw), rs = Math.atan2(ep - esb, HULL.B) * (HULL.rollGain[0] + (HULL.rollGain[1] - HULL.rollGain[0]) * pl);
+      var zsv = st.zs0 == null ? 0 : (zs - st.zs0) / h, psv = st.ps0 == null ? 0 : (ps - st.ps0) / h; st.zs0 = zs; st.ps0 = ps;
+      function mix(arr) { return arr[0] + (arr[1] - arr[0]) * pl; }
+      // nousu: vesi voi vain kannatella, ei vetää alas nopeammin kuin painovoima (liu'ussa isosta aallosta ilmaan)
+      var wz = mix(HULL.heaveW), zz = mix(HULL.heaveZ), az = wz * wz * (zs - st.z) + 2 * zz * wz * (zsv - st.zv);
+      var airborne = az < -G; if (airborne) az = -G;
+      if (st.air > 0.15 && !airborne && az > 1.2 * G) { st.slam = Math.min(4, az / G); st.slamT = t; }   // isku ilmalennon jälkeen
+      st.air = airborne ? st.air + h : 0;
+      st.zv += az * h; st.z += st.zv * h; st.az = az;
+      // nyökkäys (keula ylös positiivinen), liukukynnyksellä nyökkäys suurimmillaan
+      var wp = mix(HULL.pitchW), zp = mix(HULL.pitchZ) * (1 - 0.35 * hump), ap = airborne ? HULL.airPitch : wp * wp * (ps * (1 + 0.6 * hump) - st.p) + 2 * zp * wp * (psv - st.pv);
+      st.pv += ap * h; st.p += st.pv * h;
+      // kallistus (oikea kylki alas positiivinen)
+      var wr = mix(HULL.rollW), zr = mix(HULL.rollZ), ar = wr * wr * (rs - st.r) - 2 * zr * wr * st.rv;
+      st.rv += ar * h; st.r += st.rv * h;
+      // voimat liikemallille: aallon rinteen työntö (alamäki eteenpäin) ja lisävastus vasta-aallokossa, kääntävä vaikutus myötä- ja viistoaallokossa
+      var rel = Math.cos(st.to - hd), head = (1 - rel) / 2, m = 15500;
+      var surge = -m * G * Math.sin(ps) * mix(HULL.surge);
+      var addR = 0.5 * 1000 * G * Math.pow(st.hs / 2, 2) * HULL.B * mix(HULL.addRes) * head * (S.v > 0 ? 1 : 0) + (t - st.slamT < 0.3 ? st.slam * 2500 : 0);
+      S.waveFx = surge - addR;
+      S.waveYaw = ((ebp - ebs) - (esp - ess)) / HULL.B * mix(HULL.yaw) * (1 - head);
+      var slamNow = t - st.slamT < 0.4 ? st.slam * (1 - (t - st.slamT) / 0.4) : 0;
+      S.wave = { z: st.z, pitch: st.p / RAD, roll: st.r / RAD, az: st.az, slam: slamNow, air: st.air > 0, hs: st.hs, planing: pl };
+      return S.wave;
+    }
+    return { step: step, eta: eta, state: function () { return st; } };
+  }
+
+  var api = { waveHs: waveHs, waveTp: waveTp, waveLength: waveLength, create: create, createMeri: createMeri, spectrum: spectrum, HULL: HULL, SETTINGS: SET };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Aallot = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -14395,6 +14488,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setWeather(G.weather, G.moon); G.view.setSimTime(G.S.clockMs);
     L.setWind(G.S, G.windFrom, G.windSpeed); G.view.setWind(G.windFrom, G.windSpeed); G.S.weather = G.weather;
+    G.meri = root.Aallot ? root.Aallot.createMeri() : null;
     G.nightG3 = false; G.nightOff = false;
     G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; G.spotSel = null; if (G.valot) { ['helm', 'nav'].forEach(function (id) { G.valot.asetaHeitin(id, false); G.valot.asetaSuunta(id, 0); }); spotUi(); }
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
@@ -14825,7 +14919,19 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     if (S.speedFactor > 0 && !G.frozen) {
       G.acc += Math.min(realDt, 0.25) * S.speedFactor;
       var guard = 0;
-      while (G.acc >= 0.1 && !G.frozen && guard++ < 400) { var pp = { x: S.x, y: S.y, hdg: S.hdg }; L.advance(S, 0.1); G.acc -= 0.1; tick(0.1, pp); }
+      while (G.acc >= 0.1 && !G.frozen && guard++ < 400) { var pp = { x: S.x, y: S.y, hdg: S.hdg }; L.advance(S, 0.1); G.acc -= 0.1; seaStep(0.1); tick(0.1, pp); }
+    }
+  }
+
+  // Merenkäynti (aallot.js): aluksen vaste aallokkoon ja voimat liikemallille. Iskut lasketaan purkua varten.
+  function seaStep(dt) {
+    var S = G.S; if (!G.meri || !S) return;
+    var w = G.meri.step(S, G.aallot ? G.aallot.sea() : null, dt);
+    if (G.rec && w) {
+      var st = G.rec.sea || (G.rec.sea = { hsMax: 0, slams: 0, slamMax: 0, inSlam: false });
+      st.hsMax = Math.max(st.hsMax, w.hs);
+      if (w.slam > 1.5 && !st.inSlam) { st.slams++; st.inSlam = true; } else if (w.slam === 0) st.inSlam = false;
+      st.slamMax = Math.max(st.slamMax, w.slam);
     }
   }
 
@@ -14986,7 +15092,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     setText($('nowHdg'), pad3(hdgT) + '°'); setText($('nowSpd'), fnum(S.v / KN, 1) + ' kn');   // negatiivinen = perä edellä
     setText($('v3hud'), pad3(hdgT) + '° · ' + fnum(S.v / KN, 1) + ' kn');
     var nw = $('nowWind');
-    if (S.windSpeed > 0) { var aw = L.apparentWind(S); nw.hidden = false; setText(nw, 'Tuuli ' + pad3(S.windFrom) + '° ' + Math.round(S.windSpeed) + ' m/s, suht. ' + pad3(Math.round(aw.rel) % 360) + '° ' + Math.round(aw.app) + ' m/s'); }
+    if (S.windSpeed > 0) { var aw = L.apparentWind(S); nw.hidden = false; setText(nw, 'Tuuli ' + pad3(S.windFrom) + '° ' + Math.round(S.windSpeed) + ' m/s, suht. ' + pad3(Math.round(aw.rel) % 360) + '° ' + Math.round(aw.app) + ' m/s' + (S.wave && S.wave.hs >= 0.05 ? ', aallokko ' + fnum(S.wave.hs, 1) + ' m' : '')); }
     else if (!nw.hidden) nw.hidden = true;
     Array.prototype.forEach.call(doc.querySelectorAll('.cb.sp'), function (b) { b.classList.toggle('cur', Number(b.getAttribute('data-kn')) === S.orderSpeedKn); });
     $('gazeBtn').hidden = !(G.layout.wide || G.main === '3d') || Math.abs(G.view.getGaze()) < 1;
@@ -15038,7 +15144,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
     }
     if (G.mode === 'run') {
       if (G.gazeKey) v.setGaze(v.getGaze() + G.gazeKey * 90 * dtReal * v.gazeSens());
-      if (isNav()) crewApply(dtReal); else stepSim(dtReal);
+      if (isNav()) { crewApply(dtReal); if (!G.frozen && !G.paused) seaStep(Math.min(0.25, dtReal) * (G.S.speedFactor || 1)); } else stepSim(dtReal);
       maybeLoadAids(); maybeLoadBoats(); if (!isNav()) maybeRebase();
       if (isHelm()) crewSendState(now); else if (isNav()) crewSendInstr(now);
     }
@@ -15376,6 +15482,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       '<tr><td>Kokonaisaika</td><td class="n" id="dbTime">' + H.mmss(an.timeSec) + '</td></tr>' +
       '<tr><td>Ajettu matka</td><td class="n" id="dbDist">' + fnum(an.distM / 1852, 2) + ' mpk' + (rt ? ' (reitti ' + fnum(rt.total / 1852, 2) + ' mpk)' : '') + '</td></tr>' +
       '<tr><td>Keskinopeus</td><td class="n">' + fnum(an.avgKn, 1) + ' kn</td></tr>' +
+      (G.rec && G.rec.sea && G.rec.sea.hsMax >= 0.05 ? '<tr><td>Aallokko</td><td class="n">' + 'enintään ' + fnum(G.rec.sea.hsMax, 1) + ' m' + (G.rec.sea.slams ? ', aaltoiskuja ' + G.rec.sea.slams + ' (suurin ' + fnum(G.rec.sea.slamMax, 1) + ' g)' : '') + '</td></tr>' : '') +
       '<tr><td>Tuuli' + (G.wxLive ? ' (nykyinen sää)' : '') + '</td><td class="n">' + (G.S.windSpeed > 0 ? pad3(G.S.windFrom) + '° ' + fnum(G.S.windSpeed, 1) + ' m/s' : 'tyyni') + '</td></tr>' +
       (free ? '<tr><td>Suurin nopeus</td><td class="n">' + fnum(an.maxKn, 1) + ' kn</td></tr>' : '') +
       '<tr><td>Pohjakosketukset</td><td class="n">' + (an.groundings.length ? an.groundings.length + ' kpl' : 'ei yhtään') + '</td></tr>' +
