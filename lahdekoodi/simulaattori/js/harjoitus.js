@@ -415,6 +415,8 @@
     if (c.kind === 'straight') return 'Suoraan';
     if (c.kind === 'kosketus' || c.kind === 'tormays') return collisionText(c.kind, c.value);
     if (c.kind === 'crash') return 'Crash stop';
+    if (c.kind === 'vapaa') return 'Jetit vapaalle';
+    if (c.kind === 'kytke') return 'Jetit kytketty';
     if (c.kind === 'plotter') return c.value ? 'Plotteri päälle' : 'Plotteri pois';
     return c.kind;
   }

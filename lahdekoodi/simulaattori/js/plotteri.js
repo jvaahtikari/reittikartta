@@ -326,7 +326,7 @@
       var now = Date.now(); if (!force && now - panelT < 200) return; panelT = now;
       // SARNav: SOG kokonaislukuna, COG viivoina, kun alus on paikallaan
       var kn = S.sog / 0.514444;
-      setPanelText('hdg', pad3(S.hdgTrue)); setPanelText('sog', String(Math.round(kn))); setPanelText('cog', kn >= 0.5 ? pad3(S.cogTrue) : '---');
+      setPanelText('hdg', pad3(S.hdgTrue)); setPanelText('sog', kn < 9.95 ? kn.toFixed(1) : String(Math.round(kn))); setPanelText('cog', kn >= 0.15 ? pad3(S.cogTrue) : '---');   // alle 10 kn yhdellä desimaalilla, jotta ajelehtiminen näkyy
       var ll = P.worldToLonLat(S.x, S.y); setPanelText('lat', ddm(ll.lat, true)); setPanelText('lon', ddm(ll.lon, false));
       // Työkalun kenttä: hiiren kursori (suuntima ja etäisyys omasta aluksesta) tai EBL/VRM-piste, kun EBL/VRM on päällä
       var tl = panel.querySelector('.sn-tool'), tb = null, td = 0, tp = null, hs = harp.on ? harpStats() : null;

@@ -31,8 +31,13 @@
  * ja tehollinen keulakerroin 0,2 on kalibrointivalinta: vastatuuli 10 m/s hidastaa 20 kn:n ajoa alle 1 kn. Sivuttaisnopeus vs (sorto) hidastuu
  * veden sivuvastukseen (neliöllinen osa) ja nostovoimaan, joka kasvaa vauhdin mukana, joten sorto on selvä paikallaan (noin 0,9 kn 10 m/s
  * sivutuulessa) ja pieni ajossa (alle 1,5° 20 kn:ssa). Kääntömomentti: tuulen vaikutuskeskus on veden sivuvastuksen keskiön edessä (ohjaamo
- * ja keula korkealla), joten hitaalla nopeudella keula kääntyy tuulesta poispäin. Vauhdissa suihkujen ja rungon suuntavakaus voittaa.
+ * ja keula korkealla), joten hitaalla nopeudella keula kääntyy tuulesta poispäin, ja ajelehtiva alus asettuu kylki tuuleen (30.10.2026). Vauhdissa suihkujen ja rungon suuntavakaus voittaa.
  * Momentti lisätään kääntymisnopeuden tavoitteeseen, ja ruorimiehen P-säädin korjaa sen ruorilla. Tyynellä (tuuli 0) malli on ennallaan.
+ *
+ * Jetit kytketty tai vapaalla (30.10.2026): kytkettynä ruorimies pitää nopeuskäskyllä 0 aluksen paikallaan ja keulan käsketyssä suunnassa
+ * (paikka lukitaan, kun alus on pysähtynyt; pitkittäin vivulla ja sivuttain kahden suihkun sivuttaisvoimalla, enintään holdMaxFyN). Vapaalla
+ * suihkut eivät työnnä eivätkä ohjaa, joten tuuli ja aallokko kuljettavat ja kääntävät alusta vapaasti. Mikä tahansa nopeus- tai suuntakäsky
+ * kytkee jetit. Tyynellä pysähtyneen aluksen paikka ei muutu, joten paikallaan pito ei muuta tyynen ajon tuloksia.
  *
  * Moduuli toimii selaimessa (window.Liike) ja Nodessa (module.exports). */
 (function (root) {
@@ -65,7 +70,7 @@
     rudderNormalDeg: 15, rudderGentleDeg: 7,   // ruorimiehen tavallisen ja loivan käännöksen ruorikulma
     hdgKp: 1.2, hdgKd: 1.0,               // suunnan P-säätö: ruorikulma = Kp * virhe - Kd * kääntymisnopeus (aste, aste/s)
     hdgDeadDeg: 0.5,
-    hdgKi: 0.25, hdgIMax: 40,             // tuulessa: suuntavirheen integraali (aste x s) ruorikulmaan, enimmäisarvo
+    hdgKi: 0.25, hdgIMax: 120,             // tuulessa: suuntavirheen integraali (aste x s) ruorikulmaan, enimmäisarvo
     leverKpPerKn: 0.04,                   // vivun lisäys nopeusvirhettä kohti (liukukynnyksen yli hän antaa enemmän)
     leverKiPerKnSec: 0.006,               // vivun hidas korjaus nopeusvirheen integraalista (ruorimies hakee oikean asennon)
     leverGuessPerKn: 1 / 35,              // ruorimiehen ensiarvaus vivun asennosta käsketyllä nopeudella (lineaarinen, 28 kn = 80 %)
@@ -88,11 +93,14 @@
     airRho: 1.225, waterRho: 1000,
     windSideAreaM2: 25, windFrontAreaM2: 12,   // tuulipinta-alat (arvio piirustuksista)
     windCy: 1.0, windCx: 0.2,                 // sivuttainen kerroin ja tehollinen keulakerroin (kalibroitu, ks. otsikko)
-    latDragCd: 1.2, latAreaM2: 11.0,          // veden sivuvastus: kerroin ja ala (12,25 m x 0,9 m)
+    latDragCd: 1.0, latAreaM2: 7.0,           // veden sivuvastus: kerroin ja ala (V-pohjan upotettu sivuprofiili noin 7 m², suihkuveneessä ei köliä eikä peräsintä, 30.10.2026: aiempi 12,25 x 0,9 m liioitteli)
     latLiftNs2: 1200,                         // nostovoiman vaimennus N / (m/s)² (vauhti x sivunopeus)
     latMassFactor: 1.4,                       // sivuttaisliikkeen lisätty massa
     windYawRadPerN: 4.5e-5,                   // tuulen kääntövaikutus paikallaan (rad/s newtonia kohti), 10 m/s sivutuulessa noin 4 °/s
-    windYawFadeKn: 5                          // kääntövaikutus vaimenee nopeuden mukana: 1 / (1 + (kn / 5)²)
+    windYawFadeKn: 5,                         // kääntövaikutus vaimenee nopeuden mukana: 1 / (1 + (kn / 5)²)
+    // paikallaan pito (jetit kytketty, nopeuskäsky 0): lukitus, kun nopeus alle holdLockMs, pitkittäin vipu (PD), sivuttain suihkujen voima (PID)
+    holdLockMs: 0.03, holdLockMovingMs: 0.15, holdLeverKp: 0.012, holdLeverKd: 0.10, holdLeverMax: 0.2,
+    holdFyKp: 450, holdFyKd: 3500, holdFyKi: 30, holdMaxFyN: 4500
   };
 
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -157,6 +165,8 @@
       hdg: hdg,                              // ruutusuunta, aste (tosisuunta = ruutusuunta + conv)
       conv: conv,                            // meridiaanikonvergenssi (aste), sovellus päivittää sijainnin mukaan
       v: init.v || 0,                        // m/s
+      engaged: true,                         // jetit kytketty (false = vapaalla: ei työntöä eikä ohjausta)
+      hold: null, holdI: 0, holdFy: 0,       // paikallaan pidon lukituspiste {x, y}, sivuttaissäädön integraali ja sivuvoima (N)
       vs: 0,                                 // sivuttaisnopeus veden suhteen (sorto), m/s, positiivinen oikealle
       windFrom: init.windFrom || 0, windSpeed: init.windSpeed || 0,   // todellinen tuuli: tosisuunta, josta tuulee (aste) ja nopeus (m/s)
       // navigoijan käskyt
@@ -194,6 +204,13 @@
     else s.pending.push({ at: s.t + d, kind: kind, value: value, gentle: gentle });
   }
   function apply(s, o) {
+    if (o.kind === 'engage') {
+      s.engaged = !!o.value; s.hold = null; s.holdI = 0; s.holdFy = 0;
+      if (!s.engaged) { s.hmSpeedKn = 0; s.leverTrim = 0; s.hmStern = null; }
+      else if (s.hmSpeedKn === 0) s.hold = { x: s.x, y: s.y };   // kytkettäessä ruorimies pysäyttää ajelehtimisen ja pitää paikan, johon alus on ajautunut
+      return;
+    }
+    if (!s.engaged && o.kind !== 'gentle') s.engaged = true;   // käsky kytkee jetit
     if (o.kind === 'heading') { s.hmHdg = o.value; s.hmGentle = !!o.gentle; }
     else if (o.kind === 'speed') { s.hmSpeedKn = o.value; s.leverTrim = o.value < 0 ? leverForSpeed(o.value * KN) : Math.max(0, o.value) * SETTINGS.leverGuessPerKn; }
     else if (o.kind === 'stern') { s.hmStern = o.value; }
@@ -214,6 +231,14 @@
     var st = long ? SETTINGS.headingStepLongDeg : SETTINGS.headingStepDeg;
     orderHeading(s, s.orderHdg + dir * st);
   }
+  // Jetit vapaalle (true) tai kytketyksi (false). Vapaalle mennessä nopeuskäsky nollautuu. Ruorimies toteuttaa viiveellä.
+  function setFree(s, free) {
+    free = !!free; if (free === !s.engaged && !s.pending.some(function (p) { return p.kind === 'engage'; })) return false;
+    if (free) { s.orderSpeedKn = 0; s.sternTurn = null; s.gentleNext = false; }
+    logCmd(s, free ? 'vapaa' : 'kytke', free ? 1 : 0); queue(s, 'engage', !free, false);
+    return true;
+  }
+  function isFree(s) { return !s.engaged; }
   // Loiva käännös: merkitsee seuraavan suuntakäskyn loivaksi (kytkin)
   function toggleGentle(s) {
     s.gentleNext = !s.gentleNext;
@@ -249,7 +274,7 @@
   // Crash stop: heti, ei viivettä. Täysi peruutusvipu, kunnes alus on pysähtynyt, ja nopeuskäsky nollataan.
   function crashStop(s) {
     if (s.v > SETTINGS.crashEndMs) {
-      s.crashCmd = true; s.pending = s.pending.filter(function (p) { return p.kind !== 'speed'; });
+      s.crashCmd = true; s.engaged = true; s.pending = s.pending.filter(function (p) { return p.kind !== 'speed' && p.kind !== 'engage'; });
       s.orderSpeedKn = 0; s.hmSpeedKn = 0; logCmd(s, 'crash', 1);
     }
   }
@@ -257,7 +282,7 @@
   // Pysäytys esteeseen osuttaessa (laituri, kivi, silta): nopeus, kierto ja vipu nollataan, nopeuskäsky nollataan eikä ruorimies yritä ajaa uudelleen esteeseen
   // (käskyä ei kirjata komentolokiin, esteeseen osuminen kirjataan erikseen). Suunta pidetään siinä, mihin alus jäi, ja perän käsky päättyy.
   function halt(s) {
-    s.v = 0; s.vs = 0; s.waveFx = 0; s.waveYaw = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
+    s.v = 0; s.vs = 0; s.waveFx = 0; s.waveYaw = 0; s.rate = 0; s.lever = 0; s.hold = null; s.holdI = 0; s.holdFy = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
     s.crashCmd = false; s.crashActive = false;
     s.pending = s.pending.filter(function (p) { return p.kind === 'gentle'; });
     s.orderSpeedKn = 0; s.hmSpeedKn = 0; s.sternTurn = null; s.hmStern = null; s.gentleNext = false; s.hmGentle = false;
@@ -274,7 +299,7 @@
       var dir = s.hmStern === 'vasen' ? 1 : -1;
       return clamp(sg * dir * S.sternTurnDeg / S.rudderMaxDeg, -1, 1);
     }
-    var e = wrap180(s.hmHdg - trueHdg(s)), lim = s.hmGentle ? S.rudderGentleDeg : S.rudderNormalDeg;
+    var e = wrap180(s.hmHdg - trueHdg(s)), lim = s.hold ? S.rudderMaxDeg : s.hmGentle ? S.rudderGentleDeg : S.rudderNormalDeg;   // paikallaan pidossa täysi ruori
     if (Math.abs(e) < S.hdgDeadDeg && Math.abs(s.rate) < 0.3) {
       if (s.hmGentle) s.hmGentle = false;           // käännös valmis, loiva-merkintä kuluu
       return 0;
@@ -313,10 +338,22 @@
   function stepOnce(s, dt) {
     var S = SETTINGS;
     while (s.pending.length && s.pending[0].at <= s.t) apply(s, s.pending.shift());
-    if (s.helmsman) {
+    if (!s.engaged && !s.crashCmd) { s.rudderCmd = 0; s.leverCmd = 0; s.hold = null; s.holdFy = 0; }   // vapaalla: ei työntöä eikä ohjausta
+    else if (s.helmsman) {
       s._dt = dt;
       s.rudderCmd = helmRudder(s);
       var lt = helmLever(s, dt), maxd = S.leverRatePerSec * dt;
+      // paikallaan pito: nopeuskäsky 0, ei peruutuksen perän käskyä eikä crash stopia
+      if (s.hmSpeedKn === 0 && !s.hmStern && !s.crashActive) {
+        var moved = s.windSpeed > 0 || s.vs || s.waveFx;   // tuulessa ja aallokossa lukitus jo hitaassa vauhdissa (sivusorto ei muuten anna aluksen pysähtyä)
+        if (!s.hold && (Math.hypot(s.v, s.vs || 0) < S.holdLockMs || (moved && Math.abs(s.v) < S.holdLockMovingMs))) { s.hold = { x: s.x, y: s.y }; s.holdI = 0; }
+        if (s.hold) {
+          var hh = s.hdg * RAD, dx = s.hold.x - s.x, dy = s.hold.y - s.y, ef = dx * Math.sin(hh) + dy * Math.cos(hh), er = dx * Math.cos(hh) - dy * Math.sin(hh);
+          lt = clamp(S.holdLeverKp * ef - S.holdLeverKd * s.v, -S.holdLeverMax, S.holdLeverMax);
+          s.holdI = clamp(s.holdI + er * dt, -S.holdMaxFyN / S.holdFyKi, S.holdMaxFyN / S.holdFyKi);
+          s.holdFy = clamp(S.holdFyKp * er - S.holdFyKd * (s.vs || 0) + S.holdFyKi * s.holdI, -S.holdMaxFyN, S.holdMaxFyN);
+        }
+      } else { s.hold = null; s.holdI = 0; s.holdFy = 0; }
       s.leverCmd += clamp(lt - s.leverCmd, -maxd, maxd);
     }
     // ruori
@@ -325,12 +362,12 @@
     if (s.crashCmd && !s.crashActive) s.crashActive = true;
     var lv = s.crashActive ? S.crashLever : s.leverCmd;
     s.lever = lv;
-    var windOn = s.windSpeed > 0 || s.vs !== 0, wf = windOn ? windForces(s) : null;
+    var windOn = s.windSpeed > 0 || s.vs !== 0 || s.holdFy !== 0, wf = windOn ? windForces(s) : null;
     var a = (thrust(lv, s.v) - resistance(s.v) + (wf ? wf.fx : 0) + (s.waveFx || 0)) / S.massKg, v0 = s.v;   // waveFx: aallokon lisävastus ja rinteen työntö (aallot.js)
     s.v += a * dt;
     if (wf) {   // sorto: sivuvoima vastaan veden sivuvastus ja nostovoima
       var dl = 0.5 * S.waterRho * S.latDragCd * S.latAreaM2 * s.vs * Math.abs(s.vs) + S.latLiftNs2 * Math.abs(s.v) * s.vs;
-      s.vs += (wf.fy - dl) / (S.massKg * S.latMassFactor) * dt;
+      s.vs += (wf.fy + (s.holdFy || 0) - dl) / (S.massKg * S.latMassFactor) * dt;
       if (!(s.windSpeed > 0) && Math.abs(s.vs) < 0.005) s.vs = 0;
     }
     if (s.v < -S.reverseMaxKn * KN) s.v = -S.reverseMaxKn * KN;   // peruutusnopeuden rajoitin: täydelläkään peruutusvivulla ei yli reverseMaxKn
@@ -344,7 +381,9 @@
     // suunta
     var wTarget = s.rudder * maxTurnRate(s.v) * steerSign(s);   // rad/s
     if (s.waveYaw) wTarget += s.waveYaw;   // myötä- ja viistoaallokon kääntävä vaikutus (aallot.js)
-    if (wf) { var kn0 = Math.abs(s.v) / KN; wTarget += S.windYawRadPerN * wf.fy / (1 + Math.pow(kn0 / S.windYawFadeKn, 2)); }   // keula kääntyy tuulesta poispäin (sivuvoiman suuntaan)
+    // tuulen kääntövaikutus (30.10.2026): ajelehtiva alus asettuu kylki tuuleen (tasapaino, kun näennäinen tuuli tulee sivulta). Vasta- ja myötätuulesta keula
+    // kääntyy kohti sivutuulta. Voimakkuus näennäisen tuulen paineesta, vaimenee vauhdin mukana.
+    if (wf) { var kn0 = Math.abs(s.v) / KN, qa = 0.5 * S.airRho * S.windCy * S.windSideAreaM2 * wf.app * wf.app; wTarget += -S.windYawRadPerN * qa * Math.sin(2 * wf.rel * RAD) / (1 + Math.pow(kn0 / S.windYawFadeKn, 2)); }
     var w = s.rate * RAD;
     w += (wTarget - w) * (1 - Math.exp(-dt / S.yawLagSec));
     s.rate = w / RAD;
@@ -396,7 +435,7 @@
 
   var api = {
     KN: KN, SETTINGS: SETTINGS, create: create, stepOnce: stepOnce, advance: advance, stepFrame: stepFrame,
-    orderHeading: orderHeading, stepHeadingOrder: stepHeadingOrder, toggleGentle: toggleGentle, orderSpeed: orderSpeed,
+    orderHeading: orderHeading, setFree: setFree, isFree: isFree, stepHeadingOrder: stepHeadingOrder, toggleGentle: toggleGentle, orderSpeed: orderSpeed,
     stepSpeedOrder: stepSpeedOrder, orderReverse: orderReverse, orderStern: orderStern, stepSternOrder: stepSternOrder, orderStraight: orderStraight, crashStop: crashStop, halt: halt, trueHdg: trueHdg, wrap180: wrap180,
     steerSign: steerSign, cogTrue: cogTrue, cogGrid: cogGrid, sog: sog, windForces: windForces, apparentWind: apparentWind, setWind: setWind, sternText: sternText, orderHeadingText: orderHeadingText,
     resistance: resistance, thrust: thrust, leverForSpeed: leverForSpeed, crashStopDistance: crashStopDistance,
