@@ -1394,6 +1394,8 @@
       // tuuli ja sää aluksen tilasta näkymään (nykyinen sää päivittyy ajon aikana, miehistötilassa navigoija saa ne ruorimiehen tilasta)
       var vw = v.getWind(); if (vw.fromDeg !== S.windFrom || vw.speed !== S.windSpeed) v.setWind(S.windFrom, S.windSpeed);
       if (S.weather && v.weather().weather !== S.weather) v.setWeather(S.weather);
+      // tutkan merivälke kelin mukaan: aallonkorkeus aluksen kohdalla ja tuuli
+      if (G.radar && G.radar.asetaMeri) { var ls = G.aallot ? G.aallot.sea() : null; G.radar.asetaMeri({ hs: ls ? ls.hs : 0, tuuliMista: S.windFrom || 0, tuuliMs: S.windSpeed || 0 }); }
       liveRefresh();
     }
     if (G.valot && G.mode === 'run') G.valot.paivita(S, (S.clockMs / 1000) % 86400, G.night.dark);
@@ -1508,7 +1510,7 @@
   function crewSendInstr(now) {
     var c = G.crew; if (!c.link || !c.link.isReady() || now - c.lastInstrT < 300) return; c.lastInstrT = now;
     var r = G.radar ? G.radar.lue() : null;
-    var m = { pl: G.pl.mirrorState(), ra: r ? { a: r.alue, e: r.ebl, v: r.vrm, o: r.offset, u: r.suuntaYlos, ev: r.ev } : null, i: G.instr, sp: ownSpotMsg() };
+    var m = { pl: G.pl.mirrorState(), ra: r ? { a: r.alue, e: r.ebl, v: r.vrm, o: r.offset, u: r.suuntaYlos, ev: r.ev, sea: r.sea } : null, i: G.instr, sp: ownSpotMsg() };
     var js = JSON.stringify(m); if (js === c.sentInstr && now - c.lastInstrFull < 3000) return;
     c.sentInstr = js; c.lastInstrFull = now; c.link.send('mittarit', m);
   }
@@ -1538,6 +1540,7 @@
       if (r.suuntaYlos !== m.ra.u) G.radar.asetaSuuntaYlos(m.ra.u);
       if (r.offset !== m.ra.o) G.radar.asetaOffset(m.ra.o);
       if (r.ev !== m.ra.ev) G.radar.asetaEV(m.ra.ev);
+      if (m.ra.sea != null && r.sea !== m.ra.sea && G.radar.asetaSea) G.radar.asetaSea(m.ra.sea);
       if (Math.abs(r.ebl - m.ra.e) > 0.05) G.radar.asetaEBL(m.ra.e);
       if (Math.abs(r.vrm - m.ra.v) > 1e-4) G.radar.asetaVRM(m.ra.v);
     }
@@ -1625,6 +1628,8 @@
     if (c.kind === 'tutkasuunta') return c.value ? 'Tutka: suunta ylös (H UP)' : 'Tutka: pohjoinen ylös (N UP)';
     if (c.kind === 'tutkaev') return c.value ? 'Tutkan EBL ja VRM päälle' : 'Tutkan EBL ja VRM pois';
     if (c.kind === 'kiikari') return c.value.on ? 'Kiikari päälle, suunta ' + pad3(c.value.suunta) + '°' : 'Kiikari pois, suunta ' + pad3(c.value.suunta) + '°';
+    if (c.kind === 'sea') return 'Tutka SEA ' + (c.value === -1 ? 'AUTO' : c.value === 0 ? 'pois' : c.value);
+    if (c.kind === 'saa') return 'Sää päivittyi: ' + c.value;
     if (c.kind === 'nakyvyys') return c.value > 0 ? 'Näkyvyys (Google 3D): ' + c.value + ' km' : 'Näkyvyys (Google 3D): ei sumukerrosta';
     if (c.kind === 'google3d') return c.value ? 'Ulkonäkymä: Google 3D (testi)' : 'Ulkonäkymä: oma';
     if (c.kind === 'googlesatama') return c.value ? 'Satamat (Google 3D): Googlen omat' : 'Satamat (Google 3D): omat veneet';

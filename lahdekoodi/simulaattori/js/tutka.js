@@ -393,6 +393,8 @@
     var C = {
       alueIdx: 5, suuntaYlos: opt.suuntaYlos !== false, ebl: 0, vrm: 0.5, sade: 0, sadeSuodatin: 0, jalkiIdx: 0, vahvistus: 1, ev: opt.eblVrm !== false, offset: false,
       hairio: { kohina: 0, suuntavirhe: 0, heikko: 0, pois: false }, antenniM: opt.antenniM || M.antenniM,
+      meri: { hs: 0, tuuliMista: 0, tuuliMs: 0 },   // keli (30.10.2026): merkitsevä aallonkorkeus (m) ja tuuli, simulaattori antaa asetaMeri-kutsulla
+      sea: 0,                                     // merivälkkeen vaimennus (SEA, STC): 0 = pois, 1-3 = käsin, -1 = AUTO
       viritys: opt.viritys === 'huono' ? 'huono' : 'hyva'
     };
     if (opt.alue) C.alueIdx = nearestRange(opt.alue);
@@ -724,7 +726,8 @@
       var t = a.tyyppi || '';
       if (/loisto/i.test(t)) return { hs: a.valoKorkeus || 8, v: 0.88, maxR: 11000, p0: 1.0, kiinteä: true };
       if (/kummeli/i.test(t)) return { hs: 3, v: 0.62, maxR: 5200, p0: 1.0, kiinteä: true };
-      if (/viitta/i.test(t)) return { hs: 1.2, v: 0.32, maxR: 2600, p0: 0.95, kiinteä: false };
+      if (/viitta/i.test(t)) return { hs: 1.2, v: 0.5, maxR: 2600, p0: 0.98, kiinteä: false, kelluva: true };     // 30.10.2026: tyynellä selvä ja vakaa kaiku
+      if (/poiju/i.test(t)) return { hs: 2.6, v: 0.62, maxR: 4000, p0: 0.98, kiinteä: false, kelluva: true };   // pilaripoiju (tutkaheijastin)
       return { hs: 2.5, v: 0.5, maxR: 3800, p0: 0.95, kiinteä: a.alityyppi === 'KIINTEÄ' };
     }
     function kasitteleAidsTile(z, tx, ty, layer) {
@@ -960,16 +963,32 @@
     var rng = mulberry(12345);
     // Vastaanottimen kohina: käyttäjän asettama (asetaHairio) tai viritystilan oma, kumpi on suurempi
     function kohinaTeho() { var v = (C.viritys === 'huono' ? M.huono : M.hyva).kohinaViritys; return C.hairio.kohina > v ? C.hairio.kohina : v; }
+    // merivälkkeen voimakkuus A (0 tyyni ... noin 1,5 kova keli) ja ulottuvuus Rc (m) aallonkorkeudesta
+    function meriKaiku() { var hs = C.meri.hs || 0; return { A: Math.min(1.5, hs / 0.5), Rc: 70 + 430 * Math.min(1, hs / 0.8) }; }   // ulottuvuus: Hs 0,3 m noin 230 m, Hs 0,8 m noin 500 m (tihein lähellä)
+    // SEA (STC): lähikaikujen vaimennus etäisyyden mukaan. Käsin tasot 1-3, AUTO sovittaa vaimennuksen merivälkkeen voimakkuuteen ja ulottuvuuteen.
+    function stcTaso() {
+      if (C.sea === -1) { var mk = meriKaiku(); return { L: Math.min(0.92, mk.A * 0.7), R: mk.Rc * 0.9 }; }
+      return [{ L: 0, R: 1 }, { L: 0.45, R: 350 }, { L: 0.7, R: 650 }, { L: 0.88, R: 1000 }][C.sea] || { L: 0, R: 1 };
+    }
+    function lisaaStc() {
+      var t = stcTaso(); if (t.L <= 0) return;
+      for (var i = 0; i < NB; i++) { var s = (i + 1) * step; if (s > 4 * t.R) break; var f = 1 - t.L * Math.exp(-s / t.R); Eb[i] = Eb[i] * f; if (Eb[i] < 0.07) Eb[i] = 0; }
+    }
     function lisaaHairio(th, aikaS, revNo) {
       var i, s;
-      // sea clutter: lähellä oleva veden kohina, sisävesillä vähäinen. Pisteitä arvotaan eksponenttijakaumalla (keskimäärin 0,9 sädettä kohden).
-      var rs = mulberry((Math.round(th * 4) * 7919 + revNo * 104729) | 0), nsp = rs() < 0.9 ? 1 : 0;
-      if (rs() < 0.25) nsp++;
-      for (var j = 0; j < nsp; j++) {
-        s = -90 * Math.log(1 - rs() * 0.95);
-        if (s < M.minEtaisyysM || s > 300) continue;
-        i = Math.floor(s / step); if (i >= NB || Fb[i]) continue;
-        var v = 0.10 + 0.14 * rs(); if (v > Eb[i]) Eb[i] = v;
+      // merivälke (sea clutter, 30.10.2026): aallokon harjoista tuleva kaiku lähellä alusta. Voimakkuus ja ulottuvuus kasvavat aallonkorkeuden mukana,
+      // tuulen yläpuolella (aaltojen tulosuunta) välke on selvästi voimakkaampaa kuin alapuolella, ja kuvio vaihtuu kierroksesta toiseen (pilkkumainen).
+      // Tyynellä vain aivan lähellä muutama heikko piste.
+      var rs = mulberry((Math.round(th * 4) * 7919 + revNo * 104729) | 0), mk = meriKaiku();
+      if (mk.A < 0.05) {
+        if (rs() < 0.5) { s = -40 * Math.log(1 - rs() * 0.95); if (s >= M.minEtaisyysM && s < 120) { i = Math.floor(s / step); if (i < NB && !Fb[i]) { var v0 = 0.06 + 0.08 * rs(); if (v0 > Eb[i]) Eb[i] = v0; } } }
+      } else {
+        var dW = (th - C.meri.tuuliMista) * RAD, up = 0.4 + 0.6 * (0.5 + 0.5 * Math.cos(dW)), Aup = mk.A * up, Rc = mk.Rc * (0.7 + 0.5 * up), sMax = Math.min(rangeM, 3.5 * Rc);
+        for (i = Math.floor(M.minEtaisyysM / step); i < NB; i++) {
+          s = (i + 1) * step; if (s > sMax) break; if (Fb[i]) continue;
+          var q = s / Rc, ex = Math.exp(-q * Math.sqrt(q)), pc = Math.min(0.85, Aup * 0.8 * ex);
+          if (rs() < pc) { var vc = (0.18 + 0.62 * rs() * rs()) * Math.min(1.2, Aup) * (0.35 + 0.65 * ex); if (vc > Eb[i]) Eb[i] = vc; }
+        }
       }
       // sadeharso
       var sade = C.sade;
@@ -1002,9 +1021,13 @@
         if (r > cl.maxR) continue;
         var rr = mulberry((parseInt(a.a.numero, 10) || q) * 2654435 + revNo * 40503);
         var PV = C.viritys === 'huono' ? M.huono : M.hyva, kv = PV.kiinteaVaihtelu;
-        var pdet = cl.kiinteä ? (PV.kiintePDet != null ? PV.kiintePDet : cl.p0) : Math.max(0.12, Math.min(cl.p0, 1.25 - r / 2000));
+        // kelluvat merkit: tyynellä havainto lähes varma noin 1,5 km:iin asti ja kaiku tasainen. Aallokossa merkki keinuu ja jää välillä aallon taakse:
+        // havainto harvenee ja kaiku vaihtelee kierroksesta toiseen (Hs 0,6 m: noin puolet kierroksista).
+        var meriH = Math.min(1, (C.meri.hs || 0) / 0.6), pdet, amp;
+        if (cl.kiinteä) pdet = PV.kiintePDet != null ? PV.kiintePDet : cl.p0;
+        else pdet = Math.max(0.1, Math.min(cl.p0, 1.0 - Math.max(0, r - 1500) / (cl.maxR - 1500) * 0.7)) * (1 - 0.5 * meriH);
         if (rr() > pdet) continue;
-        var amp = cl.v * (cl.kiinteä ? (kv[0] + (kv[1] - kv[0]) * rr()) : (0.55 + 0.45 * rr())) * (1 - d / (hw * 1.15));
+        amp = cl.v * (cl.kiinteä ? (kv[0] + (kv[1] - kv[0]) * rr()) : (0.85 + 0.15 * rr()) * (1 - meriH * 0.55 * rr())) * (1 - d / (hw * 1.15));
         // näkyvyys: antennin näkölinja ei saa jäädä esteen taakse
         var bi = Math.min(NB - 1, Math.floor(r / step) - 1); if (bi < 0) continue;
         var Ha = Math.max(cl.hs, Hb[bi]), al = (Ha - C.antenniM) / r - r * K2, ref = Mb[Math.max(0, bi - 3)];
@@ -1076,6 +1099,7 @@
       if (C.hairio.pois) { for (var i = 0; i < NB; i++) Eb[i] = 0; talleta(k, t); return; }
       lisaaHairio(th, aikaS, rev);
       lisaaAidit(k, th, rev);
+      lisaaStc();
       talleta(k, t);
     }
 
@@ -1402,6 +1426,7 @@
       nappi('alue+', 'RANGE +', 'Suurenna alue', function () { asetaAlue(ALUEET[Math.min(ALUEET.length - 1, C.alueIdx + 1)]); });
       nappi('alue-', 'RANGE −', 'Pienennä alue', function () { asetaAlue(ALUEET[Math.max(0, C.alueIdx - 1)]); });
       ['alue+', 'alue-'].forEach(function (id) { var m = id === 'alue+' ? '+' : '\u2212'; napit[id].style.flexDirection = 'column'; napit[id].innerHTML = '<span style="font-size:9px;letter-spacing:.3px">RANGE</span><b style="font-size:17px;line-height:13px;font-weight:700">' + m + '</b>'; });   // RANGE pienellä ja merkki isolla, jotta nappi näkyy yhdellä silmäyksellä
+      nappi('sea', 'SEA', 'Merivälkkeen vaimennus (SEA): pois, 1, 2, 3, AUTO (näppäin S)', function () { var n = C.sea === -1 ? 0 : C.sea === 3 ? -1 : C.sea + 1; asetaSea(n); kirjaa && kirjaa('sea', n); });
       nappi('ev', 'EBL VRM', 'EBL ja VRM päälle tai pois', function () { asetaEV(!C.ev); kirjaa && kirjaa('ev', C.ev ? 1 : 0); });
       nappi('offset', 'OFFSET', 'Offset: oma alus alas, eteenpäin näkyy 1,7-kertainen matka (näppäin O)', function () { asetaOffset(!C.offset); kirjaa && kirjaa('offset', C.offset ? 1 : 0); });
       nappi('meny', '≡', 'Näytä tai piilota tutkan valikko', function () { menyAuki = !menyAuki; paivitaUi(); asetteleUi(); });
@@ -1426,6 +1451,8 @@
       napit['jalki'].textContent = JALJET[C.jalkiIdx] > 0 ? 'TRAIL ' + (JALJET[C.jalkiIdx] >= 60 ? JALJET[C.jalkiIdx] / 60 + ' min' : JALJET[C.jalkiIdx] + ' s') : 'TRAIL';
       napit['jalki'].setAttribute('aria-pressed', JALJET[C.jalkiIdx] > 0 ? 'true' : 'false');
       napit['sade'].setAttribute('aria-pressed', C.sadeSuodatin > 0 ? 'true' : 'false');
+      napit['sea'].innerHTML = '<span style="font-size:9px;letter-spacing:.3px">SEA</span><b style="font-size:13px;line-height:13px;font-weight:700">' + (C.sea === -1 ? 'AUTO' : C.sea === 0 ? 'OFF' : C.sea) + '</b>';
+      napit['sea'].style.flexDirection = 'column'; napit['sea'].setAttribute('aria-pressed', C.sea !== 0 ? 'true' : 'false');
       napit['viritys'].textContent = C.viritys === 'huono' ? 'DETUNED' : 'TUNED';
       napit['viritys'].setAttribute('aria-pressed', C.viritys === 'huono' ? 'true' : 'false');
       napit['ev'].setAttribute('aria-pressed', C.ev ? 'true' : 'false');
@@ -1462,7 +1489,7 @@
       geom.uiSig = sig;
       function put(el, x, y, w) { el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'; el.style.width = (w || BW) + 'px'; el.style.height = BH + 'px'; el.style.visibility = ''; }
       var x0 = 2, x1 = W - BW - 2;
-      put(napit['alue+'], x0, sh.bl - 2 * BH); put(napit['alue-'], x0, sh.bl - BH);
+      put(napit['alue+'], x0, sh.bl - 2 * BH); put(napit['alue-'], x0, sh.bl - BH); put(napit['sea'], x0, sh.bl - 3 * BH - 6);
       put(napit['ev'], x1, H - 2 - 2 * BH); put(napit['offset'], x1, H - 2 - BH);
       put(napit['meny'], x1, sh.tr);
       valikko.forEach(function (e, n) {
@@ -1542,6 +1569,7 @@
       else if (k === '+' || k === '=') asetaAlue(ALUEET[Math.min(ALUEET.length - 1, C.alueIdx + 1)]);
       else if (k === '-' || k === '_') asetaAlue(ALUEET[Math.max(0, C.alueIdx - 1)]);
       else if (k === 'o' || k === 'O') { asetaOffset(!C.offset); kirjaa && kirjaa('offset', C.offset ? 1 : 0); }
+      else if (k === 's' || k === 'S') { napit['sea'] && napit['sea'].click(); }
       else return false;
       return true;
     }
@@ -1594,6 +1622,8 @@
       paivitaMuutos();
       return uusi;
     }
+    function asetaMeri(o) { if (!o) return; if (o.hs != null) C.meri.hs = Math.max(0, Number(o.hs) || 0); if (o.tuuliMista != null) C.meri.tuuliMista = Number(o.tuuliMista) || 0; if (o.tuuliMs != null) C.meri.tuuliMs = Number(o.tuuliMs) || 0; }
+    function asetaSea(v) { v = Number(v); C.sea = v === -1 ? -1 : Math.max(0, Math.min(3, v | 0)); paivitaUi(); paivitaMuutos(); }
     function asetaVahvistus(v) { C.vahvistus = Math.max(0.2, Math.min(1.5, Number(v) || 1)); }
     // Häiriöt vaihetta 5 varten: { kohina: 0..1, heikko: 0..1 (lähettimen teho), suuntavirhe: aste, pois: boolean, sade: 0..1 }
     function asetaHairio(h) {
@@ -1608,7 +1638,7 @@
     function lue() {
       var h = JSON.parse(JSON.stringify(C.hairio)); h.kohina = kohinaTeho();   // viritystilan kohina mukana
       return { alue: ALUEET[C.alueIdx], rengasvali: ALUEET[C.alueIdx] / 4, suuntaYlos: C.suuntaYlos, ebl: C.ebl, vrm: C.vrm, sade: C.sade, sadeSuodatin: C.sadeSuodatin,
-        jalkiS: JALJET[C.jalkiIdx], offset: C.offset, ev: C.ev, hairio: h, viritys: C.viritys, suunta: S.hdg, nopeus: S.kn, e: S.e, n: S.n, sateita: NR, askel: step, solu: cell };
+        jalkiS: JALJET[C.jalkiIdx], sea: C.sea, offset: C.offset, ev: C.ev, hairio: h, viritys: C.viritys, suunta: S.hdg, nopeus: S.kn, e: S.e, n: S.n, sateita: NR, askel: step, solu: cell };
     }
     function valmis() {
       return new Promise(function (res) {
@@ -1735,7 +1765,7 @@
 
     return {
       paivita: paivita, asetaViritys: asetaViritys, tila: lue, asetaAlue: asetaAlue, asetaSuuntaYlos: asetaSuuntaYlos, asetaOffset: asetaOffset, asetaVaraus: asetaVaraus, asetaEV: asetaEV, nappain: kasitteleNappain, asetaEBL: asetaEBL, asetaVRM: asetaVRM, asetaSade: asetaSade,
-      asetaSadeSuodatin: asetaSadeSuodatin, asetaJalki: asetaJalki, asetaVahvistus: asetaVahvistus, asetaHairio: asetaHairio,
+      asetaSadeSuodatin: asetaSadeSuodatin, asetaMeri: asetaMeri, asetaSea: asetaSea, asetaJalki: asetaJalki, asetaVahvistus: asetaVahvistus, asetaHairio: asetaHairio,
       lue: lue, vapautaRuudut: vapautaRuudut, valmis: valmis, taytaKierros: taytaKierros, piirra: piirra, kaynnista: kaynnista, pysayta: pysayta, tuhoa: tuhoa, kohteet: kohteet,
       tilasto: function () { return JSON.parse(JSON.stringify(tilasto)); },
       verkko: function () { return lukija.tilasto; },
