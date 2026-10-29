@@ -791,6 +791,9 @@
     L.toggleGentle(G.S);
   }
   function crash() { if (!canCmd()) return; L.crashStop(G.S); }
+  // Jetit vapaalle tai kytketyksi (30.10.2026): vapaalla alus ajelehtii, kytkettynä nopeudella 0 ruorimies pitää sen paikallaan
+  function freeOrdered(S) { for (var i = S.cmdLog.length - 1; i >= 0; i--) { var k = S.cmdLog[i].kind; if (k === 'vapaa') return true; if (k === 'kytke' || k === 'speed' || k === 'heading' || k === 'stern' || k === 'straight' || k === 'crash') return false; } return false; }
+  function toggleFree() { if (!canCmd()) return; L.setFree(G.S, !freeOrdered(G.S)); }
   function setPlotter(on) {
     if (G.plotterOn === on) return; G.plotterOn = on; $('plotOff').hidden = on;
     if (G.S) { logCustom('plotter', on ? 1 : 0); if (G.rec) G.rec.plotter.push({ t: G.S.t, on: on }); }
@@ -817,6 +820,7 @@
     $('bReverse4').addEventListener('click', function () { if (canCmd()) L.orderReverse(G.S, 4); });
     $('groundGo').addEventListener('click', resumeAfterCollision);
     $('bStop').addEventListener('click', function () { cmdSpeed(0); });
+    $('bFree').addEventListener('click', toggleFree);
     $('bCrash').addEventListener('click', crash);
     $('speedBtn').addEventListener('click', function () { setSpeedFactor((G.speedIdx + 1) % G.speedSteps.length); });
     $('pauseBtn').addEventListener('click', togglePause);
@@ -934,6 +938,7 @@
       else if (k === 'ArrowDown') { if (canCmd()) L.stepSpeedOrder(G.S, -1); }
       else if (k === ' ') crash();
       else if (k === 'l' || k === 'L') toggleGentle();
+      else if (k === 'n' || k === 'N') toggleFree();
       else if (k === 'b' || k === 'B') setBino(!G.view.isBino());
       else if (k === 'h' || k === 'H') toggleSpot(e.shiftKey && G.crew.role === 'solo' ? (spotSel() === 'helm' ? 'nav' : 'helm') : spotSel());
       else if ((k === 'j' || k === 'J' || k === 'k' || k === 'K') && G.valot && G.valot.heitin(spotSel()).on) aimSpot(G.valot.heitin(spotSel()).kulma + ((k === 'j' || k === 'J') ? -1 : 1) * (e.shiftKey ? 30 : 10));
@@ -1245,7 +1250,9 @@
   function updateUi() {
     var S = G.S;
     setText($('clock'), fmtClock(S.clockMs)); if (G.pl && G.pl.setClock) G.pl.setClock(S.clockMs);
-    setText($('ordHdg'), L.orderHeadingText(S)); setText($('ordSpd'), L.speedText(S.orderSpeedKn));
+    var freeOrd = freeOrdered(S);
+    setText($('ordHdg'), L.orderHeadingText(S)); setText($('ordSpd'), freeOrd ? 'Jetit vapaalla' : L.speedText(S.orderSpeedKn));
+    var bf = $('bFree'); if (bf.getAttribute('aria-pressed') !== String(freeOrd)) { bf.setAttribute('aria-pressed', String(freeOrd)); setText(bf, freeOrd ? 'Kytke' : 'Vapaa'); }
     // peruutuksessa (käsketty nopeus alle 0) suuntanapit ovat Perä vasen ja Perä oikea ja Loiva-nappi on Suoraan
     var rev = S.orderSpeedKn < 0;
     setText($('bLeft').querySelector('.lbl'), rev ? 'Perä vasen' : 'Vasen'); setText($('bRight').querySelector('.lbl'), rev ? 'Perä oikea' : 'Oikea'); setText($('bGentle').querySelector('.lbl'), rev ? 'Suoraan' : 'Loiva');
@@ -1256,7 +1263,7 @@
     setText($('nowHdg'), pad3(hdgT) + '°'); setText($('nowSpd'), fnum(S.v / KN, 1) + ' kn');   // negatiivinen = perä edellä
     setText($('v3hud'), pad3(hdgT) + '° · ' + fnum(S.v / KN, 1) + ' kn');
     var nw = $('nowWind');
-    if (S.windSpeed > 0) { var aw = L.apparentWind(S); nw.hidden = false; setText(nw, 'Tuuli ' + pad3(S.windFrom) + '° ' + Math.round(S.windSpeed) + ' m/s, suht. ' + pad3(Math.round(aw.rel) % 360) + '° ' + Math.round(aw.app) + ' m/s' + (S.wave && S.wave.hs >= 0.05 ? ', aallokko ' + fnum(S.wave.hs, 1) + ' m' : '')); }
+    if (S.windSpeed > 0) { nw.hidden = false; setText(nw, 'Tuuli ' + pad3(S.windFrom) + '° ' + fnum(S.windSpeed, S.windSpeed < 10 && S.windSpeed % 1 ? 1 : 0) + ' m/s'); }   // vain mistä ja kuinka lujaa, kulku näkyy plotterista
     else if (!nw.hidden) nw.hidden = true;
     Array.prototype.forEach.call(doc.querySelectorAll('.cb.sp'), function (b) { b.classList.toggle('cur', Number(b.getAttribute('data-kn')) === S.orderSpeedKn); });
     $('gazeBtn').hidden = !(G.layout.wide || G.main === '3d') || Math.abs(G.view.getGaze()) < 1;

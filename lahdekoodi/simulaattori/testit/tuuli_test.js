@@ -15,12 +15,48 @@ function alus(M, kn, from, ms) {
   return s;
 }
 
-// 1. Paikallaan 10 m/s sivutuulessa sorto 0,8 ... 1,5 kn 60 s jälkeen (tuuli idästä, sorto länteen)
+// 1. Jetit vapaalla: paikallaan 10 m/s sivutuulessa sorto 0,8 ... 1,5 kn 60 s jälkeen (tuuli idästä, sorto länteen), keula kääntyy vapaasti
 {
-  const s = alus(L, 0, 90, 10); aja(L, s, 60);
-  const sorto = Math.abs(s.vs) / KN, keula = L.trueHdg(s);
-  ehto('sorto paikallaan, sivutuuli 10 m/s, 60 s', sorto >= 0.8 && sorto <= 1.5, sorto.toFixed(2) + ' kn, sivunopeus ' + (s.vs < 0 ? 'vasemmalle (länteen)' : 'oikealle') + ', keula ' + keula.toFixed(1) + '° (ruorimies pitää suunnan 000)');
-  ehto('sorto on myötätuuleen', s.vs < 0);
+  const s = alus(L, 0, 90, 10); L.setFree(s, true); aja(L, s, 60);
+  const sorto = L.sog(s) / KN, keula = L.trueHdg(s), cog = L.cogTrue(s);
+  ehto('jetit vapaalla: ajelehtiminen 10 m/s tuulessa', sorto >= 0.8 && sorto <= 1.5, sorto.toFixed(2) + ' kn suuntaan ' + cog.toFixed(0) + '°, keula ' + keula.toFixed(0) + '°');
+  ehto('ajelehtiminen myötätuuleen (länteen)', cog > 225 && cog < 315);
+  const kylki = Math.abs(Math.abs(L.wrap180(90 - keula)) - 90);
+  ehto('vapaalla alus asettuu kylki tuuleen', kylki < 25, 'tuuli ' + Math.abs(L.wrap180(90 - keula)).toFixed(0) + '° keulasta');
+  ehto('vapaalla ei työntöä eikä ruoria', s.lever === 0 && Math.abs(s.rudder) < 0.01);
+}
+// 1a. Vapaalla vastatuulesta: keula kääntyy, kunnes alus on kylki tuuleen
+{
+  const s = L.create({ hdg: 85 }); L.setWind(s, 90, 10); L.setFree(s, true); aja(L, s, 90);
+  const r = Math.abs(L.wrap180(90 - L.trueHdg(s)));
+  ehto('vapaalla vastatuulesta kylki tuuleen 90 s:ssa', Math.abs(r - 90) < 25, 'tuuli ' + r.toFixed(0) + '° keulasta, ajelehtii ' + (L.sog(s) / KN).toFixed(2) + ' kn');
+}
+// 1e. Vapaalla ajelehtimisen jälkeen kytkentä pysäyttää ajelehtimisen
+{
+  const s = alus(L, 0, 90, 10); L.setFree(s, true); aja(L, s, 60); L.setFree(s, false); aja(L, s, 15);
+  const x0 = s.x, y0 = s.y; aja(L, s, 60);
+  ehto('kytkentä pysäyttää ajelehtimisen', Math.hypot(s.x - x0, s.y - y0) < 5, 'siirtymä minuutissa ' + Math.hypot(s.x - x0, s.y - y0).toFixed(1) + ' m, nopeus ' + (L.sog(s) / KN).toFixed(2) + ' kn');
+}
+// 1f. Ajosta pysähdys tuulessa: alus pysähtyy ja jää paikalleen
+{
+  const s = alus(L, 12, 90, 10); L.orderSpeed(s, 0); aja(L, s, 40); const x0 = s.x, y0 = s.y; aja(L, s, 60);
+  ehto('pysähdys tuulessa ja paikallaan pito', Math.hypot(s.x - x0, s.y - y0) < 5, 'siirtymä minuutissa ' + Math.hypot(s.x - x0, s.y - y0).toFixed(1) + ' m');
+}
+// 1d. Jetit kytketty, tuuli viistosti edestä (45°): paikka ja keula pysyvät
+{
+  const s = alus(L, 0, 45, 14), x0 = s.x, y0 = s.y; aja(L, s, 120);
+  ehto('paikallaan pito 14 m/s viistotuulessa', Math.hypot(s.x - x0, s.y - y0) < 8 && Math.abs(L.wrap180(L.trueHdg(s))) < 4, 'siirtymä ' + Math.hypot(s.x - x0, s.y - y0).toFixed(1) + ' m, keula ' + L.wrap180(L.trueHdg(s)).toFixed(1) + '°');
+}
+// 1b. Jetit kytketty: ruorimies pitää aluksen paikallaan ja keulan suunnassa 10 m/s ja 14 m/s sivutuulessa
+for (const ws of [10, 14]) {
+  const s = alus(L, 0, 90, ws), x0 = s.x, y0 = s.y; aja(L, s, 120);
+  const siirto = Math.hypot(s.x - x0, s.y - y0), keula = Math.abs(L.wrap180(L.trueHdg(s)));
+  ehto('jetit kytketty: paikallaan pito ' + ws + ' m/s sivutuulessa', siirto < 8 && keula < 4, 'siirtymä ' + siirto.toFixed(1) + ' m, keula ' + keula.toFixed(1) + '° käskystä');
+}
+// 1c. Vapaalta takaisin: nopeuskäsky kytkee jetit
+{
+  const s = alus(L, 0, 90, 10); L.setFree(s, true); aja(L, s, 10); L.orderSpeed(s, 6); aja(L, s, 30);
+  ehto('nopeuskäsky kytkee jetit', !L.isFree(s) && s.v / KN > 5, (s.v / KN).toFixed(1) + ' kn');
 }
 // 2. 20 kn ajossa 10 m/s sivutuuli: sorron kulma (COG - HDG) alle 3°
 {
@@ -49,8 +85,8 @@ function alus(M, kn, from, ms) {
 }
 // 5. Paikallaan keula kääntyy tuulesta poispäin, kun ruorimies ei ohjaa (suora ohjaus, ruori 0)
 {
-  const s = L.create({ hdg: 0, helmsman: false }); L.setWind(s, 90, 10); aja(L, s, 5);
-  ehto('keula kääntyy tuulesta poispäin (tuuli idästä, keula länteen)', s.rate < 0, 'kääntymisnopeus ' + s.rate.toFixed(2) + ' °/s');
+  const s = L.create({ hdg: 60, helmsman: false }); L.setWind(s, 90, 10); aja(L, s, 2);   // tuuli 30° keulasta oikealta
+  ehto('keula kääntyy tuulesta poispäin (tuuli 30° oikealta, keula vasemmalle)', s.rate < 0, 'kääntymisnopeus ' + s.rate.toFixed(2) + ' °/s');
 }
 // 6. Näennäinen tuuli: 20 kn vastatuulessa 10 m/s näennäinen noin 20,3 m/s suoraan edestä
 {
