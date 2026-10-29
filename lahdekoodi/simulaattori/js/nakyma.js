@@ -34,6 +34,7 @@
     pixelBudgetMp: 0.55,      // piirtopuskurin pikselien enimmäismäärä (miljoonaa), tarkentuu kuvanopeuden mukaan
     pixelMinMp: 0.1, pixelMaxMp: 1.4,
     bobPitchDeg: 0.35, bobRollDeg: 0.5, bobHeaveM: 0.04,  // pieni aallokko nopeudessa
+    headStab: 0.35,           // pään vakautus (30.10.2026): miehistö on veneessä ja keinuu sen mukana, mutta kompensoi ja ennakoi osan nyökkäyksestä ja kallistuksesta (osuus)
     // kiikari (vaihe 3g): 7x50-kiikarin vaakakuvakulma 7 astetta ja suurennus 7 (näkyvyysrajat ja katseen herkkyys), käden tärinän amplitudi asteina
     // (taajuus noin 1-2 Hz, kasvaa nopeuden ja aallokon mukana) sekä pystykatseen enimmäiskulmat (kiikari pitää vaakatason vakaana, pystykatsetta voi säätää vetämällä)
     kiikariHfovDeg: 7, kiikariSuurennus: 7, kiikariTarinaDeg: 0.15, kiikariPitchMin: -8, kiikariPitchMax: 12
@@ -520,6 +521,24 @@
     var extra = [];     // lisäobjektit, joilla on rebase()
     // kiikari: tila (päällä, katseen ja pystykulman talteenotto) ja käden tärinä (kaksi vaimennettua värähtelijää, joita satunnaisliike ajaa)
     var tmpDir = new THREE.Vector3();
+    // pään vakautus: kameran asento = veneen mukana keinuva asento, josta osa (headStab) kompensoidaan kohti vaakatasoa. Kerrostilassa (Google 3D) sama asento,
+    // ja Googlen kuva kierretään ja siirretään kuvatasossa samaan asentoon (camTilt), koska Googlen kamera ei käänny horisontin yläpuolelle eikä kallistu.
+    var qA = new THREE.Quaternion(), qB = new THREE.Quaternion(), qL = new THREE.Quaternion(), eA = new THREE.Euler(0, 0, 0, 'YXZ'), vA = new THREE.Vector3(), vB = new THREE.Vector3();
+    var camTilt = { pitchDeg: 0, rollDeg: 0, eyeY: 0 };
+    function headCamera(st, dt, pitchOffDeg, yawOffDeg, world) {
+      // veneen kiinteä asento (kamera rungon mukana) maailmassa
+      rig.updateMatrixWorld(true); rig.getWorldQuaternion(qA);
+      eA.set((camPitchDeg + pitchOffDeg) * RAD, -Math.PI / 2 - (gaze + yawOffDeg) * RAD, 0, 'YXZ'); qB.setFromEuler(eA); qA.multiply(qB);
+      // vaakatasoon vakautettu asento (sama suunta ja katseen kulma)
+      eA.set((camPitchDeg + pitchOffDeg) * RAD, -(st.hdg + gaze + yawOffDeg) * RAD, 0, 'YXZ'); qL.setFromEuler(eA);
+      qL.slerp(qA, 1 - S.headStab);   // qL = lopullinen kameran asento maailmassa
+      if (world) camera.quaternion.copy(qL);
+      else { rig.getWorldQuaternion(qB).invert(); camera.quaternion.copy(qB.multiply(qL)); }
+      // kameran kallistus ja nyökkäys maailmassa (Googlen kuvan siirtoa varten)
+      camera.updateMatrixWorld(true);
+      vA.set(1, 0, 0).applyQuaternion(qL); vB.set(0, 0, -1).applyQuaternion(qL);
+      camTilt.rollDeg = Math.asin(Math.max(-1, Math.min(1, vA.y))) / RAD; camTilt.pitchDeg = Math.asin(Math.max(-1, Math.min(1, vB.y))) / RAD - (camPitchDeg + pitchOffDeg);
+    }
     var bino = { on: false, gaze0: 0, pitch: 0, sh: { p: [0, 0], v: [0, 0] }, shakeYaw: 0, shakePitch: 0 };
     var freeCam = false;
     // Vapaa kamera testikuviin ja purkuun (maailmakoordinaatit: x = E, y = ylös, z = -N)
@@ -665,11 +684,13 @@
       // katse
       gaze += (gazeCmd - gaze) * Math.min(1, dt * 8);
       if (!freeCam && ov.on) {
-        // kerrostila: kamera ei keinu rungon mukana vaan on samassa paikassa ja suunnassa kuin Googlen kamera (silmäpiste aluksen suunnan mukaan, vaakasuora katse, ei kiikarin tärinää)
+        // kerrostila: kamera on veneessä silmäpisteessä ja keinuu sen mukana pään vakautuksella (ei kiikarin tärinää). Googlen kamera saa saman silmän korkeuden,
+        // ja Googlen kuva kierretään ja siirretään kuvatasossa (camTilt), jotta Googlen maisema ja oma kerros pysyvät kohdakkain.
         bino.shakeYaw = 0; bino.shakePitch = 0;
-        var hr = st.hdg * RAD, fw = S.eyeX - S.pivotX, sb = S.eyeY;
-        camera.position.set(st.x + Math.sin(hr) * fw + Math.cos(hr) * sb, eyeZ() - S.waterlineZ, -(st.y + Math.cos(hr) * fw - Math.sin(hr) * sb));
-        camera.rotation.set(ov.cal.dPitchDeg * RAD, -(st.hdg + gaze + ov.cal.dHeadingDeg) * RAD, 0);
+        rig.updateMatrixWorld(true);
+        camera.position.copy(rig.localToWorld(vA.set(S.eyeX - S.pivotX, eyeZ() - S.waterlineZ, S.eyeY)));
+        headCamera(st, dt, ov.cal.dPitchDeg, ov.cal.dHeadingDeg, true);
+        camTilt.eyeY = camera.position.y;
       } else if (!freeCam) {
         if (bino.on) {
           rig.updateMatrixWorld(true);
@@ -685,7 +706,7 @@
             corr -= Math.asin(Math.max(-1, Math.min(1, dirv.y))) / RAD - pit;
           }
           camera.rotation.set((pit + corr) * RAD, yawC, 0);
-        } else camera.rotation.set(camPitchDeg * RAD, -Math.PI / 2 - gaze * RAD, 0);
+        } else headCamera(st, dt, 0, 0, false);
       }
       rig.updateMatrixWorld(true);
       // vesi ja taivas seuraavat kameraa
@@ -739,7 +760,7 @@
       setOverlay: setOverlay, isOverlay: function () { return ov.on; }, setFogKm: setFogKm, getFogKm: function () { return ov.fogKm; }, setCalib: setCalib, getCalib: function () { return { dHeadingDeg: ov.cal.dHeadingDeg, dPitchDeg: ov.cal.dPitchDeg, tanScale: ov.cal.tanScale }; },
       vfovRequested: function () { return reqVfov; }, eyeAboveWaterM: function () { return eyeZ() - S.waterlineZ; }, overlayHide: overlayHide, wmask: wmask, overlayMat: ov.mat, overlayDome: ov.dome, overlaySettings: ov,
       setCameraPitch: function (d) { camPitchDeg = d; }, isSeated: function () { return seated; },
-      setWind: setWind, setSea: setSea, sea: function () { return sea; }, getWind: function () { return { fromDeg: S.windFromDeg, speed: S.windSpeed }; }, setQuality: setQuality, getQuality: function () { return quality; },
+      camTilt: function () { return camTilt; }, setWind: setWind, setSea: setSea, sea: function () { return sea; }, getWind: function () { return { fromDeg: S.windFromDeg, speed: S.windSpeed }; }, setQuality: setQuality, getQuality: function () { return quality; },
       setBinoculars: setBinoculars, isBino: function () { return bino.on; }, setBinoPitch: setBinoPitch, getBinoPitch: function () { return bino.pitch; },
       baseHfov: baseHfov, gazeSens: function () { return bino.on ? 1 / S.kiikariSuurennus : 1; }, binoState: function () { return { on: bino.on, gaze0: bino.gaze0, pitch: bino.pitch, shakeYaw: bino.shakeYaw, shakePitch: bino.shakePitch }; }
     };
