@@ -103,6 +103,9 @@
         var F = spd > 0 ? fetchAt(st.x, st.y, from) : 0;
         local = { hs: waveHs(spd, F), tp: waveTp(spd, F), fetch: F, toGrid: P.trueToGrid(from + 180, st.x, st.y) };
         U.uWaveAmp.value = spd > 0 ? amp(local.hs) : SET.ampMin;
+        // veden aaltokenttä: huippuaallonpituus ja jyrkkyys (pi Hs / aallonpituus) aluksen kohdalta, tyynellä lyhyt ja loiva väre
+        var lam = local.tp ? waveLength(local.tp) : 0;
+        if (U.uWaveLen) { U.uWaveLen.value = lam > 0.6 ? lam : 0.8; U.uSteep.value = lam > 0.6 ? Math.min(0.2, Math.max(0.015, Math.PI * local.hs / lam)) : 0.012; }
         if (view.setSea) view.setSea(local);
       }
     }
