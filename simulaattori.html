@@ -10402,7 +10402,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       vertexShader: 'varying vec3 vW; varying float vDepth; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vDepth = -mv.z; gl_Position = projectionMatrix * mv; }',
       fragmentShader: GLSL_SKY + [
         'uniform vec3 uDeep; uniform vec3 uFogColor; uniform float uFogDensity; uniform float uDay;',
-        'uniform sampler2D uWaveTex; uniform vec2 uWindDir; uniform float uWaveAmp;',
+        'uniform sampler2D uWaveTex; uniform vec2 uWindDir; uniform float uWaveAmp; uniform float uWaveLen; uniform float uSteep; uniform float uWindSpd;',
         // aaltomalli (aallot.js): aaltojen voimakkuus paikan mukaan tuulen suuntaisesta ruudukosta (pyyhkäisymatka), ruudukon ulkopuolella uWaveAmp
         'uniform sampler2D uSeaTex; uniform vec2 uSeaO; uniform vec2 uSeaU; uniform vec2 uSeaV; uniform float uSeaHalf; uniform float uSeaOn;',
         'float seaAmp(vec3 w){',
@@ -10427,20 +10427,35 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         '  vec2 p = vW.xz; float t = uTime; float dist = length(cameraPosition - vW);',
         '  float fade = 1.0 / (1.0 + dist * 0.004);',
         '  vec2 g = vec2(0.0); float wa = seaAmp(vW);',
-        '  g += vec2(0.80, 0.60) * 0.020 * cos(dot(vec2(0.80, 0.60), p) * 0.55 + t * 1.10);',
-        '  g += vec2(-0.55, 0.83) * 0.014 * cos(dot(vec2(-0.55, 0.83), p) * 1.30 + t * 1.55);',
+        // aaltokenttä (30.10.2026): tuulen suuntaan kulkevia aaltoja (harjat poikittain tuuleen), aallonpituudet aaltomallin huippuaallonpituuden (uWaveLen)
+        // ympäriltä ja suunnat tuulen suunnan ympäriltä (hajonta noin ±30°), etenemisnopeus syvän veden kaavasta (w = sqrt(g k)). Jyrkkyys (uSteep) aaltomallista,
+        // paikan mukainen voimakkuus (rannan suoja) suhteessa aluksen kohtaan. Lyhyet aallot häivytetään kaukana, ettei synny moiré-kuviota.
+        '  vec2 wd = uWindDir, wq = vec2(-wd.y, wd.x); float Lp = max(uWaveLen, 0.6);',
+        '  float loc = clamp(wa / max(uWaveAmp, 0.05), 0.0, 2.5), stp = uSteep * loc, hh = 0.0;',
         '#ifdef WATER_TEX',
-        '  vec2 w1 = vec2(uWindDir.x * 0.940 - uWindDir.y * 0.342, uWindDir.x * 0.342 + uWindDir.y * 0.940);',
-        '  vec2 w2 = vec2(uWindDir.x * 0.866 + uWindDir.y * 0.500, -uWindDir.x * 0.500 + uWindDir.y * 0.866);',
-        '  if (dist < 5500.0) {',
-        '    vec2 s1 = texture2D(uWaveTex, p * 0.0833 - w1 * (t * 0.125)).rg * 2.0 - 1.0;',
-        '    vec2 s2 = texture2D(uWaveTex, p * 0.2900 - w2 * (t * 0.215) + vec2(0.31, 0.57)).rg * 2.0 - 1.0;',
-        '    g += (s1 * 0.050 + s2 * 0.032 * (0.25 + 0.75 * fade)) * wa * (0.15 + 0.85 * fade) * (1.0 - smoothstep(1500.0, 5500.0, dist));',
-        '  }',
+        '  const int NW = 7;',
         '#else',
-        '  g += (vec2(0.30, -0.95) * 0.011 * cos(dot(vec2(0.30, -0.95), p) * 3.10 + t * 2.20)) * (0.2 + 0.8 * fade) * wa;',
-        '  g += (vec2(-0.95, -0.30) * 0.007 * cos(dot(vec2(-0.95, -0.30), p) * 7.30 + t * 3.10)) * fade * fade * wa;',
+        '  const int NW = 4;',
         '#endif',
+        '  for (int i = 0; i < NW; i++) {',
+        '    float fi = float(i), lam = Lp * (1.7 - 0.19 * fi), ang = (fract(sin(fi * 12.989) * 437.585) - 0.5) * 1.05;',
+        '    vec2 d = cos(ang) * wd + sin(ang) * wq; float k = 6.28318 / lam, w = sqrt(9.81 * k);',
+        '    float a = stp * 0.55 / (1.0 + 0.3 * fi) * (1.0 - smoothstep(lam * 25.0, lam * 70.0, dist));',
+        '    float ph = k * dot(d, p) - w * t + fi * 1.913;',
+        '    g += d * (a * cos(ph)); hh += a * sin(ph);',
+        '  }',
+        '#ifdef WATER_TEX',
+        // hienorakenne: kohinatekstuuri tuulen suuntaisessa koordinaatistossa, venytetty poikittain (pitkät harjat), liikkuu tuulen mukana
+        '  if (dist < 1500.0) {',
+        '    vec2 q = vec2(dot(p, wq), dot(p, wd)); float Ls = max(0.8, Lp * 0.45), cs = sqrt(9.81 * Ls / 6.28318);',
+        '    vec2 sd = texture2D(uWaveTex, vec2(q.x / (Ls * 3.2), (q.y - cs * t) / Ls) * 0.25).rg * 2.0 - 1.0;',
+        '    vec2 sd2 = texture2D(uWaveTex, vec2(q.x / (Ls * 1.6), (q.y - cs * 0.7 * t) / (Ls * 0.45)) * 0.25 + vec2(0.37, 0.11)).rg * 2.0 - 1.0;',
+        '    vec2 dn = (sd * 0.6 + sd2 * 0.35 * fade) * (0.25 * stp + 0.012 + 0.004 * uWindSpd) * (1.0 - smoothstep(300.0, 1500.0, dist));',
+        '    g += wq * dn.x + wd * dn.y;',
+        '  }',
+        '#endif',
+        // tyynellä vain hyvin loiva pinnan väre
+        '  g += vec2(0.80, 0.60) * 0.004 * cos(dot(vec2(0.80, 0.60), p) * 0.55 + t * 1.10) * fade;',
         '  vec3 n = normalize(vec3(-g.x, 1.0, -g.y));',
         '  vec3 v = normalize(cameraPosition - vW);',
         '  float nv = max(dot(n, v), 0.0);',
@@ -10459,6 +10474,15 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         '    glit = n650 * 2.2 + n90 * 0.18;',
         '  }',
         '  c += uSunColor * glit * uSunGlow * smoothstep(0.0, 0.08, uSunDir.y) * (0.35 + 0.65 * smoothstep(0.0, 0.5, fr * 4.0)) * (1.0 - smoothstep(2000.0, 6000.0, dist));',
+        // vaahtopäät: tuuli yli noin 6 m/s, harjojen kohdalla (aaltojen summa korkealla) ja kohinan mukaan laikuittain, häviää kaukana
+        '  if (uWindSpd > 5.5 && dist < 2500.0) {',
+        '    vec2 fq = vec2(dot(p, wq), dot(p, wd)); float cf = sqrt(9.81 * Lp / 6.28318);',
+        '    float fn = texture2D(uWaveTex, vec2(fq.x / 9.0, (fq.y - cf * t) / 26.0) * 0.25).g, fn2 = texture2D(uWaveTex, vec2(fq.x / 2.5, (fq.y - cf * t) / 7.0) * 0.25 + 0.5).r;',
+                // vaahdon peitto kasvaa tuulen mukana (14 m/s noin 5 %)
+        '    float cov = clamp((uWindSpd - 5.5) / 10.0, 0.0, 1.0);',
+        '    float foam = smoothstep(0.93 - 0.12 * cov, 1.0, fn * 0.55 + fn2 * 0.3 + max(hh, 0.0) / max(stp, 0.01) * 0.25) * (0.5 + 0.4 * cov) * min(loc, 1.2) * (1.0 - smoothstep(600.0, 2200.0, dist));',
+        '    c = mix(c, vec3(0.86, 0.9, 0.93) * (0.35 + 0.65 * uDay), foam);',
+        '  }',
         '  if (uSpotI > 0.0) c += spotVesi(uSpotPos, uSpotDir, uSpotI, n, v);',
         '  if (uSpotI2 > 0.0) c += spotVesi(uSpotPos2, uSpotDir2, uSpotI2, n, v);',
         '  float f = 1.0 - exp(-vDepth * uFogDensity);',
@@ -10542,7 +10566,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       uHorizon: { value: new THREE.Color('#cfe0ee') }, uZenith: { value: new THREE.Color('#4a86c7') },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color('#fff2d8') }, uSunGlow: { value: 1 },
       uTime: { value: 0 }, uDeep: { value: new THREE.Color('#1c4c66') }, uFogColor: { value: new THREE.Color('#cfe0ee') }, uFogDensity: { value: S.fogDensity }, uDay: { value: 1 },
-      uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uSeaTex: { value: null }, uSeaO: { value: new THREE.Vector2() }, uSeaU: { value: new THREE.Vector2(1, 0) }, uSeaV: { value: new THREE.Vector2(0, 1) }, uSeaHalf: { value: 1200 }, uSeaOn: { value: 0 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') },
+      uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uWaveLen: { value: 3 }, uSteep: { value: 0.06 }, uWindSpd: { value: 3 }, uSeaTex: { value: null }, uSeaO: { value: new THREE.Vector2() }, uSeaU: { value: new THREE.Vector2(1, 0) }, uSeaV: { value: new THREE.Vector2(0, 1) }, uSeaHalf: { value: 1200 }, uSeaOn: { value: 0 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') },
       // valonheitin (vaihe 4, valot3d.js): paikka ja suunta maailmassa, keilan kosini ja päällä (1) tai pois (0)
       uMoonDir: { value: new THREE.Vector3(0, -1, 0) }, uMoonI: { value: 0 }, uStars: { value: 0 },
       uSpotPos: { value: new THREE.Vector3() }, uSpotDir: { value: new THREE.Vector3(1, 0, 0) }, uSpotCos: { value: 0.995 }, uSpotI: { value: 0 }, uSpotPos2: { value: new THREE.Vector3() }, uSpotDir2: { value: new THREE.Vector3(1, 0, 0) }, uSpotI2: { value: 0 }
@@ -10562,6 +10586,7 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
       var gdir = P.trueToGrid(S.windFromDeg + 180, 0, 0) * RAD;
       U.uWindDir.value.set(Math.sin(gdir), -Math.cos(gdir));
       U.uWaveAmp.value = Math.min(3, Math.max(0.25, S.windSpeed / 3));
+      U.uWindSpd.value = S.windSpeed;
     }
     setWind();
     // grafiikan laatu (vaihe 3j): 'full' tai 'light'. Kevyt: ei pilviä, vesi ilman normaalikarttaa
@@ -11429,6 +11454,9 @@ function shade(col, f) { return [Math.min(1, col[0] * f), Math.min(1, col[1] * f
         var F = spd > 0 ? fetchAt(st.x, st.y, from) : 0;
         local = { hs: waveHs(spd, F), tp: waveTp(spd, F), fetch: F, toGrid: P.trueToGrid(from + 180, st.x, st.y) };
         U.uWaveAmp.value = spd > 0 ? amp(local.hs) : SET.ampMin;
+        // veden aaltokenttä: huippuaallonpituus ja jyrkkyys (pi Hs / aallonpituus) aluksen kohdalta, tyynellä lyhyt ja loiva väre
+        var lam = local.tp ? waveLength(local.tp) : 0;
+        if (U.uWaveLen) { U.uWaveLen.value = lam > 0.6 ? lam : 0.8; U.uSteep.value = lam > 0.6 ? Math.min(0.2, Math.max(0.015, Math.PI * local.hs / lam)) : 0.012; }
         if (view.setSea) view.setSea(local);
       }
     }
