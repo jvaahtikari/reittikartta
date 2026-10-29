@@ -18,7 +18,7 @@
 
   var G = {
     S: null, view: null, pl: null, route: null, auto: null, rec: null, mode: 'start', main: 'plot', origin: { e: 0, n: 0 },
-    ex: 'h1', dir: 'fwd', stored: [], showRk: { legBrg: true, turnTicks: true }, targetKn: 30, weather: 'puoli', moon: 'auto', windFrom: 225, windSpeed: 3, eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
+    ex: 'h1', dir: 'fwd', stored: [], showRk: { legBrg: true, turnTicks: true }, targetKn: 30, weather: 'puoli', moon: 'auto', windFrom: 225, windSpeed: 3, wxLive: false, liveData: null, liveT: 0, eye: 'nav', clockMode: 'custom', clockStr: '12:00', dateStr: '', running: false, frozen: false, acc: 0, lastT: 0,
     plotterOn: true, lastPlotT: 0, lastTrailT: 0, trail: [], gazeKey: 0, lastMerkitLoad: { x: 1e9, y: 1e9 }, lastVis: -1e9,
     speedSteps: [1, 2, 5, 10], speedIdx: 0, seated: false, ground: null, lastConvT: -1e9, loadedLandmarks: false, ready: false,
     layout: { land: false, wide: false, tri: false, tp: false }, fwKnown: 0, lastPohjaT: 0, endTimer: null, dbPl: null, finishedAt: null,
@@ -42,6 +42,7 @@
       if (o.radarTune === 'hyva' || o.radarTune === 'huono') G.radarTune = o.radarTune;
       if (o.gfx === 'full' || o.gfx === 'light') G.gfx = o.gfx;
       if (o.saa === 'selkea' || o.saa === 'puoli' || o.saa === 'pilvi') G.weather = o.saa; if (o.kuu === 'auto' || o.kuu === 'taysi' || o.kuu === 'ei') G.moon = o.kuu;
+      if (o.saaLive != null) G.wxLive = !!o.saaLive;
       if (o.tuuliSuunta != null && isFinite(o.tuuliSuunta)) G.windFrom = Number(o.tuuliSuunta); if (o.tuuliNopeus != null && isFinite(o.tuuliNopeus)) G.windSpeed = Number(o.tuuliNopeus);
       if (o.googleSumu != null && root.Google3D.SETTINGS.fogLevelsKm.indexOf(Number(o.googleSumu)) >= 0) G.fogKm = Number(o.googleSumu);
       // Satamatila (28.10.2026 oletus 'google'): tallennettu arvo luetaan vain, jos käyttäjä on valinnut sen itse valikosta. Aiemmin arvo tallentui aina, joten vanha 'oma' ohittaisi uuden oletuksen.
@@ -49,7 +50,7 @@
     } catch (e) {}
   }
   function savePrefs() {
-    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, saa: G.weather, kuu: G.moon, tuuliSuunta: G.windFrom, tuuliNopeus: G.windSpeed, googleSumu: G.fogKm, googleSatama: G.satama, googleSatamaValittu: !!G.satamaValittu })); } catch (e) {}
+    try { localStorage.setItem('sim.asetukset', JSON.stringify({ northUp: G.northUp, raster: G.raster, vecIdx: G.vecIdx, fovDeg: G.fovDeg, evOn: G.evOn, radarTune: G.radarTune, gfx: G.gfx, saa: G.weather, kuu: G.moon, tuuliSuunta: G.windFrom, tuuliNopeus: G.windSpeed, saaLive: G.wxLive, googleSumu: G.fogKm, googleSatama: G.satama, googleSatamaValittu: !!G.satamaValittu })); } catch (e) {}
   }
   G.satama = root.Google3D.SETTINGS.googleSatama === 'google' ? 'google' : 'oma';
   loadPrefs();
@@ -168,6 +169,55 @@
     } else el.textContent = (sun.elevDeg < 3 ? 'Hämärä alkaa, loistot syttyvät. ' : 'Päivänäkymä. ') + 'Auringon korkeus ' + Math.round(sun.elevDeg) + '°. Näkymä seuraa kelloa: yö tulee ajon aikana, kun aurinko laskee.';
     updateWxHint(ms);
   }
+  // ---- nykyinen sää (live, 29.10.2026) ----
+  // Open-Meteo (open-meteo.com, avoin, ei avainta, CC BY 4.0): tämänhetkinen tuuli 10 m:n korkeudella, puuskat, pilvisyys ja sääkoodi Näsijärven kohdalta.
+  // Päivitetään aloitusnäytössä ja ajon aikana 10 minuutin välein. Jos haku ei onnistu, käytetään itse valittuja arvoja.
+  var LIVE_URL = 'https://api.open-meteo.com/v1/forecast?latitude=61.53&longitude=23.74&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,weather_code&wind_speed_unit=ms&timezone=Europe%2FHelsinki';
+  function fetchLive(cb) {
+    var ctl = root.AbortController ? new AbortController() : null, to = setTimeout(function () { if (ctl) ctl.abort(); }, 8000);
+    fetch(LIVE_URL, ctl ? { signal: ctl.signal } : {}).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+      clearTimeout(to); var c = j && j.current;
+      if (!c || c.wind_speed_10m == null || c.wind_direction_10m == null) throw new Error('vastauksessa ei säätietoja');
+      var cc = Number(c.cloud_cover) || 0, code = Number(c.weather_code) || 0, wet = (code >= 45 && code <= 48) || code >= 51;
+      cb(null, { windFrom: Math.round(Number(c.wind_direction_10m)) % 360, windSpeed: Math.round(Number(c.wind_speed_10m) * 10) / 10, gust: c.wind_gusts_10m != null ? Math.round(Number(c.wind_gusts_10m) * 10) / 10 : null,
+        cloud: cc, code: code, weather: wet || cc >= 75 ? 'pilvi' : cc >= 30 ? 'puoli' : 'selkea', time: c.time || '' });
+    }).catch(function (e) { clearTimeout(to); cb(e && e.name === 'AbortError' ? 'aikakatkaisu' : String(e && e.message || e)); });
+  }
+  var COMPASS = ['pohjois', 'koillis', 'itä', 'kaakkois', 'etelä', 'lounais', 'länsi', 'luoteis'];
+  function windName(d) { return COMPASS[Math.round(((d % 360) + 360) % 360 / 45) % 8]; }
+  function liveText(d) {
+    var w = d.windSpeed < 0.5 ? 'tyyntä' : windName(d.windFrom) + 'tuuli ' + fnum(d.windSpeed, 1) + ' m/s (' + pad3(d.windFrom) + '°' + (d.gust ? ', puuskat ' + fnum(d.gust, 0) + ' m/s' : '') + ')';
+    return 'Tampere nyt' + (d.time ? ' (klo ' + d.time.slice(11, 16) + ')' : '') + ': ' + w + ', pilvisyys ' + Math.round(d.cloud) + ' %. Lähde Open-Meteo.';
+  }
+  function applyLive(d) {
+    G.liveData = d; G.liveT = Date.now();
+    G.windFrom = d.windFrom; G.windSpeed = d.windSpeed; G.weather = d.weather;
+    Array.prototype.forEach.call($('segWeather').children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === G.weather); });
+    Array.prototype.forEach.call($('segWindSpd').children, function (c) { c.classList.toggle('on', Math.abs(Number(c.getAttribute('data-v')) - G.windSpeed) < 0.5); });
+    $('windDir').value = String(Math.round(G.windFrom / 45) * 45 % 360);
+    updateWindHint(); updateClockHint();
+  }
+  function applyWxMode() {
+    $('start').classList.toggle('wx-live', G.wxLive);
+    var el = $('liveWx');
+    if (!G.wxLive) { el.textContent = 'Sää, kuu ja tuuli valitaan alla.'; return; }
+    el.textContent = 'Haetaan Tampereen nykyistä säätä…';
+    fetchLive(function (err, d) {
+      if (!G.wxLive) return;
+      if (err) { el.textContent = 'Säätietoja ei saatu (' + err + '). Ajossa käytetään alla valittuja arvoja.'; return; }
+      applyLive(d); el.textContent = liveText(d);
+    });
+  }
+  // ajon aikana: päivitys 10 min välein, tuuli ja sää aluksen tilaan (näkymä ja aallokko seuraavat tilaa)
+  function liveRefresh() {
+    if (!G.wxLive || isNav() || !G.S || Date.now() - G.liveT < 600000) return;
+    G.liveT = Date.now();
+    fetchLive(function (err, d) {
+      if (err || !G.S) return;
+      applyLive(d); L.setWind(G.S, d.windFrom, d.windSpeed); G.S.weather = d.weather;
+      if (G.mode === 'run') logCustom('saa', d.windFrom + '° ' + d.windSpeed + ' m/s, ' + d.weather);
+    });
+  }
   function updateWindHint() {
     var el = $('windHint'), w = G.windSpeed; if (!el) return;
     $('windDir').disabled = !w;
@@ -246,6 +296,10 @@
     segInit('segWindSpd', function (v) { G.windSpeed = Number(v); savePrefs(); updateWindHint(); });
     $('windDir').addEventListener('change', function () { G.windFrom = Number($('windDir').value); savePrefs(); updateWindHint(); });
     updateWindHint();
+    // nykyinen sää (live): tuuli, puuskat ja pilvisyys Open-Meteosta
+    Array.prototype.forEach.call($('segWxMode').children, function (c) { c.classList.toggle('on', c.getAttribute('data-v') === (G.wxLive ? 'live' : 'oma')); });
+    segInit('segWxMode', function (v) { G.wxLive = v === 'live'; savePrefs(); applyWxMode(); });
+    applyWxMode();
     $('clockIn').addEventListener('input', function () { G.clockStr = $('clockIn').value || '12:00'; updateClockHint(); });
     $('dateIn').addEventListener('input', function () { G.dateStr = $('dateIn').value || todayHelsinki(); updateClockHint(); });
     updateClockHint();
@@ -276,7 +330,8 @@
     G.view.setQuality(gfxNow());
     if (qs.get('vesi') !== 'iso') splitWater(G.view);   // vesitason syvyystarkkuus (vaihe 3l)
     G.boats = root.Veneet3D && qs.get('veneet') !== 'ei' ? attachBoats(G.view) : null;   // laituriveneet (vaihe 3l)
-    G.valot = root.Valot3D ? G.view.addExtra(root.Valot3D.create(G.view)) : null;          // yön valot ja valonheitin (vaihe 4)
+    G.valot = root.Valot3D ? G.view.addExtra(root.Valot3D.create(G.view)) : null;
+    G.aallot = root.Aallot ? G.view.addExtra(root.Aallot.create(G.view)) : null;          // aallokko tuulen ja pyyhkäisymatkan mukaan (vaihe 4)          // yön valot ja valonheitin (vaihe 4)
     applyBoatsQuality();
     new ResizeObserver(function () { layout(); }).observe($('stage'));
     new ResizeObserver(function () { sizeViews(); }).observe($('pane3d'));
@@ -596,7 +651,7 @@
     G.auto = qs.get('auto') ? H.createAuto(G.route, Number(qs.get('auto')), G.origin) : null;
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setWeather(G.weather, G.moon); G.view.setSimTime(G.S.clockMs);
-    L.setWind(G.S, G.windFrom, G.windSpeed); G.view.setWind(G.windFrom, G.windSpeed);
+    L.setWind(G.S, G.windFrom, G.windSpeed); G.view.setWind(G.windFrom, G.windSpeed); G.S.weather = G.weather;
     G.nightG3 = false; G.nightOff = false;
     G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; G.spotSel = null; if (G.valot) { ['helm', 'nav'].forEach(function (id) { G.valot.asetaHeitin(id, false); G.valot.asetaSuunta(id, 0); }); spotUi(); }
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
@@ -1307,8 +1362,13 @@
       var pn = e < -2; if (pn !== n.plotNight) { n.plotNight = pn; $('paneP').classList.toggle('yo', pn); }
       if (G.valot) G.valot.asetaNakyvyys(G.ext === 'google' ? G.fogKm * 1000 : 0);   // sumukerros on vain Google 3D -näkymässä
       $('v3').style.setProperty('--g3dim', String(Math.round((1 - 0.88 * n.dark) * 100) / 100));
+      // tuuli ja sää aluksen tilasta näkymään (nykyinen sää päivittyy ajon aikana, miehistötilassa navigoija saa ne ruorimiehen tilasta)
+      var vw = v.getWind(); if (vw.fromDeg !== S.windFrom || vw.speed !== S.windSpeed) v.setWind(S.windFrom, S.windSpeed);
+      if (S.weather && v.weather().weather !== S.weather) v.setWeather(S.weather);
+      liveRefresh();
     }
     if (G.valot && G.mode === 'run') G.valot.paivita(S, (S.clockMs / 1000) % 86400, G.night.dark);
+    if (G.aallot && G.mode === 'run') { G.aallot.paivita(S, Math.min(0.25, (now - (G.night.waveT || now)) / 1000)); G.night.waveT = now; }
   }
   // Valonheittimet: kaksi valoa katolla, ruorimiehen ('helm') ja navigoijan ('nav') yläpuolella. Miehistötilassa kumpikin ohjaa omaansa ja toisen
   // valo tulee yhteyden kautta. Yksin ajaessa molemmat ovat käytössä: säädin ohjaa valittua valoa (oletus oma silmäpiste).
@@ -1573,7 +1633,7 @@
       '<tr><td>Kokonaisaika</td><td class="n" id="dbTime">' + H.mmss(an.timeSec) + '</td></tr>' +
       '<tr><td>Ajettu matka</td><td class="n" id="dbDist">' + fnum(an.distM / 1852, 2) + ' mpk' + (rt ? ' (reitti ' + fnum(rt.total / 1852, 2) + ' mpk)' : '') + '</td></tr>' +
       '<tr><td>Keskinopeus</td><td class="n">' + fnum(an.avgKn, 1) + ' kn</td></tr>' +
-      '<tr><td>Tuuli</td><td class="n">' + (G.windSpeed > 0 ? pad3(G.windFrom) + '° ' + G.windSpeed + ' m/s' : 'tyyni') + '</td></tr>' +
+      '<tr><td>Tuuli' + (G.wxLive ? ' (nykyinen sää)' : '') + '</td><td class="n">' + (G.S.windSpeed > 0 ? pad3(G.S.windFrom) + '° ' + fnum(G.S.windSpeed, 1) + ' m/s' : 'tyyni') + '</td></tr>' +
       (free ? '<tr><td>Suurin nopeus</td><td class="n">' + fnum(an.maxKn, 1) + ' kn</td></tr>' : '') +
       '<tr><td>Pohjakosketukset</td><td class="n">' + (an.groundings.length ? an.groundings.length + ' kpl' : 'ei yhtään') + '</td></tr>' +
       '<tr><td>Törmäykset esteisiin</td><td class="n" id="dbCrashCount">' + (an.crashCount ? an.crashCount + ' kpl' : 'ei yhtään') + '</td></tr>' +

@@ -98,6 +98,14 @@
       <div class="hint" id="clockHint"></div>
     </div>
 
+    <div class="field crew-hide" role="group" aria-labelledby="lblWxMode">
+      <div class="lbl" id="lblWxMode">Sää ja tuuli</div>
+      <div class="seg" id="segWxMode">
+        <button type="button" data-v="oma" class="on">Valitse itse</button>
+        <button type="button" data-v="live">Nykyinen sää<small>Tampere, päivittyy ajon aikana</small></button>
+      </div>
+      <div class="hint" id="liveWx" role="status"></div>
+    </div>
     <div class="field crew-hide" role="group" aria-labelledby="lblWx">
       <div class="lbl" id="lblWx">Sää ja kuu</div>
       <div class="seg" id="segWeather">
@@ -140,7 +148,7 @@
     <div class="warn"><b>Ei navigointikäyttöön.</b> Aineistot ovat avointa dataa, eikä ohjelma täytä asianmukaisen merikartan vaatimuksia.</div>
     <details class="src"><summary>Lähteet ja käyttöehdot</summary>
       <p id="srcText">Sisältää Maanmittauslaitoksen, Väyläviraston, Liikenne- ja viestintäviraston, Luonnonvarakeskuksen sekä Digi- ja väestötietoviraston avointa aineistoa. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.</p>
-      <p>Merikartan syvyysalueet: Liikenne- ja viestintävirasto, plotterin väritys Reittikartan vektorikartan mukaan. Valinnainen rasterimerikartta: Liikenne- ja viestintävirasto. Kirjastot: three.js (MIT) ja PMTiles (BSD-3). Ohjelman oma koodi: PolyForm Noncommercial 1.0.0.</p>
+      <p>Merikartan syvyysalueet: Liikenne- ja viestintävirasto, plotterin väritys Reittikartan vektorikartan mukaan. Valinnainen rasterimerikartta: Liikenne- ja viestintävirasto. Nykyinen sää: Open-Meteo.com (CC BY 4.0). Kirjastot: three.js (MIT) ja PMTiles (BSD-3). Ohjelman oma koodi: PolyForm Noncommercial 1.0.0.</p>
     </details>
   </div>
 </section>
@@ -328,6 +336,7 @@
 <script src="simulaattori/js/nakyma.js"></script>
 <script src="simulaattori/js/miehisto.js"></script>
 <script src="simulaattori/js/valot3d.js"></script>
+<script src="simulaattori/js/aallot.js"></script>
 <script src="simulaattori/js/google3d.js"></script>
 <script src="simulaattori/js/kalibrointi.js"></script>
 <script src="simulaattori/js/plotteri.js"></script>

@@ -319,3 +319,5 @@ input[type=date]{margin-top:8px;min-height:48px;font-size:18px;padding:6px 10px;
 .windrow select{min-height:40px;padding:4px 8px;border:1px solid var(--line);border-radius:9px;background:var(--btn,#1c3a52);color:#fff;font:inherit;font-size:15px}
 .status .now{white-space:normal}
 .status .wind{font-size:11px;color:var(--muted);font-weight:500;margin-left:2px;display:inline-block;white-space:nowrap}
+/* nykyinen sää (live): itse valittavat sää- ja tuulinapit lukittuina */
+.wx-live #segWeather,.wx-live #segWindSpd,.wx-live .windrow{opacity:.45;pointer-events:none}

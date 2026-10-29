@@ -211,6 +211,14 @@
       fragmentShader: GLSL_SKY + [
         'uniform vec3 uDeep; uniform vec3 uFogColor; uniform float uFogDensity; uniform float uDay;',
         'uniform sampler2D uWaveTex; uniform vec2 uWindDir; uniform float uWaveAmp;',
+        // aaltomalli (aallot.js): aaltojen voimakkuus paikan mukaan tuulen suuntaisesta ruudukosta (pyyhkäisymatka), ruudukon ulkopuolella uWaveAmp
+        'uniform sampler2D uSeaTex; uniform vec2 uSeaO; uniform vec2 uSeaU; uniform vec2 uSeaV; uniform float uSeaHalf; uniform float uSeaOn;',
+        'float seaAmp(vec3 w){',
+        '  if (uSeaOn < 0.5) return uWaveAmp;',
+        '  vec2 dd = w.xz - uSeaO; vec2 st = vec2(dot(dd, uSeaU), dot(dd, uSeaV)) / (2.0 * uSeaHalf) + 0.5;',
+        '  float e = min(min(st.x, st.y), min(1.0 - st.x, 1.0 - st.y)); if (e <= 0.0) return uWaveAmp;',
+        '  return mix(uWaveAmp, texture2D(uSeaTex, st).r * 4.0, smoothstep(0.0, 0.08, e));',
+        '}',
         'uniform vec3 uSpotPos; uniform vec3 uSpotDir; uniform float uSpotCos; uniform float uSpotI;',
         'uniform vec3 uSpotPos2; uniform vec3 uSpotDir2; uniform float uSpotI2;',
         'varying vec3 vW; varying float vDepth;',
@@ -226,7 +234,7 @@
         'void main(){',
         '  vec2 p = vW.xz; float t = uTime; float dist = length(cameraPosition - vW);',
         '  float fade = 1.0 / (1.0 + dist * 0.004);',
-        '  vec2 g = vec2(0.0);',
+        '  vec2 g = vec2(0.0); float wa = seaAmp(vW);',
         '  g += vec2(0.80, 0.60) * 0.020 * cos(dot(vec2(0.80, 0.60), p) * 0.55 + t * 1.10);',
         '  g += vec2(-0.55, 0.83) * 0.014 * cos(dot(vec2(-0.55, 0.83), p) * 1.30 + t * 1.55);',
         '#ifdef WATER_TEX',
@@ -235,11 +243,11 @@
         '  if (dist < 5500.0) {',
         '    vec2 s1 = texture2D(uWaveTex, p * 0.0833 - w1 * (t * 0.125)).rg * 2.0 - 1.0;',
         '    vec2 s2 = texture2D(uWaveTex, p * 0.2900 - w2 * (t * 0.215) + vec2(0.31, 0.57)).rg * 2.0 - 1.0;',
-        '    g += (s1 * 0.050 + s2 * 0.032 * (0.25 + 0.75 * fade)) * uWaveAmp * (0.15 + 0.85 * fade) * (1.0 - smoothstep(1500.0, 5500.0, dist));',
+        '    g += (s1 * 0.050 + s2 * 0.032 * (0.25 + 0.75 * fade)) * wa * (0.15 + 0.85 * fade) * (1.0 - smoothstep(1500.0, 5500.0, dist));',
         '  }',
         '#else',
-        '  g += (vec2(0.30, -0.95) * 0.011 * cos(dot(vec2(0.30, -0.95), p) * 3.10 + t * 2.20)) * (0.2 + 0.8 * fade) * uWaveAmp;',
-        '  g += (vec2(-0.95, -0.30) * 0.007 * cos(dot(vec2(-0.95, -0.30), p) * 7.30 + t * 3.10)) * fade * fade * uWaveAmp;',
+        '  g += (vec2(0.30, -0.95) * 0.011 * cos(dot(vec2(0.30, -0.95), p) * 3.10 + t * 2.20)) * (0.2 + 0.8 * fade) * wa;',
+        '  g += (vec2(-0.95, -0.30) * 0.007 * cos(dot(vec2(-0.95, -0.30), p) * 7.30 + t * 3.10)) * fade * fade * wa;',
         '#endif',
         '  vec3 n = normalize(vec3(-g.x, 1.0, -g.y));',
         '  vec3 v = normalize(cameraPosition - vW);',
@@ -342,11 +350,12 @@
       uHorizon: { value: new THREE.Color('#cfe0ee') }, uZenith: { value: new THREE.Color('#4a86c7') },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color('#fff2d8') }, uSunGlow: { value: 1 },
       uTime: { value: 0 }, uDeep: { value: new THREE.Color('#1c4c66') }, uFogColor: { value: new THREE.Color('#cfe0ee') }, uFogDensity: { value: S.fogDensity }, uDay: { value: 1 },
-      uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') },
+      uCloudTex: { value: cloudTex }, uCloud: { value: S.cloudCover }, uWaveTex: { value: makeWaveTexture() }, uWindDir: { value: new THREE.Vector2(0.7, -0.7) }, uWaveAmp: { value: 1 }, uSeaTex: { value: null }, uSeaO: { value: new THREE.Vector2() }, uSeaU: { value: new THREE.Vector2(1, 0) }, uSeaV: { value: new THREE.Vector2(0, 1) }, uSeaHalf: { value: 1200 }, uSeaOn: { value: 0 }, uCloudLit: { value: new THREE.Color('#ffffff') }, uCloudShade: { value: new THREE.Color('#b0c0d6') },
       // valonheitin (vaihe 4, valot3d.js): paikka ja suunta maailmassa, keilan kosini ja päällä (1) tai pois (0)
       uMoonDir: { value: new THREE.Vector3(0, -1, 0) }, uMoonI: { value: 0 }, uStars: { value: 0 },
       uSpotPos: { value: new THREE.Vector3() }, uSpotDir: { value: new THREE.Vector3(1, 0, 0) }, uSpotCos: { value: 0.995 }, uSpotI: { value: 0 }, uSpotPos2: { value: new THREE.Vector3() }, uSpotDir2: { value: new THREE.Vector3(1, 0, 0) }, uSpotI2: { value: 0 }
     };
+    U.uSeaTex.value = new THREE.DataTexture(new Uint8Array([64]), 1, 1, THREE.LuminanceFormat, THREE.UnsignedByteType); U.uSeaTex.value.needsUpdate = true;
     var sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), skyMaterial(U));
     sky.renderOrder = 100; sky.frustumCulled = false; scene.add(sky);
     var waterFull = waterMaterial(U, true), waterLight = waterMaterial(U, false);
@@ -505,7 +514,9 @@
     // ---- tila ----
     var gaze = 0, gazeCmd = 0, w = 1, h = 1, dpr = Math.min(root.devicePixelRatio || 1, 3), pixelMp = S.pixelBudgetMp;
     var sun = { elevDeg: 45, azDeg: 180 }, sunDirW = new THREE.Vector3(0, 1, 0), simMs = Date.now(), moonDirW = new THREE.Vector3(0, -1, 0), night = null;
-    var frames = [], lastT = 0, bobT = 0, camPitchDeg = 0;
+    var frames = [], lastT = 0, bobT = 0, camPitchDeg = 0, sea = null, seaT = 0;
+    // aallokko aluksen kohdalla (aallot.js): { hs, tp, toGrid } keinuntaa varten
+    function setSea(o) { sea = o; }
     var extra = [];     // lisäobjektit, joilla on rebase()
     // kiikari: tila (päällä, katseen ja pystykulman talteenotto) ja käden tärinä (kaksi vaimennettua värähtelijää, joita satunnaisliike ajaa)
     var tmpDir = new THREE.Vector3();
@@ -642,6 +653,15 @@
       var bobP = Math.sin(bobT * 2.3) * S.bobPitchDeg * sp + Math.sin(bobT * 5.1) * S.bobPitchDeg * 0.4 * sp;
       var bobR = Math.sin(bobT * 1.7 + 1) * S.bobRollDeg * Math.min(1, 0.25 + sp);
       var heave = Math.sin(bobT * 2.0) * S.bobHeaveM * (0.3 + sp);
+      // aallokon keinunta: jyrkkyys (Hs / aallonpituus), tulosuunta keulaan nähden ja kohtaamistaajuus. Lyhyet aallot (alle rungon pituuden) keinuttavat vähemmän.
+      if (sea && sea.hs > 0.02 && sea.tp > 0.3) {
+        var lam = 9.81 * sea.tp * sea.tp / (2 * Math.PI), resp = Math.min(1, Math.max(0.15, lam / 12)), slope = Math.atan(Math.PI * sea.hs / lam) / RAD * 0.5 * resp;
+        var beta = (sea.toGrid - st.hdg) * RAD, om = 2 * Math.PI / sea.tp, ome = Math.max(0.35, Math.abs(om - om * om / 9.81 * st.v * Math.cos(beta)));
+        seaT += dt * ome;
+        bobP += slope * Math.abs(Math.cos(beta)) * (1 + 1.2 * sp) * Math.sin(seaT);
+        bobR += slope * 1.4 * Math.abs(Math.sin(beta)) * Math.sin(seaT * 0.85 + 1.1);
+        heave += sea.hs * 0.5 * resp * Math.sin(seaT + 0.6);
+      }
       rig.position.set(st.x, heave, -st.y);
       var yaw = Math.PI / 2 - st.hdg * RAD;
       rig.rotation.set((st.roll + bobR) * RAD, yaw, (st.trim + bobP) * RAD);
@@ -722,7 +742,7 @@
       setOverlay: setOverlay, isOverlay: function () { return ov.on; }, setFogKm: setFogKm, getFogKm: function () { return ov.fogKm; }, setCalib: setCalib, getCalib: function () { return { dHeadingDeg: ov.cal.dHeadingDeg, dPitchDeg: ov.cal.dPitchDeg, tanScale: ov.cal.tanScale }; },
       vfovRequested: function () { return reqVfov; }, eyeAboveWaterM: function () { return eyeZ() - S.waterlineZ; }, overlayHide: overlayHide, wmask: wmask, overlayMat: ov.mat, overlayDome: ov.dome, overlaySettings: ov,
       setCameraPitch: function (d) { camPitchDeg = d; }, isSeated: function () { return seated; },
-      setWind: setWind, getWind: function () { return { fromDeg: S.windFromDeg, speed: S.windSpeed }; }, setQuality: setQuality, getQuality: function () { return quality; },
+      setWind: setWind, setSea: setSea, sea: function () { return sea; }, getWind: function () { return { fromDeg: S.windFromDeg, speed: S.windSpeed }; }, setQuality: setQuality, getQuality: function () { return quality; },
       setBinoculars: setBinoculars, isBino: function () { return bino.on; }, setBinoPitch: setBinoPitch, getBinoPitch: function () { return bino.pitch; },
       baseHfov: baseHfov, gazeSens: function () { return bino.on ? 1 / S.kiikariSuurennus : 1; }, binoState: function () { return { on: bino.on, gaze0: bino.gaze0, pitch: bino.pitch, shakeYaw: bino.shakeYaw, shakePitch: bino.shakePitch }; }
     };
