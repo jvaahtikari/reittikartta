@@ -653,14 +653,11 @@
       var bobP = Math.sin(bobT * 2.3) * S.bobPitchDeg * sp + Math.sin(bobT * 5.1) * S.bobPitchDeg * 0.4 * sp;
       var bobR = Math.sin(bobT * 1.7 + 1) * S.bobRollDeg * Math.min(1, 0.25 + sp);
       var heave = Math.sin(bobT * 2.0) * S.bobHeaveM * (0.3 + sp);
-      // aallokon keinunta: jyrkkyys (Hs / aallonpituus), tulosuunta keulaan nähden ja kohtaamistaajuus. Lyhyet aallot (alle rungon pituuden) keinuttavat vähemmän.
-      if (sea && sea.hs > 0.02 && sea.tp > 0.3) {
-        var lam = 9.81 * sea.tp * sea.tp / (2 * Math.PI), resp = Math.min(1, Math.max(0.15, lam / 12)), slope = Math.atan(Math.PI * sea.hs / lam) / RAD * 0.5 * resp;
-        var beta = (sea.toGrid - st.hdg) * RAD, om = 2 * Math.PI / sea.tp, ome = Math.max(0.35, Math.abs(om - om * om / 9.81 * st.v * Math.cos(beta)));
-        seaT += dt * ome;
-        bobP += slope * Math.abs(Math.cos(beta)) * (1 + 1.2 * sp) * Math.sin(seaT);
-        bobR += slope * 1.4 * Math.abs(Math.sin(beta)) * Math.sin(seaT * 0.85 + 1.1);
-        heave += sea.hs * 0.5 * resp * Math.sin(seaT + 0.6);
+      // merenkäynti (aallot.js createMeri): nousu, nyökkäys ja kallistus epäsäännöllisestä aallokosta liukuvarungon vasteella, isku tärähdyksenä
+      var wv = st.wave;
+      if (wv) {
+        bobP = bobP * (1 - Math.min(1, wv.hs * 3)) + wv.pitch; bobR += wv.roll; heave += wv.z;
+        if (wv.slam > 0) { seaT += dt * 47; bobP += wv.slam * 0.9 * Math.sin(seaT); heave += wv.slam * 0.02 * Math.sin(seaT * 1.3); }
       }
       rig.position.set(st.x, heave, -st.y);
       var yaw = Math.PI / 2 - st.hdg * RAD;

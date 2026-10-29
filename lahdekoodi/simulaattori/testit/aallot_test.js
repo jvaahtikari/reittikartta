@@ -40,5 +40,34 @@ ehto('saaren suojapuolella tyynempää', saarenTakana < saarenVieressa, 'saaren 
 aja({ x: 0, y: 0, windFrom: 180, windSpeed: 10 });
 ehto('eteläntuulessa pitkä pyyhkäisymatka', W.tila().fetch >= 9000, W.tila().fetch + ' m, Hs ' + W.tila().hs.toFixed(2) + ' m');
 ehto('keinunta saa aallokon (setSea)', sea && sea.hs > 0.3 && Math.abs(((sea.toGrid % 360) + 360) % 360) < 1e-6, sea && ('Hs ' + sea.hs.toFixed(2) + ', suunta ' + sea.toGrid));
+
+// 3. Merenkäynti ja liukuvarungon vaste (createMeri)
+{
+  const KN = 0.514444;
+  function ajo(kn, from, hs, sek) {   // keula pohjoiseen, aallot suunnasta 'from' (0 = vasta, 180 = myötä, 90 = sivulta)
+    const M = A.createMeri(), S = { x: 0, y: 0, hdg: 0, v: kn * KN, t: 0 }, r = { p: 0, r: 0, slams: 0, air: 0, fx: 0, n: 0 };
+    const sea = { hs: hs, tp: A.waveTp(hs < 0.3 ? 6 : hs < 0.6 ? 10 : 13, 6000), toGrid: (from + 180) % 360 }; let edell = 0;
+    for (let i = 0; i < sek * 10; i++) {
+      S.t += 0.1; S.y += S.v * 0.1; const w = M.step(S, sea, 0.1);
+      if (i > 100 && w) { r.p = Math.max(r.p, Math.abs(w.pitch)); r.r = Math.max(r.r, Math.abs(w.roll)); r.air += w.air ? 0.1 : 0; r.fx += S.waveFx; r.n++; if (w.slam > 1.5 && !edell) r.slams++; edell = w.slam > 1.5 ? 1 : 0; }
+    }
+    r.fx /= r.n; return r;
+  }
+  const pienet = ajo(30, 0, 0.2, 180), isot = ajo(30, 0, 0.8, 180);
+  ehto('liu\'ussa lyhyt aallokko jää rungon alle', pienet.p < 3 && pienet.slams === 0, 'Hs 0,2 m, 30 kn: nyökkäys ' + pienet.p.toFixed(1) + '°, iskuja ' + pienet.slams);
+  ehto('liu\'ussa iso vasta-aallokko heittää ilmaan ja iskee', isot.slams >= 2 && isot.air > 1, 'Hs 0,8 m, 30 kn: iskuja ' + isot.slams + ' / 3 min, ilmassa ' + isot.air.toFixed(1) + ' s');
+  const hidasSivu = ajo(0, 90, 0.5, 180), nopeaSivu = ajo(30, 90, 0.5, 180);
+  ehto('sivuaallokko kallistaa paikallaan enemmän kuin liu\'ussa', hidasSivu.r > 2 * nopeaSivu.r && hidasSivu.r < 15, 'paikallaan ' + hidasSivu.r.toFixed(1) + '°, 30 kn ' + nopeaSivu.r.toFixed(1) + '°');
+  const v6 = ajo(6, 0, 0.5, 120), v30 = ajo(30, 0, 0.5, 120);
+  ehto('vasta-aallokko hidastaa, liu\'ussa enemmän', v6.fx < 0 && v30.fx < v6.fx, '6 kn ' + (v6.fx / 1000).toFixed(1) + ' kN, 30 kn ' + (v30.fx / 1000).toFixed(1) + ' kN');
+  // epäsäännöllisyys: aaltojen korkeudet vaihtelevat (nollan ylitysten välinen huipusta pohjaan)
+  const M = A.createMeri(), S = { x: 0, y: 0, hdg: 0, v: 0, t: 0 }; M.step(S, { hs: 0.5, tp: 2.4, toGrid: 0 }, 0.1); M.state().hs = 0.5;
+  const h = []; let mx = -1, mn = 1, ed = 0;
+  for (let t = 0; t < 600; t += 0.05) { const e = M.eta(0, 0, t); mx = Math.max(mx, e); mn = Math.min(mn, e); if (ed < 0 && e >= 0) { h.push(mx - mn); mx = -1; mn = 1; } ed = e; }
+  const ka = h.reduce((a, b) => a + b, 0) / h.length, sd = Math.sqrt(h.reduce((a, b) => a + (b - ka) * (b - ka), 0) / h.length), suurin = Math.max.apply(null, h);
+  ehto('aallot ovat erikokoisia', sd > 0.25 * ka && suurin > 1.4 * 0.5 && suurin < 2.2 * 0.5, h.length + ' aaltoa, keskikorkeus ' + ka.toFixed(2) + ' m, hajonta ' + sd.toFixed(2) + ', suurin ' + suurin.toFixed(2) + ' m (Hs 0,5)');
+  const M2 = A.createMeri(); M2.step(S, { hs: 0.5, tp: 2.4, toGrid: 0 }, 0.1); M2.state().hs = 0.5;
+  ehto('sama meri molemmilla laitteilla (kiinteä siemen)', Math.abs(M.eta(12, 34, 56) - M2.eta(12, 34, 56)) < 1e-12);
+}
 console.log(fails ? 'VIRHEITÄ ' + fails : 'Kaikki aaltotestit läpi');
 process.exit(fails ? 1 : 0);

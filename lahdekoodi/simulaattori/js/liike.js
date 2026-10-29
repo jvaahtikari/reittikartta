@@ -257,7 +257,7 @@
   // Pysäytys esteeseen osuttaessa (laituri, kivi, silta): nopeus, kierto ja vipu nollataan, nopeuskäsky nollataan eikä ruorimies yritä ajaa uudelleen esteeseen
   // (käskyä ei kirjata komentolokiin, esteeseen osuminen kirjataan erikseen). Suunta pidetään siinä, mihin alus jäi, ja perän käsky päättyy.
   function halt(s) {
-    s.v = 0; s.vs = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
+    s.v = 0; s.vs = 0; s.waveFx = 0; s.waveYaw = 0; s.rate = 0; s.lever = 0; s.leverCmd = 0; s.leverTrim = 0; s.speedSense = 0; s.rudderCmd = 0; s.rudder = 0;
     s.crashCmd = false; s.crashActive = false;
     s.pending = s.pending.filter(function (p) { return p.kind === 'gentle'; });
     s.orderSpeedKn = 0; s.hmSpeedKn = 0; s.sternTurn = null; s.hmStern = null; s.gentleNext = false; s.hmGentle = false;
@@ -326,7 +326,7 @@
     var lv = s.crashActive ? S.crashLever : s.leverCmd;
     s.lever = lv;
     var windOn = s.windSpeed > 0 || s.vs !== 0, wf = windOn ? windForces(s) : null;
-    var a = (thrust(lv, s.v) - resistance(s.v) + (wf ? wf.fx : 0)) / S.massKg, v0 = s.v;
+    var a = (thrust(lv, s.v) - resistance(s.v) + (wf ? wf.fx : 0) + (s.waveFx || 0)) / S.massKg, v0 = s.v;   // waveFx: aallokon lisävastus ja rinteen työntö (aallot.js)
     s.v += a * dt;
     if (wf) {   // sorto: sivuvoima vastaan veden sivuvastus ja nostovoima
       var dl = 0.5 * S.waterRho * S.latDragCd * S.latAreaM2 * s.vs * Math.abs(s.vs) + S.latLiftNs2 * Math.abs(s.v) * s.vs;
@@ -339,10 +339,11 @@
         s.v = 0; s.crashActive = false; s.crashCmd = false; s.leverCmd = 0; s.speedSense = 0;
         logCmd(s, 'lever0', 0);
       }
-    } else if (lv === 0 && Math.abs(s.v) < 0.02 && !(s.windSpeed > 0)) s.v = 0;
+    } else if (lv === 0 && Math.abs(s.v) < 0.02 && !(s.windSpeed > 0) && !s.waveFx) s.v = 0;
     else if (lv === 0 && v0 * s.v < 0) s.v = 0;
     // suunta
     var wTarget = s.rudder * maxTurnRate(s.v) * steerSign(s);   // rad/s
+    if (s.waveYaw) wTarget += s.waveYaw;   // myötä- ja viistoaallokon kääntävä vaikutus (aallot.js)
     if (wf) { var kn0 = Math.abs(s.v) / KN; wTarget += S.windYawRadPerN * wf.fy / (1 + Math.pow(kn0 / S.windYawFadeKn, 2)); }   // keula kääntyy tuulesta poispäin (sivuvoiman suuntaan)
     var w = s.rate * RAD;
     w += (wTarget - w) * (1 - Math.exp(-dt / S.yawLagSec));

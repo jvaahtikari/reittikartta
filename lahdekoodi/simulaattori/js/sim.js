@@ -652,6 +652,7 @@
     G.plotterOn = true; $('plotOff').hidden = true; G.trail = []; G.acc = 0; G.lastVis = -1e9; G.lastConvT = -1e9; G.lastPohjaT = 0;
     G.view.setWeather(G.weather, G.moon); G.view.setSimTime(G.S.clockMs);
     L.setWind(G.S, G.windFrom, G.windSpeed); G.view.setWind(G.windFrom, G.windSpeed); G.S.weather = G.weather;
+    G.meri = root.Aallot ? root.Aallot.createMeri() : null;
     G.nightG3 = false; G.nightOff = false;
     G.night.lastT = -1e9; G.night.dusk = null; G.night.plotNight = null; G.spotSel = null; if (G.valot) { ['helm', 'nav'].forEach(function (id) { G.valot.asetaHeitin(id, false); G.valot.asetaSuunta(id, 0); }); spotUi(); }
     G.view.setEye(6.1, G.eye === 'helm' ? G.view.settings.helmEyeY : -0.75);
@@ -1082,7 +1083,19 @@
     if (S.speedFactor > 0 && !G.frozen) {
       G.acc += Math.min(realDt, 0.25) * S.speedFactor;
       var guard = 0;
-      while (G.acc >= 0.1 && !G.frozen && guard++ < 400) { var pp = { x: S.x, y: S.y, hdg: S.hdg }; L.advance(S, 0.1); G.acc -= 0.1; tick(0.1, pp); }
+      while (G.acc >= 0.1 && !G.frozen && guard++ < 400) { var pp = { x: S.x, y: S.y, hdg: S.hdg }; L.advance(S, 0.1); G.acc -= 0.1; seaStep(0.1); tick(0.1, pp); }
+    }
+  }
+
+  // Merenkäynti (aallot.js): aluksen vaste aallokkoon ja voimat liikemallille. Iskut lasketaan purkua varten.
+  function seaStep(dt) {
+    var S = G.S; if (!G.meri || !S) return;
+    var w = G.meri.step(S, G.aallot ? G.aallot.sea() : null, dt);
+    if (G.rec && w) {
+      var st = G.rec.sea || (G.rec.sea = { hsMax: 0, slams: 0, slamMax: 0, inSlam: false });
+      st.hsMax = Math.max(st.hsMax, w.hs);
+      if (w.slam > 1.5 && !st.inSlam) { st.slams++; st.inSlam = true; } else if (w.slam === 0) st.inSlam = false;
+      st.slamMax = Math.max(st.slamMax, w.slam);
     }
   }
 
@@ -1243,7 +1256,7 @@
     setText($('nowHdg'), pad3(hdgT) + '°'); setText($('nowSpd'), fnum(S.v / KN, 1) + ' kn');   // negatiivinen = perä edellä
     setText($('v3hud'), pad3(hdgT) + '° · ' + fnum(S.v / KN, 1) + ' kn');
     var nw = $('nowWind');
-    if (S.windSpeed > 0) { var aw = L.apparentWind(S); nw.hidden = false; setText(nw, 'Tuuli ' + pad3(S.windFrom) + '° ' + Math.round(S.windSpeed) + ' m/s, suht. ' + pad3(Math.round(aw.rel) % 360) + '° ' + Math.round(aw.app) + ' m/s'); }
+    if (S.windSpeed > 0) { var aw = L.apparentWind(S); nw.hidden = false; setText(nw, 'Tuuli ' + pad3(S.windFrom) + '° ' + Math.round(S.windSpeed) + ' m/s, suht. ' + pad3(Math.round(aw.rel) % 360) + '° ' + Math.round(aw.app) + ' m/s' + (S.wave && S.wave.hs >= 0.05 ? ', aallokko ' + fnum(S.wave.hs, 1) + ' m' : '')); }
     else if (!nw.hidden) nw.hidden = true;
     Array.prototype.forEach.call(doc.querySelectorAll('.cb.sp'), function (b) { b.classList.toggle('cur', Number(b.getAttribute('data-kn')) === S.orderSpeedKn); });
     $('gazeBtn').hidden = !(G.layout.wide || G.main === '3d') || Math.abs(G.view.getGaze()) < 1;
@@ -1295,7 +1308,7 @@
     }
     if (G.mode === 'run') {
       if (G.gazeKey) v.setGaze(v.getGaze() + G.gazeKey * 90 * dtReal * v.gazeSens());
-      if (isNav()) crewApply(dtReal); else stepSim(dtReal);
+      if (isNav()) { crewApply(dtReal); if (!G.frozen && !G.paused) seaStep(Math.min(0.25, dtReal) * (G.S.speedFactor || 1)); } else stepSim(dtReal);
       maybeLoadAids(); maybeLoadBoats(); if (!isNav()) maybeRebase();
       if (isHelm()) crewSendState(now); else if (isNav()) crewSendInstr(now);
     }
@@ -1633,6 +1646,7 @@
       '<tr><td>Kokonaisaika</td><td class="n" id="dbTime">' + H.mmss(an.timeSec) + '</td></tr>' +
       '<tr><td>Ajettu matka</td><td class="n" id="dbDist">' + fnum(an.distM / 1852, 2) + ' mpk' + (rt ? ' (reitti ' + fnum(rt.total / 1852, 2) + ' mpk)' : '') + '</td></tr>' +
       '<tr><td>Keskinopeus</td><td class="n">' + fnum(an.avgKn, 1) + ' kn</td></tr>' +
+      (G.rec && G.rec.sea && G.rec.sea.hsMax >= 0.05 ? '<tr><td>Aallokko</td><td class="n">' + 'enintään ' + fnum(G.rec.sea.hsMax, 1) + ' m' + (G.rec.sea.slams ? ', aaltoiskuja ' + G.rec.sea.slams + ' (suurin ' + fnum(G.rec.sea.slamMax, 1) + ' g)' : '') + '</td></tr>' : '') +
       '<tr><td>Tuuli' + (G.wxLive ? ' (nykyinen sää)' : '') + '</td><td class="n">' + (G.S.windSpeed > 0 ? pad3(G.S.windFrom) + '° ' + fnum(G.S.windSpeed, 1) + ' m/s' : 'tyyni') + '</td></tr>' +
       (free ? '<tr><td>Suurin nopeus</td><td class="n">' + fnum(an.maxKn, 1) + ' kn</td></tr>' : '') +
       '<tr><td>Pohjakosketukset</td><td class="n">' + (an.groundings.length ? an.groundings.length + ' kpl' : 'ei yhtään') + '</td></tr>' +
